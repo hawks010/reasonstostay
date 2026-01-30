@@ -1,0 +1,425 @@
+<?php
+/**
+ * RTS Letters CPT - CLEAN ADMIN OVERHAUL
+ * Simple columns that make sense, no confusing data
+ */
+
+if (!defined('ABSPATH')) exit;
+
+class RTS_CPT_Letters_Clean {
+    
+    private static $instance = null;
+    
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    private function __construct() {
+        add_action('init', [$this, 'register_post_type']);
+        add_action('init', [$this, 'register_taxonomies']);
+        
+        // CLEAN columns
+        add_filter('manage_letter_posts_columns', [$this, 'set_columns']);
+        add_action('manage_letter_posts_custom_column', [$this, 'render_column'], 10, 2);
+        add_filter('manage_edit-letter_sortable_columns', [$this, 'sortable_columns']);
+        
+        // BIG OBVIOUS process button
+        add_action('admin_notices', [$this, 'show_process_button']);
+        
+        // Simpler row actions
+        add_filter('post_row_actions', [$this, 'row_actions'], 10, 2);
+        
+        // Custom CSS to make it look professional
+        add_action('admin_head', [$this, 'admin_css']);
+    }
+    
+    public function register_post_type() {
+        register_post_type('letter', [
+            'labels' => [
+                'name' => 'Letters',
+                'singular_name' => 'Letter',
+                'add_new' => 'Add New',
+                'add_new_item' => 'Add New Letter',
+                'edit_item' => 'Edit Letter',
+                'menu_name' => 'Letters'
+            ],
+            'public' => true,
+            'show_ui' => true,
+            'menu_position' => 5,
+            'menu_icon' => 'dashicons-email-alt',
+            'supports' => ['title', 'editor', 'author'],
+            'capability_type' => 'post',
+        ]);
+    }
+    
+    public function register_taxonomies() {
+        register_taxonomy('letter_feeling', 'letter', [
+            'label' => 'Feelings',
+            'public' => false,
+            'show_ui' => true,
+            'hierarchical' => true,
+        ]);
+        
+        register_taxonomy('letter_tone', 'letter', [
+            'label' => 'Tone',
+            'public' => false,
+            'show_ui' => true,
+            'hierarchical' => false,
+        ]);
+    }
+    
+    /**
+     * CLEAN COLUMNS - Only what matters
+     */
+    public function set_columns($columns) {
+        return [
+            'cb' => $columns['cb'],
+            'title' => 'Letter',
+            'letter_quality' => 'Quality',
+            'letter_safety' => 'Safety',
+            'letter_rating' => 'User Rating',
+            'letter_tags' => 'Tags',
+            'date' => 'Date'
+        ];
+    }
+    
+    /**
+     * Render clean column content
+     */
+    public function render_column($column, $post_id) {
+        switch ($column) {
+            case 'letter_quality':
+                $score = get_post_meta($post_id, 'quality_score', true);
+                if ($score) {
+                    // Color-coded score
+                    if ($score >= 70) {
+                        echo '<span class="rts-score rts-score-good">' . $score . '</span>';
+                    } elseif ($score >= 50) {
+                        echo '<span class="rts-score rts-score-ok">' . $score . '</span>';
+                    } else {
+                        echo '<span class="rts-score rts-score-low">' . $score . '</span>';
+                    }
+                } else {
+                    echo '<span class="rts-unrated">Unrated</span>';
+                }
+                break;
+                
+            case 'letter_safety':
+                $needs_review = get_post_meta($post_id, 'needs_review', true);
+                if ($needs_review) {
+                    echo '<span class="rts-safety rts-safety-flag">⚠️ Review</span>';
+                } else {
+                    echo '<span class="rts-safety rts-safety-ok">✓ Safe</span>';
+                }
+                break;
+                
+            case 'letter_rating':
+                // SIMPLE PERCENTAGE - No confusing thumbs
+                $thumbs_up = (int) get_post_meta($post_id, 'thumbs_up', true);
+                $thumbs_down = (int) get_post_meta($post_id, 'thumbs_down', true);
+                $total = $thumbs_up + $thumbs_down;
+                
+                if ($total > 0) {
+                    $percent = round(($thumbs_up / $total) * 100);
+                    
+                    // Color-coded percentage
+                    if ($percent >= 70) {
+                        echo '<span class="rts-rating rts-rating-good">' . $percent . '%</span>';
+                    } elseif ($percent >= 50) {
+                        echo '<span class="rts-rating rts-rating-ok">' . $percent . '%</span>';
+                    } else {
+                        echo '<span class="rts-rating rts-rating-low">' . $percent . '%</span>';
+                    }
+                    echo '<div class="rts-votes">' . $total . ' votes</div>';
+                } else {
+                    echo '<span class="rts-no-rating">No ratings yet</span>';
+                }
+                break;
+                
+            case 'letter_tags':
+                $feelings = wp_get_post_terms($post_id, 'letter_feeling', ['fields' => 'names']);
+                $tone = wp_get_post_terms($post_id, 'letter_tone', ['fields' => 'names']);
+                
+                if (!empty($feelings)) {
+                    echo '<div class="rts-tags">';
+                    foreach (array_slice($feelings, 0, 3) as $feeling) {
+                        echo '<span class="rts-tag">' . esc_html($feeling) . '</span>';
+                    }
+                    if (count($feelings) > 3) {
+                        echo '<span class="rts-tag-more">+' . (count($feelings) - 3) . '</span>';
+                    }
+                    echo '</div>';
+                }
+                
+                if (!empty($tone)) {
+                    echo '<div class="rts-tone">' . esc_html($tone[0]) . '</div>';
+                }
+                
+                if (empty($feelings) && empty($tone)) {
+                    echo '<span class="rts-no-tags">Not tagged yet</span>';
+                }
+                break;
+        }
+    }
+    
+    public function sortable_columns($columns) {
+        $columns['letter_quality'] = 'quality_score';
+        $columns['letter_rating'] = 'thumbs_up';
+        return $columns;
+    }
+    
+    /**
+     * BIG OBVIOUS PROCESS BUTTON
+     */
+    public function show_process_button() {
+        $screen = get_current_screen();
+        if (!$screen || $screen->post_type !== 'letter') return;
+        
+        global $wpdb;
+        
+        // Count unrated
+        $unrated = $wpdb->get_var("
+            SELECT COUNT(DISTINCT p.ID)
+            FROM {$wpdb->posts} p
+            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = 'quality_score'
+            WHERE p.post_type = 'letter'
+            AND p.post_status IN ('publish', 'pending')
+            AND pm.meta_id IS NULL
+        ");
+        
+        if ($unrated > 0):
+        ?>
+        <div class="notice notice-warning" style="border-left-color:#f0b849;padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+                <div style="flex:1;">
+                    <h2 style="margin:0 0 10px 0;font-size:18px;color:#2c3338;">
+                        ⚡ <?php echo number_format($unrated); ?> letters need processing
+                    </h2>
+                    <p style="margin:0;font-size:14px;color:#50575e;">
+                        Click <strong>"Process All Letters"</strong> to analyze quality, detect feelings/tones, and flag unsafe content.
+                        <br><small style="opacity:0.8;">Takes 2-5 minutes. Auto-processing runs every 5 minutes, but you can speed it up.</small>
+                    </p>
+                </div>
+                <div>
+                    <button type="button" class="button button-primary" id="rts-process-btn" style="height:auto;padding:15px 30px;font-size:16px;font-weight:600;">
+                        🚀 Process All Letters
+                    </button>
+                </div>
+            </div>
+            
+            <div id="rts-progress" style="margin-top:20px;display:none;">
+                <div style="background:#f0f0f0;border-radius:8px;height:30px;overflow:hidden;position:relative;">
+                    <div id="rts-progress-bar" style="background:#2271b1;height:100%;width:0%;transition:width 0.3s;display:flex;align-items:center;justify-content:center;">
+                        <strong id="rts-progress-text" style="color:white;font-size:13px;"></strong>
+                    </div>
+                </div>
+                <p id="rts-progress-status" style="margin:10px 0 0 0;font-size:13px;color:#50575e;"></p>
+            </div>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#rts-process-btn').on('click', function() {
+                var btn = $(this);
+                var progress = $('#rts-progress');
+                var bar = $('#rts-progress-bar');
+                var text = $('#rts-progress-text');
+                var status = $('#rts-progress-status');
+                
+                btn.prop('disabled', true).text('Processing...');
+                progress.show();
+                
+                var total = <?php echo $unrated; ?>;
+                var processed = 0;
+                
+                function processChunk() {
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'rts_process_unrated_letters',
+                            nonce: '<?php echo wp_create_nonce('rts_process_unrated'); ?>'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                processed = response.data.processed;
+                                var percent = Math.round((processed / total) * 100);
+                                
+                                bar.css('width', percent + '%');
+                                text.text(processed + ' / ' + total);
+                                status.text('Processing... ' + percent + '% complete');
+                                
+                                if (response.data.done) {
+                                    bar.css('background', '#00a32a');
+                                    text.text('✓ Complete!');
+                                    status.html('<strong style="color:#00a32a;">All done! Refreshing page...</strong>');
+                                    setTimeout(function() { location.reload(); }, 2000);
+                                } else {
+                                    setTimeout(processChunk, 500);
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                processChunk();
+            });
+        });
+        </script>
+        <?php
+        endif;
+    }
+    
+    /**
+     * Simpler row actions
+     */
+    public function row_actions($actions, $post) {
+        if ($post->post_type !== 'letter') return $actions;
+        
+        $new_actions = [];
+        
+        if (isset($actions['edit'])) {
+            $new_actions['edit'] = $actions['edit'];
+        }
+        
+        // Quick approve for pending
+        if ($post->post_status === 'pending') {
+            $new_actions['approve'] = '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=rts_quick_approve&post=' . $post->ID), 'approve_' . $post->ID) . '">✓ Approve</a>';
+        }
+        
+        if (isset($actions['trash'])) {
+            $new_actions['trash'] = $actions['trash'];
+        }
+        
+        return $new_actions;
+    }
+    
+    /**
+     * Professional admin CSS
+     */
+    public function admin_css() {
+        $screen = get_current_screen();
+        if (!$screen || $screen->post_type !== 'letter') return;
+        ?>
+        <style>
+        /* Clean, professional styling */
+        .rts-score {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .rts-score-good { background: #d4edda; color: #155724; }
+        .rts-score-ok { background: #fff3cd; color: #856404; }
+        .rts-score-low { background: #f8d7da; color: #721c24; }
+        
+        .rts-unrated {
+            color: #999;
+            font-style: italic;
+            font-size: 13px;
+        }
+        
+        .rts-safety {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .rts-safety-ok { background: #d4edda; color: #155724; }
+        .rts-safety-flag { background: #fff3cd; color: #856404; }
+        
+        .rts-rating {
+            display: block;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .rts-rating-good { color: #00a32a; }
+        .rts-rating-ok { color: #f0b849; }
+        .rts-rating-low { color: #d63638; }
+        
+        .rts-votes {
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .rts-no-rating {
+            color: #999;
+            font-size: 13px;
+        }
+        
+        .rts-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+        
+        .rts-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #555;
+        }
+        
+        .rts-tag-more {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #666;
+            font-weight: 600;
+        }
+        
+        .rts-tone {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #e3f2fd;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #1565c0;
+            margin-top: 4px;
+        }
+        
+        .rts-no-tags {
+            color: #999;
+            font-size: 12px;
+            font-style: italic;
+        }
+        
+        /* Make table more readable */
+        .wp-list-table .column-letter_quality { width: 100px; }
+        .wp-list-table .column-letter_safety { width: 100px; }
+        .wp-list-table .column-letter_rating { width: 120px; }
+        .wp-list-table .column-letter_tags { width: 200px; }
+        </style>
+        <?php
+    }
+}
+
+// Initialize
+RTS_CPT_Letters_Clean::get_instance();
+
+// Quick approve handler
+add_action('admin_post_rts_quick_approve', function() {
+    if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'approve_' . $_GET['post'])) {
+        wp_die('Invalid request');
+    }
+    
+    $post_id = intval($_GET['post']);
+    wp_update_post([
+        'ID' => $post_id,
+        'post_status' => 'publish'
+    ]);
+    
+    wp_redirect(admin_url('edit.php?post_type=letter'));
+    exit;
+});
