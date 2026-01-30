@@ -425,7 +425,7 @@ class RTS_Shortcodes {
                         id="rts-letter-content" 
                         name="letter_content" 
                         class="rts-textarea"
-                        placeholder="Dear Friend,&#10;&#10;I know how hard it is right now..."
+                        placeholder="Dear Friend,"
                         rows="12"
                         required
                     ></textarea>

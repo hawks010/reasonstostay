@@ -55,64 +55,6 @@ class RTS_Shortcodes {
 
         ob_start();
         ?>
-        <style>
-        /* Letter viewer styling */
-        .rts-btn-next {
-            background: #2c3e50 !important;
-            color: white !important;
-            border: none !important;
-            padding: 12px 30px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            border-radius: 4px !important;
-            cursor: pointer !important;
-            transition: all 0.3s !important;
-            float: right !important;
-            margin-top: 20px !important;
-        }
-        
-        .rts-btn-next:hover {
-            background: #f0b849 !important;
-            color: #2c3e50 !important;
-        }
-        
-        /* Feedback and Report tabs */
-        .rts-feedback-tab,
-        .rts-report-tab {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            background: #2c3e50 !important;
-            color: white !important;
-            padding: 10px 20px !important;
-            border: none !important;
-            cursor: pointer !important;
-            transition: all 0.3s !important;
-            font-size: 14px !important;
-            font-weight: 600 !important;
-            z-index: 10 !important;
-        }
-        
-        .rts-report-tab {
-            left: auto !important;
-            right: 0 !important;
-        }
-        
-        .rts-feedback-tab:hover,
-        .rts-report-tab:hover {
-            background: #f0b849 !important;
-            color: #2c3e50 !important;
-        }
-        
-        .rts-letter-card {
-            position: relative !important;
-            background: var(--rts-white, #fff);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
-            border-radius: 2px;
-            padding: 40px 30px 30px 30px !important;
-        }
-        </style>
-        
         <div class="rts-letter-viewer" data-rts-viewer="1">
             <div id="rts-letter-stage" class="rts-letter-stage">
                 <?php if ($letter): ?>
@@ -142,41 +84,13 @@ class RTS_Shortcodes {
 
         ob_start();
         ?>
-        <style>
-        /* Paper effect for write letter form */
-        .rts-submit-form {
-            background: var(--rts-white, #fff);
-            position: relative;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
-            border-radius: 2px;
-            padding: 30px;
-        }
-        
-        .rts-submit-btn {
-            background: #2c3e50 !important;
-            color: white !important;
-            border: none !important;
-            padding: 12px 30px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            border-radius: 4px !important;
-            cursor: pointer !important;
-            transition: background 0.3s !important;
-        }
-        
-        .rts-submit-btn:hover {
-            background: #f0b849 !important;
-            color: #2c3e50 !important;
-        }
-        </style>
-        
         <div class="rts-submit-wrap">
             <div class="rts-submit-grid">
                 <div class="rts-submit-panel">
                     <form id="rts-submit-form" class="rts-submit-form" novalidate>
 
                         <label for="rts-letter-text" class="rts-field-label">Your letter <span aria-hidden="true">*</span></label>
-                        <textarea id="rts-letter-text" name="letter" rows="12" required minlength="50" placeholder="Dear Friend,\n\n..."></textarea>
+                        <textarea id="rts-letter-text" name="letter" rows="12" required minlength="50" placeholder="Dear Friend,"></textarea>
                         <div class="rts-char-count" aria-live="polite">0 characters (minimum 50)</div>
 
                         <div class="rts-field">
@@ -185,15 +99,16 @@ class RTS_Shortcodes {
                             <div class="rts-help">For moderation contact only, will never be published</div>
                         </div>
 
-                        <label class="rts-consent">
-                            <input type="checkbox" name="consent" value="1" required />
-                            <span>I understand my letter will be reviewed before publishing <span aria-hidden="true">*</span></span>
-                        </label>
 
-                        <button type="submit" class="rts-submit-btn">
-                            <span class="rts-btn-text">Submit Letter</span>
-                            <span class="rts-btn-spinner" aria-hidden="true" style="display:none">…</span>
-                        </button>
+                        <div class="rts-consent-row">
+                            <input id="rts-consent" type="checkbox" name="consent" value="1" required />
+                            <label for="rts-consent">I understand my letter will be reviewed before publishing <span aria-hidden="true">*</span></label>
+                        </div>
+
+                        <div class="rts-submit-actions">
+                            <button type="submit" class="rts-submit-btn">Submit Letter</button>
+                        </div>
+
 
                         <div class="rts-submit-response" aria-live="polite"></div>
                     </form>
@@ -281,6 +196,59 @@ class RTS_Shortcodes {
             <div class="rts-letter-share" style="display:none" aria-hidden="true"></div>
             <?php endif; ?>
         </article>
+
+        <?php
+        static $rts_modal_rendered = false;
+        if (!$rts_modal_rendered):
+            $rts_modal_rendered = true;
+        ?>
+        <div id="rts-feedback-modal" class="rts-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title">
+            <div class="rts-modal-backdrop" data-rts-close="1"></div>
+            <div class="rts-modal-panel" role="document">
+                <div class="rts-modal-header">
+                    <h3 id="rts-feedback-title">Feedback</h3>
+                    <button type="button" class="rts-modal-close" data-rts-close="1" aria-label="Close feedback">×</button>
+                </div>
+
+                <form class="rts-feedback-form" novalidate>
+                    <input type="hidden" name="letter_id" value="">
+                    <input type="text" name="website" value="" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
+
+                    <div class="rts-field">
+                        <label for="rts-feedback-rating">How did this letter land?</label>
+                        <select id="rts-feedback-rating" name="rating" required>
+                            <option value="neutral">Not sure</option>
+                            <option value="up">It helped</option>
+                            <option value="down">It did not help / Concern</option>
+                        </select>
+                    </div>
+
+                    <div class="rts-field">
+                        <label for="rts-feedback-comment">Your message (optional)</label>
+                        <textarea id="rts-feedback-comment" name="comment" rows="5" placeholder="Tell us what you think. If something feels unsafe, say why."></textarea>
+                    </div>
+
+                    <div class="rts-field">
+                        <label for="rts-feedback-email">Email (optional)</label>
+                        <input id="rts-feedback-email" type="email" name="email" placeholder="Only if you want a follow-up">
+                    </div>
+
+                    <div class="rts-field rts-field-inline">
+                        <input id="rts-feedback-triggered" type="checkbox" name="triggered" value="1">
+                        <label for="rts-feedback-triggered">This letter triggered me or I am worried about its safety</label>
+                    </div>
+
+                    <div class="rts-modal-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+                        <button type="button" class="rts-btn rts-btn-secondary" data-rts-close="1">Cancel</button>
+                        <button type="submit" class="rts-btn rts-btn-primary">Send feedback</button>
+                    </div>
+
+                    <p class="rts-feedback-status" aria-live="polite" style="margin:12px 0 0 0;"></p>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <?php
         return ob_get_clean();
     }

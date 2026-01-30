@@ -25,10 +25,10 @@ class RTS_CPT_Letters_Complete {
         add_action('init', [$this, 'register_post_type']);
         add_action('init', [$this, 'register_taxonomies']);
         
-        // Meta boxes (Author / Email / Reading Time / Manual Stats)
+        // Meta boxes
         add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
         add_action('save_post_letter', [$this, 'save_meta_boxes']);
-        
+
         // CLEAN columns
         add_filter('manage_letter_posts_columns', [$this, 'set_columns']);
         add_action('manage_letter_posts_custom_column', [$this, 'render_column'], 10, 2);
@@ -99,11 +99,10 @@ class RTS_CPT_Letters_Complete {
             'hierarchical' => false,
         ]);
     }
-
-    // -----------------------
-    // Meta boxes
-    // -----------------------
-public function add_meta_boxes() {
+    /**
+     * Meta Boxes for Author, Reading Time, and Manual Stats
+     */
+    public function add_meta_boxes() {
         add_meta_box(
             'rts_letter_meta',
             'Letter Details',
@@ -144,16 +143,16 @@ public function add_meta_boxes() {
         echo '</select></p>';
 
         echo '<p style="font-size:12px;color:#666;">If Reading time is set to Auto, the system will estimate it from the letter length.</p>';
-        
+
         echo '<hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">';
-        
+
         echo '<p style="margin-bottom: 10px;"><strong>Manual Stats Override</strong></p>';
         echo '<p style="font-size:12px;color:#666;margin-bottom:10px;">Use these fields when importing letters from Wix to preserve view/help counts. Leave blank for new letters.</p>';
-        
+
         echo '<p><label for="rts_view_count"><strong>View Count</strong></label><br>';
         echo '<input type="number" id="rts_view_count" name="rts_view_count" value="' . esc_attr($view_count) . '" min="0" style="width:100%;" placeholder="0" />';
         echo '<span style="font-size:11px;color:#999;">Number of times this letter was viewed</span></p>';
-        
+
         echo '<p><label for="rts_help_count"><strong>Help Count</strong></label><br>';
         echo '<input type="number" id="rts_help_count" name="rts_help_count" value="' . esc_attr($help_count) . '" min="0" style="width:100%;" placeholder="0" />';
         echo '<span style="font-size:11px;color:#999;">Number of "This helped" clicks</span></p>';
@@ -179,7 +178,7 @@ public function add_meta_boxes() {
         } else {
             update_post_meta($post_id, 'reading_time', $reading_time);
         }
-        
+
         // Manual stats override (for Wix imports)
         if (isset($_POST['rts_view_count'])) {
             $view_count = intval($_POST['rts_view_count']);
@@ -187,7 +186,7 @@ public function add_meta_boxes() {
                 update_post_meta($post_id, 'view_count', $view_count);
             }
         }
-        
+
         if (isset($_POST['rts_help_count'])) {
             $help_count = intval($_POST['rts_help_count']);
             if ($help_count >= 0) {
@@ -195,6 +194,7 @@ public function add_meta_boxes() {
             }
         }
     }
+
 
 
     /**

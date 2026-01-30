@@ -266,19 +266,14 @@
    LETTER ACTIONS
    ========================================== */
 
-.rts-letter-actions {
-    /* Now lives BELOW the card (only rating prompt) */
-    display: flex;
-    gap: 12px;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    margin-top: 22px;
+.rts-letter-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  justify-content:flex-start;
+  flex-wrap:wrap;
+  margin-top:22px;
 }
-
-.rts-letter-actions .rts-btn-next{
-    margin-left: auto;
-}
-
 /* Footer icon buttons (Feedback / Report) */
 .rts-letter-actions .rts-trigger{
     display:inline-flex;
@@ -334,32 +329,15 @@
     outline-offset: 3px;
 }
 
-.rts-btn:active {
-    transform: translateY(0);
+.rts-btn:active{
+  transform: translateY(1px);
 }
-
-/* Read Another Letter button - wider, less height, Special Elite font */
-.rts-btn.rts-btn-next {
-    font-family: 'Special Elite', 'Courier New', monospace;
-    color: #fff;
-    min-width: 280px;
-    max-width: 400px;
-    width: 100%;
-    padding: 10px 28px;
-    min-height: 42px;
-    font-size: 16px;
-    font-weight: 600;
-}
-.rts-btn.rts-btn-next:hover {
-    color: #FCA311 !important;
-}
-
 
 /* ==========================================
    QUICK RATING PROMPT (shown on Next)
    ========================================== */
 
-rts-rate-prompt {
+.rts-rate-prompt {
     width: 100%;
     display: flex;
     max-width: 100%;
@@ -1114,220 +1092,29 @@ body.rts-modal-open{overflow:hidden;}
 }
 
 .rts-instruction-block{
-    border-top: 1px solid rgba(241,227,211,0.18);
-    padding-top: 14px;
-    margin-top: 14px;
+  border-top: 1px solid rgba(241,227,211,0.18);
+  padding-top: 14px;
+  margin-top: 14px;
 }
 
-.rts-instruction-block:first-of-type{
-    border-top: 0;
-    padding-top: 0;
-    margin-top: 0;
-}
+/* Buttons */
+.rts-btn{appearance:none;border:1px solid transparent;border-radius:6px;padding:12px 22px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background-color .15s ease,color .15s ease,border-color .15s ease,transform .15s ease}
+.rts-btn:focus-visible{outline:3px solid rgba(252,163,17,.55);outline-offset:3px}
+.rts-btn-next{background:#000;border-color:#000;color:#fff;min-width:280px;text-align:center}
+.rts-btn-next:hover,.rts-btn-next:focus{background:#FCA311;border-color:#FCA311;color:#000}
+.rts-submit-btn{background:#070C13;border-color:#070C13;color:#fff;padding:12px 22px;border-radius:10px}
+.rts-submit-btn:hover,.rts-submit-btn:focus{background:#FCA311;border-color:#FCA311;color:#000}
 
-.rts-instruction-block h4{
-    margin: 0 0 6px;
-    color: #FCA311;
-    font-size: 1.05rem;
-    line-height: 1.2;
-}
+/* Footer button placement */
+.rts-letter-card-footer{display:flex;justify-content:flex-end;margin-top:26px}
 
-.rts-submit-instructions p{
-    margin: 0;
-    color: #F1E3D3;
-    opacity: 0.95;
-}
+/* Write a letter layout */
+.rts-submit-grid{display:grid;grid-template-columns:1.25fr .9fr;gap:28px;align-items:start}
+.rts-submit-form{display:flex;flex-direction:column;gap:14px}
+.rts-submit-form .rts-field{display:flex;flex-direction:column;gap:6px}
+.rts-consent-row{display:flex;align-items:flex-start;gap:10px}
+.rts-submit-actions{display:flex;justify-content:flex-end;margin-top:10px}
+.rts-submit-actions .rts-submit-btn{min-width:180px}
 
-.rts-submit-instructions a{
-    color: #FCA311;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-.rts-submit-instructions a:focus-visible{
-    outline: 3px solid #FCA311;
-    outline-offset: 3px;
-    border-radius: 10px;
-}
-
-@media (max-width: 900px){
-    .rts-submit-grid{
-        grid-template-columns: 1fr;
-        gap: 18px;
-    }
-    .rts-submit-instructions{
-        padding: 18px 16px;
-    }
-}
-
-
-/* === RESTORED BUTTON + TAG CSS (Sonny) === */
-.rts-letter-actions .rts-btn-next{
-    margin-left: auto;
-}
-/* Read Another Letter button - wider, less height, Special Elite font */
-.rts-btn.rts-btn-next {
-    font-family: 'Special Elite', 'Courier New', monospace;
-    color: #fff;
-    min-width: 280px;
-    max-width: 400px;
-    width: 100%;
-    padding: 10px 28px;
-    min-height: 42px;
-    font-size: 16px;
-    font-weight: 600;
-}
-.rts-btn.rts-btn-next:hover {
-    color: #FCA311 !important;
-}
-/* Next letter button - matches Spec */
-.rts-btn-next{
-    width: 250px;
-    max-width: 250px;
-    padding: 7px 0;
-    font-family: 'Special Elite', 'Courier New', monospace;
-    font-size: .85rem;
-    line-height: 1.2;
-    background: transparent;
-    color: var(--rts-black);
-    border: 1px solid rgba(7,12,19,0.35);
-    border-radius: 4px;
-    cursor: pointer;
-    text-align:center;
-    transition: background .18s ease, color .18s ease, border-color .18s ease;
-}
-.rts-btn-next:hover{
-    background: #000000;
-    color: #FCA311;
-}
-.rts-btn-next:focus-visible{
-    outline: 3px solid #FCA311;
-    outline-offset: 2px;
-}
-
-/* RTS v2.0.10.55 additions */
-.rts-btn-next:hover{
-  background:#000000;
-  color:#FCA311;
-}
-
-/* Top-left tag icons (Feedback / Report) */
-.rts-letter-top-tags{
-    position: absolute;
-    top: 15px;
-    left: -45px; /* sit outside the paper */
-    display: inline-flex;
-    flex-direction: column;
-    gap: 5px;
-    z-index: 3;
-}
-
-@media (max-width: 768px) {
-.rts-letter-top-tags{
-        top: 12px;
-        left: auto;
-        right: 12px;
-        flex-direction: row;
-    }
-}
-.rts-tag-btn{
-    width: 44px;
-    height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--rts-black);
-    color: var(--rts-white);
-    border: 2px solid var(--rts-black);
-    border-radius: 0px; /* square-ish tag */
-    cursor: pointer;
-    transition: all 0.18s ease;
-    position: relative;
-}
-.rts-tag-btn:hover{
-    transform: translateY(-1px);
-    color: #FCA311;
-    box-shadow: 0 6px 14px var(--rts-shadow);
-}
-
-.rts-tag-btn:focus-visible{
-    outline: 3px solid #FCA311;
-    outline-offset: 3px;
-}
-
-.rts-tag-btn i{
-    font-size: 18px;
-    line-height: 1;
-}
-/* Tooltip label (hover + keyboard focus) */
-.rts-tag-btn::after{
-    content: attr(data-tooltip);
-    position: absolute;
-    top: 50%;
-    left: 54px; /* show label to the right of the tag */
-    background: rgba(7, 12, 19, 0.95);
-    color: #fff;
-    padding: 8px 10px;
-    border-radius: 8px;
-    font-size: 12px;
-    white-space: nowrap;
-    opacity: 0;
-    transform: translateY(-50%) translateX(-4px);
-    pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.rts-tag-btn:hover::after,
-.rts-tag-btn:focus-visible::after{
-    opacity: 1;
-    transform: translateY(-50%) translateX(0);
-}
-/* Card footer keeps Next button visually attached to the letter */
-.rts-letter-card-footer{
-    margin-top: 26px;
-    display: flex;
-    justify-content: center;
-}
-@media (max-width: 768px) {
-.rts-tag-btn i {
-        font-size: 13px;
-    }
-
-    .rts-tag-btn{
-        width: 25px;
-        height: 25px;
-    }}
-/* RTS v2.0.10.58 - Tooltips for letter action tabs */
-.rts-letter-tabs .rts-tag-btn{
-  position:relative;
-}
-
-.rts-letter-tabs .rts-tag-btn::after{
-  content: attr(data-tooltip);
-  position:absolute;
-  top:100%;
-  left:50%;
-  transform:translateX(-50%);
-  margin-top:6px;
-  background:#000;
-  color:#fff;
-  font-size:0.75rem;
-  line-height:1.2;
-  padding:5px 9px;
-  border-radius:6px;
-  white-space:nowrap;
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .15s ease;
-  z-index:9999;
-}
-
-.rts-letter-tabs .rts-tag-btn:hover::after,
-.rts-letter-tabs .rts-tag-btn:focus-visible::after{
-  opacity:1;
-}
-
-@media (hover:none)
-
-{
-  .rts-letter-tabs .rts-tag-btn::after{ display:none; }
+@media (max-width:900px){.rts-submit-grid{grid-template-columns:1fr}}
+@media (max-width:768px){.rts-letter-card-footer{justify-content:stretch}.rts-btn-next{width:100%;min-width:0}.rts-submit-actions{justify-content:stretch}.rts-submit-actions .rts-submit-btn{width:100%;min-width:0}}
