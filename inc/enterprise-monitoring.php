@@ -455,7 +455,8 @@ class RTS_Enterprise_Monitor {
         // Webhook
         if (!empty($this->config['webhook_url'])) {
             if (filter_var($this->config['webhook_url'], FILTER_VALIDATE_URL)) {
-                wp_remote_post($this->config['webhook_url'], [
+                (function_exists("session_status") && session_status() === PHP_SESSION_ACTIVE) ? session_write_close() : null; 
+        wp_remote_post($this->config['webhook_url'], [
                     'body' => json_encode([
                         'text' => "🚨 *System Alert*: $type detected on " . get_bloginfo('name'),
                         'attachments' => [[

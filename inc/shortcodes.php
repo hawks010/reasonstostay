@@ -1,259 +1,753 @@
 <?php
 /**
  * Reasons to Stay - Shortcodes
- *
- * Notes:
- * - Markup matches assets/js/rts-system.js (IDs/classes).
- * - First letter is rendered server-side for reliability.
- * - We do NOT add a separate signature line (letter body already contains it).
+ * Main shortcodes for letter system
  */
 
 if (!defined('ABSPATH')) exit;
 
-if (!class_exists('RTS_Shortcodes')) {
-
 class RTS_Shortcodes {
-
-    private static $instance = null;
-
-    public static function get_instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
-        }
-        return self::$instance;
+    
+    public function __construct() {
+        add_shortcode('rts_letter_viewer', [$this, 'letter_viewer']);
+        add_shortcode('rts_onboarding', [$this, 'onboarding']);
+        add_shortcode('rts_submit_form', [$this, 'submit_form']);
+        add_shortcode('rts_site_stats_row', [$this, 'site_stats_row']);
     }
-
-    private function __construct() {
-        add_shortcode('rts_onboarding', [$this, 'render_onboarding']);
-        add_shortcode('rts_letter_viewer', [$this, 'render_letter_viewer']);
-
-        // Keep backwards compatibility with older pages
-        add_shortcode('rts_submit_form', [$this, 'render_write_letter']);
-        add_shortcode('rts_write_letter', [$this, 'render_write_letter']);
-        add_shortcode('rts_write_letter_form', [$this, 'render_write_letter']);
-    }
-
-    public function render_onboarding() {
-        return '<div id="rts-onboarding-modal" class="rts-onboarding" style="display:none" aria-hidden="true"></div>';
-    }
-
+    
     /**
-     * [rts_letter_viewer show_next="yes" show_share="yes" show_helpful="yes"]
+     * [rts_letter_viewer] - Main letter display
      */
-    public function render_letter_viewer($atts) {
+    public function letter_viewer($atts) {
         $atts = shortcode_atts([
-            'show_next' => 'yes',
-            'show_share' => 'yes',
             'show_helpful' => 'yes',
-        ], $atts, 'rts_letter_viewer');
-
-        $show_next = in_array(strtolower($atts['show_next']), ['1','yes','true'], true);
-        $show_share = in_array(strtolower($atts['show_share']), ['1','yes','true'], true);
-        $show_helpful = in_array(strtolower($atts['show_helpful']), ['1','yes','true'], true);
-
-        $letter = $this->get_random_published_letter();
-
+            'show_share' => 'yes',
+            'show_next' => 'yes'
+        ], $atts);
+        
         ob_start();
+        // Always render onboarding overlay (JS will only show it for new users)
+        echo $this->onboarding([]);
         ?>
-        <div class="rts-letter-viewer" data-rts-viewer="1">
-            <div id="rts-letter-stage" class="rts-letter-stage">
-                <?php if ($letter): ?>
-                    <?php echo $this->render_letter_card($letter, $show_next, $show_share, $show_helpful); ?>
-                <?php else: ?>
-                    <div class="rts-letter-card" style="padding:24px;">
-                        <p>No letters found yet.</p>
+        <div class="rts-letter-viewer" data-component="viewer">
+            
+            <!-- Loading state -->
+            <div class="rts-loading">
+                <div class="rts-spinner"></div>
+                <p>Finding a letter for you...</p>
+            </div>
+            
+            <!-- Letter display (populated by JS) -->
+            <div class="rts-letter-display" style="display:none;">
+                <div class="rts-letter-card">
+                    <div class="rts-letter-content"></div>
+                    
+                    <div class="rts-letter-signature"></div>
+                </div>
+                
+                <!-- Action buttons -->
+                <div class="rts-letter-actions">
+                    <?php if ($atts['show_next'] === 'yes') : ?>
+                    <button class="rts-btn rts-btn-next" aria-label="Read another letter">
+                        Read Another Letter
+                    </button>
+                    <?php endif; ?>
+                
+                    <!-- Rating prompt (shown on Next click to reduce button clutter) -->
+                    <?php if ($atts['show_helpful'] === 'yes') : ?>
+                    <div class="rts-rate-prompt" hidden aria-live="polite" aria-label="Rate this letter before continuing">
+                        <span class="rts-rate-prompt-text">Before the next letter, how was that one?</span>
+                        <div class="rts-rate-prompt-actions" role="group" aria-label="Rate this letter">
+                            <button type="button" class="rts-rate-btn rts-rate-up" aria-label="This helped">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M14 9V5a3 3 0 0 0-3-3l-1 7-4 5v9h11a2 2 0 0 0 2-1.6l1-9A2 2 0 0 0 18 10h-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M6 23H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                </svg>
+                                <span>Helped</span>
+                            </button>
+                            <button type="button" class="rts-rate-btn rts-rate-down" aria-label="Not for me">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M10 15v4a3 3 0 0 0 3 3l1-7 4-5V1H7a2 2 0 0 0-2 1.6l-1 9A2 2 0 0 0 6 14h4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M18 1h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                </svg>
+                                <span>Not for me</span>
+                            </button>
+                            <button type="button" class="rts-rate-skip" aria-label="Skip rating">
+                                Skip
+                            </button>
+                        </div>
                     </div>
+                    <?php endif; ?>
+                </div>
+                
+                
+                <div class="rts-letter-feedback-link" aria-label="Feedback options">
+                    <button type="button" class="rts-feedback-open" aria-haspopup="dialog" aria-controls="rts-feedback-modal">
+                        Give feedback on this letter
+                    </button>
+                    <button type="button" class="rts-trigger-open" aria-haspopup="dialog" aria-controls="rts-feedback-modal" data-rts-trigger="1">
+                        Report a concern
+                    </button>
+                </div>
+
+                <!-- Feedback modal (subtle, internal, letter-linked) -->
+                <div class="rts-modal" id="rts-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title" aria-hidden="true">
+                    <div class="rts-modal-backdrop" data-rts-close></div>
+                    <div class="rts-modal-panel" role="document">
+                        <div class="rts-modal-header">
+                            <h3 id="rts-feedback-title">Feedback</h3>
+                            <button type="button" class="rts-modal-close" aria-label="Close feedback" data-rts-close>×</button>
+                        </div>
+
+                        <form class="rts-feedback-form" autocomplete="on">
+                            <input type="hidden" name="letter_id" value="">
+                            <input type="text" name="website" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;">
+
+                            <div class="rts-field">
+                                <label for="rts-feedback-rating">Overall</label>
+                                <select id="rts-feedback-rating" name="rating">
+                                    <option value="neutral">No reaction</option>
+                                    <option value="up">👍 Helped</option>
+                                    <option value="down">👎 Didn’t help</option>
+                                </select>
+                            </div>
+
+                            <div class="rts-field rts-field-inline">
+                                <input id="rts-feedback-triggered" type="checkbox" name="triggered" value="1">
+                                <label for="rts-feedback-triggered">This letter felt triggering or unsafe</label>
+                            </div>
+
+                            <div class="rts-field">
+                                <label for="rts-feedback-comment">Optional note</label>
+                                <textarea id="rts-feedback-comment" name="comment" rows="4" placeholder="What worked, what didn’t, or anything we should know (optional)"></textarea>
+                            </div>
+
+                            <div class="rts-field">
+                                <label for="rts-feedback-email">Email (optional)</label>
+                                <input id="rts-feedback-email" type="email" name="email" placeholder="Only if you want a reply">
+                            </div>
+
+                            <div class="rts-actions">
+                                <button type="submit" class="rts-btn rts-btn-primary">Send feedback</button>
+                                <button type="button" class="rts-btn rts-btn-ghost" data-rts-close>Cancel</button>
+                            </div>
+
+                            <p class="rts-muted">
+                                Feedback is private and linked to the letter you just read. If you’re in immediate danger, please use the emergency links above.
+                            </p>
+                        </form>
+                    </div>
+                </div>
+
+<?php if ($atts['show_share'] === 'yes') : ?>
+                <!-- Share section -->
+                <div class="rts-letter-share">
+                    <p class="rts-share-label">Help us reach more people by sharing this site:</p>
+                    <div class="rts-share-buttons">
+                        <a href="#" class="share-btn rts-share-btn" data-platform="facebook" target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook (opens in new tab)">
+                            <i class="fab fa-facebook-f" aria-hidden="true"></i>
+                            <span>Facebook</span>
+                        </a>
+                        <a href="#" class="share-btn rts-share-btn" data-platform="x" target="_blank" rel="noopener noreferrer" aria-label="Share on X (opens in new tab)">
+                            <i class="fab fa-x-twitter" aria-hidden="true"></i>
+                            <span>X</span>
+                        </a>
+                        <a href="#" class="share-btn rts-share-btn" data-platform="whatsapp" target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp (opens in new tab)">
+                            <i class="fab fa-whatsapp" aria-hidden="true"></i>
+                            <span>WhatsApp</span>
+                        </a>
+                        <button class="share-btn rts-share-btn" type="button" data-platform="copy" aria-label="Copy link">
+                            <i class="fas fa-link" aria-hidden="true"></i>
+                            <span>Copy link</span>
+                        </button>
+                        <a href="#" class="share-btn rts-share-btn" data-platform="email" aria-label="Share via email">
+                            <i class="fas fa-envelope" aria-hidden="true"></i>
+                            <span>Email</span>
+                        </a>
+                    </div>
+                </div>
                 <?php endif; ?>
+            </div>
+            
+            <!-- Helpful confirmation toast -->
+            <div class="rts-helpful-toast" style="display:none;" role="alert">
+                <p>✓ Thank you for letting us know</p>
             </div>
         </div>
         <?php
         return ob_get_clean();
     }
-
+    
     /**
-     * Write a Letter (front-end) form
-     * - Must match rts-system.js selectors:
-     *   #rts-submit-form, #rts-letter-text, .rts-char-count
+     * [rts_onboarding] - Preference selector
      */
-    public function render_write_letter($atts) {
-        $atts = shortcode_atts([
-            'show_guidelines' => 'yes',
-        ], $atts, 'rts_write_letter');
-
-        $show_guidelines = in_array(strtolower($atts['show_guidelines']), ['1','yes','true'], true);
-
+    public function onboarding($atts) {
         ob_start();
         ?>
-        <div class="rts-submit-wrap">
-            <div class="rts-submit-grid">
-                <div class="rts-submit-panel">
-                    <form id="rts-submit-form" class="rts-submit-form" novalidate>
-
-                        <label for="rts-letter-text" class="rts-field-label">Your letter <span aria-hidden="true">*</span></label>
-                        <textarea id="rts-letter-text" name="letter" rows="12" required minlength="50" placeholder="Dear Friend,"></textarea>
-                        <div class="rts-char-count" aria-live="polite">0 characters (minimum 50)</div>
-
-                        <div class="rts-field">
-                            <label for="rts-email" class="rts-field-label">Your email <span class="rts-muted">*</span></label>
-                            <input id="rts-email" name="email" type="email" required autocomplete="email" />
-                            <div class="rts-help">For moderation contact only, will never be published</div>
+        <div class="rts-onboarding-overlay" style="display:none;">
+            <div class="rts-onboarding-modal">
+                <div class="rts-onboarding-content">
+                    <h2>Would you like a letter chosen just for you?</h2>
+                    <p>Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
+                    
+                    <!-- Step 1: Feelings -->
+                    <div class="rts-onboarding-step" data-step="1">
+                        <h3>What are you feeling right now?</h3>
+                        <p class="rts-step-subtitle">Select all that apply</p>
+                        
+                        <div class="rts-checkbox-group">
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="hopeless">
+                                <span>Hopeless</span>
+                            </label>
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="alone">
+                                <span>Alone</span>
+                            </label>
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="anxious">
+                                <span>Anxious</span>
+                            </label>
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="grieving">
+                                <span>Grieving</span>
+                            </label>
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="tired">
+                                <span>Tired of fighting</span>
+                            </label>
+                            <label class="rts-checkbox-label">
+                                <input type="checkbox" name="feelings[]" value="struggling">
+                                <span>Just struggling</span>
+                            </label>
                         </div>
-
-
-                        <div class="rts-consent-row">
-                            <input id="rts-consent" type="checkbox" name="consent" value="1" required />
-                            <label for="rts-consent">I understand my letter will be reviewed before publishing <span aria-hidden="true">*</span></label>
+                        
+                        <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+                    </div>
+                    
+                    <!-- Step 2: Reading time -->
+                    <div class="rts-onboarding-step" data-step="2" style="display:none;">
+                        <h3>How much time do you have?</h3>
+                        
+                        <div class="rts-radio-group">
+                            <label class="rts-radio-label">
+                                <input type="radio" name="readingTime" value="short">
+                                <span>Just a minute</span>
+                            </label>
+                            <label class="rts-radio-label">
+                                <input type="radio" name="readingTime" value="medium">
+                                <span>A few minutes</span>
+                            </label>
+                            <label class="rts-radio-label">
+                                <input type="radio" name="readingTime" value="long" checked>
+                                <span>I can read for a bit</span>
+                            </label>
                         </div>
-
-                        <div class="rts-submit-actions">
-                            <button type="submit" class="rts-submit-btn">Submit Letter</button>
+                        
+                        <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+                    </div>
+                    
+                    <!-- Step 3: Tone -->
+                    <div class="rts-onboarding-step" data-step="3" style="display:none;">
+                        <h3>What kind of voice helps you?</h3>
+                        
+                        <div class="rts-radio-group">
+                            <label class="rts-radio-label">
+                                <input type="radio" name="tone" value="gentle">
+                                <span>Warm and gentle</span>
+                            </label>
+                            <label class="rts-radio-label">
+                                <input type="radio" name="tone" value="real">
+                                <span>Straight-talking and real</span>
+                            </label>
+                            <label class="rts-radio-label">
+                                <input type="radio" name="tone" value="hopeful">
+                                <span>Hopeful and uplifting</span>
+                            </label>
+                            <label class="rts-radio-label">
+                                <input type="radio" name="tone" value="any" checked>
+                                <span>Surprise me</span>
+                            </label>
                         </div>
-
-
-                        <div class="rts-submit-response" aria-live="polite"></div>
-                    </form>
+                        
+                        <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
+                    </div>
                 </div>
-
-                <?php if ($show_guidelines): ?>
-                <aside class="rts-submit-instructions" id="rts-writing-guidelines">
+                
+                <button class="rts-btn-skip" type="button" aria-label="Skip to read any letter">
+                    Skip, show me any letter
+                </button>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * [rts_submit_form] - Letter submission form
+     */
+    public function submit_form($atts) {
+        ob_start();
+        ?>
+        <div class="rts-submit-form-wrapper">
+            
+            <!-- 2fr 1fr Grid: Form left, Instructions right -->
+            <div class="rts-submit-grid">
+                
+                <!-- LEFT: Form (2fr) -->
+                <form id="rts-submit-form" class="rts-form" novalidate>
+                    
+                    <div class="rts-form-field">
+                        <label for="rts-author-name">Your first name <span class="rts-optional">(optional)</span></label>
+                        <input 
+                            type="text" 
+                            id="rts-author-name" 
+                            name="author_name" 
+                            maxlength="50"
+                            autocomplete="given-name"
+                        >
+                    </div>
+                    
+                    <div class="rts-form-field">
+                        <label for="rts-letter-text">Your letter <span class="rts-required">*</span></label>
+                        <textarea 
+                            id="rts-letter-text" 
+                            name="letter_text" 
+                            required
+                            minlength="50"
+                            rows="12"
+                            placeholder="Write from the heart..."
+                            aria-required="true"
+                        ></textarea>
+                        <span class="rts-char-count" aria-live="polite">0 characters (minimum 50)</span>
+                    </div>
+                    
+                    <div class="rts-form-field">
+                        <label for="rts-author-email">Your email <span class="rts-required">*</span></label>
+                        <input 
+                            type="email" 
+                            id="rts-author-email" 
+                            name="author_email" 
+                            required
+                            autocomplete="email"
+                            aria-required="true"
+                        >
+                        <span class="rts-field-help">For moderation contact only - will never be published</span>
+                    </div>
+                    
+                    <!-- Enhanced honeypot (multiple traps) -->
+                    <input type="text" name="website" style="position:absolute;left:-9999px;" tabindex="-1" aria-hidden="true" autocomplete="off">
+                    <input type="text" name="company" style="position:absolute;left:-9999px;" tabindex="-1" aria-hidden="true" autocomplete="off">
+                    <input type="email" name="confirm_email" style="position:absolute;left:-9999px;" tabindex="-1" aria-hidden="true" autocomplete="off">
+                    <input type="hidden" name="rts_timestamp" id="rts-timestamp" value="">
+                    <input type="hidden" name="rts_token" id="rts-token" value="<?php echo wp_create_nonce('rts_submit_letter'); ?>">
+                    
+                    <div class="rts-form-field rts-checkbox-field">
+                        <label class="rts-checkbox-label">
+                            <input type="checkbox" id="rts-consent" required aria-required="true">
+                            <span>I understand my letter will be reviewed before publishing <span class="rts-required">*</span></span>
+                        </label>
+                    </div>
+                    
+                    <div class="rts-form-actions">
+                        <button type="submit" class="rts-btn rts-btn-submit">
+                            <span class="rts-btn-text">Submit Letter</span>
+                            <span class="rts-btn-spinner" style="display:none;">Submitting...</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Response messages -->
+                    <div class="rts-form-response" role="alert" aria-live="polite"></div>
+                </form>
+                
+                <!-- RIGHT: Instructions (1fr) -->
+                <div class="rts-submit-instructions">
                     <h3>Writing Guidelines</h3>
-                    <div class="rts-guideline">
+                    
+                    <div class="rts-instruction-block">
                         <h4>✍️ Write from the Heart</h4>
                         <p>Focus on writing something warm and supportive. If you need inspiration, you can read existing letters on the site.</p>
                     </div>
-                    <div class="rts-guideline">
+                    
+                    <div class="rts-instruction-block">
                         <h4>📝 Don't Worry About Perfect</h4>
                         <p>All submissions are reviewed and may be lightly edited to make sure they're ready to be published and delivered to someone. So don't worry about making it perfect.</p>
                     </div>
-                    <div class="rts-guideline">
+                    
+                    <div class="rts-instruction-block">
                         <h4>💚 Your Impact</h4>
                         <p>Your letter will be randomly delivered to someone who needs hope. You could make a real difference in someone's life today.</p>
                     </div>
-                </aside>
-                <?php endif; ?>
+                </div>
+            
+            </div>
+            
+            <!-- Success message (hidden by default) -->
+            <div class="rts-submit-success" style="display:none;">
+                <div class="rts-success-icon">✓</div>
+                <h3>Thank you for writing!</h3>
+                <p>Your letter has been submitted and will be reviewed shortly. Once approved, it will be published and help someone who needs it.</p>
+                <button class="rts-btn" onclick="location.reload()">Write Another Letter</button>
             </div>
         </div>
+        
+        <style>
+        /* 2fr 1fr Grid Layout */
+        .rts-submit-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+        
+        /* Instructions Panel */
+        .rts-submit-instructions {
+            background: #182437;
+            color: #F1E3D3;
+            padding: 30px;
+            border-radius: 12px;
+            position: sticky;
+            top: 20px;
+        }
+        
+        .rts-submit-instructions h3 {
+            font-family: 'Special Elite', 'Courier New', monospace;
+            font-size: 1.4rem;
+            color: #FCA311;
+            margin: 0 0 25px 0;
+            border-bottom: 2px solid rgba(252, 163, 17, 0.3);
+            padding-bottom: 15px;
+        }
+        
+        .rts-instruction-block {
+            margin-bottom: 25px;
+        }
+        
+        .rts-instruction-block:last-child {
+            margin-bottom: 0;
+        }
+        
+        .rts-instruction-block h4 {
+            font-size: 1.1rem;
+            color: #FCA311;
+            margin: 0 0 10px 0;
+            font-weight: 700;
+        }
+        
+        .rts-instruction-block p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin: 0;
+            color: #F1E3D3;
+        }
+        
+        /* Mobile: Stack vertically */
+        @media (max-width: 968px) {
+            .rts-submit-grid {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+            
+            .rts-submit-instructions {
+                position: static;
+                order: -1; /* Show instructions first on mobile */
+            }
+        }
+        
+        /* Tablet: Adjust ratio */
+        @media (min-width: 969px) and (max-width: 1200px) {
+            .rts-submit-grid {
+                grid-template-columns: 3fr 2fr;
+            }
+        }
+        </style>
+        
+        <script>
+        // Enhanced bot protection (lightweight, non-intrusive)
+        (function() {
+            // Set form load timestamp (timing check)
+            var loadTime = Date.now();
+            var timestampField = document.getElementById('rts-timestamp');
+            if (timestampField) {
+                timestampField.value = loadTime;
+            }
+            
+            // Character count
+            var textarea = document.getElementById('rts-letter-text');
+            var counter = document.querySelector('.rts-char-count');
+            
+            if (textarea && counter) {
+                textarea.addEventListener('input', function() {
+                    var count = this.value.length;
+                    counter.textContent = count + ' characters (minimum 50)';
+                    
+                    if (count >= 50) {
+                        counter.style.color = '#28a745';
+                    } else {
+                        counter.style.color = '';
+                    }
+                });
+            }
+            
+            // Form submission with lightweight bot checks
+            var form = document.getElementById('rts-submit-form');
+            if (!form) return;
+            
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                var formData = new FormData(this);
+                
+                // Client-side bot checks (lightweight)
+                var now = Date.now();
+                var loadTimestamp = parseInt(formData.get('rts_timestamp') || 0);
+                var timeDiff = now - loadTimestamp;
+                
+                // Check 1: Honeypot fields must be empty
+                if (formData.get('website') || formData.get('company') || formData.get('confirm_email')) {
+                    console.warn('Bot detected: Honeypot filled');
+                    return false;
+                }
+                
+                // Check 2: Minimum time on page (3 seconds - human can't submit faster)
+                if (timeDiff < 3000) {
+                    showError('Please take a moment to write your letter.');
+                    return false;
+                }
+                
+                // Check 3: Maximum reasonable time (2 hours - prevents replay attacks)
+                if (timeDiff > 7200000) {
+                    showError('Session expired. Please refresh and try again.');
+                    return false;
+                }
+                
+                // All checks passed - submit
+                submitLetter(formData);
+            });
+            
+            function submitLetter(formData) {
+                var btn = form.querySelector('.rts-btn-submit');
+                var btnText = btn.querySelector('.rts-btn-text');
+                var spinner = btn.querySelector('.rts-btn-spinner');
+                var responseDiv = form.querySelector('.rts-form-response');
+                
+                btn.disabled = true;
+                btnText.style.display = 'none';
+                spinner.style.display = 'inline';
+                responseDiv.innerHTML = '';
+                
+                fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        form.style.display = 'none';
+                        document.querySelector('.rts-submit-instructions').style.display = 'none';
+                        document.querySelector('.rts-submit-success').style.display = 'block';
+                    } else {
+                        showError(data.data || 'Something went wrong. Please try again.');
+                        btn.disabled = false;
+                        btnText.style.display = 'inline';
+                        spinner.style.display = 'none';
+                    }
+                })
+                .catch(function() {
+                    showError('Network error. Please check your connection and try again.');
+                    btn.disabled = false;
+                    btnText.style.display = 'inline';
+                    spinner.style.display = 'none';
+                });
+            }
+            
+            function showError(message) {
+                var responseDiv = form.querySelector('.rts-form-response');
+                responseDiv.innerHTML = '<div class="rts-error">' + message + '</div>';
+                responseDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        })();
+        </script>
         <?php
         return ob_get_clean();
     }
-
-    private function render_term_options($taxonomy) {
-        $terms = get_terms([
-            'taxonomy' => $taxonomy,
-            'hide_empty' => false,
-        ]);
-        if (is_wp_error($terms) || empty($terms)) return '';
-
-        $out = '';
-        foreach ($terms as $t) {
-            $out .= '<option value="' . esc_attr($t->slug) . '">' . esc_html($t->name) . '</option>';
-        }
-        return $out;
-    }
-
-    private function get_random_published_letter() {
-        $q = new WP_Query([
-            'post_type' => 'letter',
-            'post_status' => 'publish',
-            'posts_per_page' => 1,
-            'orderby' => 'rand',
-            'no_found_rows' => true,
-        ]);
-        return ($q->have_posts()) ? $q->posts[0] : null;
-    }
-
-    private function render_letter_card($letter, $show_next, $show_share, $show_helpful) {
-        $letter_id = (int) $letter->ID;
-        $content = apply_filters('the_content', $letter->post_content);
-
+    
+    /**
+     * Site Stats Row - [rts_site_stats_row]
+     * Displays 3 stats: Letters delivered, Feel better %, Submitted letters
+     * Pulls real data from database with manual override support
+     */
+    public function site_stats_row($atts) {
+        // Get real stats from database
+        $stats = $this->get_site_stats();
+        
         ob_start();
         ?>
-        <article class="rts-letter-card" id="rts-letter-card" data-letter-id="<?php echo esc_attr($letter_id); ?>">
-            <div class="rts-letter-meta">
-                <p class="rts-letter-intro">This letter was written by someone in the world that cares. It was delivered to you at random when you opened this page.</p>
-            </div>
-
-            <div class="rts-letter-body" id="rts-letter-content">
-                <?php echo $content; ?>
-            </div>
-
-            <!-- Top-left tag icons (Feedback / Report) -->
-            <div class="rts-letter-top-tags">
-                <button type="button" class="rts-tag-btn rts-feedback-open" data-tooltip="Give feedback" aria-label="Give feedback">
-                    <i class="dashicons dashicons-admin-comments"></i>
-                </button>
-                <button type="button" class="rts-tag-btn rts-trigger-open" data-tooltip="Report a concern" aria-label="Report a concern">
-                    <i class="dashicons dashicons-flag"></i>
-                </button>
-            </div>
-
-            <!-- Card footer with Read Another Letter button -->
-            <div class="rts-letter-card-footer" style="display:<?php echo ($show_next ? 'flex':'none'); ?>;">
-                <button type="button" class="rts-btn rts-btn-next">Read Another Letter</button>
-            </div>
-
-            <?php if ($show_helpful || $show_share): ?>
-            <div class="rts-letter-share" style="display:none" aria-hidden="true"></div>
-            <?php endif; ?>
-        </article>
-
-        <?php
-        static $rts_modal_rendered = false;
-        if (!$rts_modal_rendered):
-            $rts_modal_rendered = true;
-        ?>
-        <div id="rts-feedback-modal" class="rts-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title">
-            <div class="rts-modal-backdrop" data-rts-close="1"></div>
-            <div class="rts-modal-panel" role="document">
-                <div class="rts-modal-header">
-                    <h3 id="rts-feedback-title">Feedback</h3>
-                    <button type="button" class="rts-modal-close" data-rts-close="1" aria-label="Close feedback">×</button>
+        <div class="rts-stats-row" role="group" aria-label="Site statistics">
+            <div class="rts-stat">
+                <div class="rts-stat-number" id="rts-letters-delivered">
+                    <?php echo number_format($stats['letters_delivered']); ?>
                 </div>
-
-                <form class="rts-feedback-form" novalidate>
-                    <input type="hidden" name="letter_id" value="">
-                    <input type="text" name="website" value="" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
-
-                    <div class="rts-field">
-                        <label for="rts-feedback-rating">How did this letter land?</label>
-                        <select id="rts-feedback-rating" name="rating" required>
-                            <option value="neutral">Not sure</option>
-                            <option value="up">It helped</option>
-                            <option value="down">It did not help / Concern</option>
-                        </select>
-                    </div>
-
-                    <div class="rts-field">
-                        <label for="rts-feedback-comment">Your message (optional)</label>
-                        <textarea id="rts-feedback-comment" name="comment" rows="5" placeholder="Tell us what you think. If something feels unsafe, say why."></textarea>
-                    </div>
-
-                    <div class="rts-field">
-                        <label for="rts-feedback-email">Email (optional)</label>
-                        <input id="rts-feedback-email" type="email" name="email" placeholder="Only if you want a follow-up">
-                    </div>
-
-                    <div class="rts-field rts-field-inline">
-                        <input id="rts-feedback-triggered" type="checkbox" name="triggered" value="1">
-                        <label for="rts-feedback-triggered">This letter triggered me or I am worried about its safety</label>
-                    </div>
-
-                    <div class="rts-modal-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
-                        <button type="button" class="rts-btn rts-btn-secondary" data-rts-close="1">Cancel</button>
-                        <button type="submit" class="rts-btn rts-btn-primary">Send feedback</button>
-                    </div>
-
-                    <p class="rts-feedback-status" aria-live="polite" style="margin:12px 0 0 0;"></p>
-                </form>
+                <div class="rts-stat-label">
+                    letters delivered to site visitors.
+                </div>
+            </div>
+            
+            <div class="rts-stat">
+                <div class="rts-stat-number" id="rts-feel-better">
+                    <?php echo $stats['feel_better_percent']; ?>%
+                </div>
+                <div class="rts-stat-label">
+                    say reading a letter made them feel "much better".
+                </div>
+            </div>
+            
+            <div class="rts-stat">
+                <div class="rts-stat-number" id="rts-letters-submitted">
+                    <?php echo number_format($stats['letters_submitted']); ?>
+                </div>
+                <div class="rts-stat-label">
+                    submitted letters to the site.
+                </div>
             </div>
         </div>
-        <?php endif; ?>
-
+        
+        <style>
+        .rts-stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 32px;
+            text-align: center;
+            padding: 20px 0;
+        }
+        
+        .rts-stat {
+            min-width: 200px;
+            max-width: 300px;
+        }
+        
+        .rts-stat-number {
+            font-family: 'Special Elite', 'Courier New', monospace;
+            font-size: 2.8rem;
+            line-height: 1;
+            font-weight: 700;
+            color: var(--rts-black, #2A2A2A);
+        }
+        
+        .rts-stat-label {
+            margin-top: 10px;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--rts-gray-mid, #666);
+        }
+        
+        @media (max-width: 768px) {
+            .rts-stats-row {
+                gap: 24px;
+            }
+            
+            .rts-stat {
+                min-width: 150px;
+            }
+            
+            .rts-stat-number {
+                font-size: 2.2rem;
+            }
+        }
+        </style>
+        
+        <script>
+        // Update stats dynamically via REST API
+        (function() {
+            function updateStats() {
+                fetch('<?php echo esc_url(rest_url('rts/v1/site-stats')); ?>')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.letters_delivered !== undefined) {
+                            document.getElementById('rts-letters-delivered').textContent = 
+                                new Intl.NumberFormat().format(data.letters_delivered);
+                        }
+                        if (data.feel_better_percent !== undefined) {
+                            document.getElementById('rts-feel-better').textContent = 
+                                data.feel_better_percent;
+                        }
+                        if (data.letters_submitted !== undefined) {
+                            document.getElementById('rts-letters-submitted').textContent = 
+                                new Intl.NumberFormat().format(data.letters_submitted);
+                        }
+                    })
+                    .catch(() => {}); // Silent fail
+            }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', updateStats);
+            } else {
+                updateStats();
+            }
+        })();
+        </script>
         <?php
         return ob_get_clean();
+    }
+    
+    /**
+     * Get real site stats from database
+     */
+    private function get_site_stats() {
+        global $wpdb;
+        
+        // Total letters delivered (sum of all view_count)
+        $letters_delivered = $wpdb->get_var("
+            SELECT SUM(CAST(meta_value AS UNSIGNED))
+            FROM {$wpdb->postmeta}
+            WHERE meta_key = 'view_count'
+        ");
+        $letters_delivered = intval($letters_delivered);
+        
+        // Total helps (sum of all help_count)
+        $total_helps = $wpdb->get_var("
+            SELECT SUM(CAST(meta_value AS UNSIGNED))
+            FROM {$wpdb->postmeta}
+            WHERE meta_key = 'help_count'
+        ");
+        $total_helps = intval($total_helps);
+        
+        // Calculate feel better percentage
+        $feel_better_percent = 0;
+        if ($letters_delivered > 0) {
+            $feel_better_percent = round(($total_helps / $letters_delivered) * 100);
+        }
+        
+        // Total submitted letters (published + pending)
+        $letters_submitted = wp_count_posts('letter');
+        $total_submitted = intval($letters_submitted->publish) + intval($letters_submitted->pending);
+        
+        return [
+            'letters_delivered' => $letters_delivered,
+            'feel_better_percent' => $feel_better_percent,
+            'letters_submitted' => $total_submitted
+        ];
     }
 }
 
-} // class_exists
+// Initialize
+new RTS_Shortcodes();
 
-RTS_Shortcodes::get_instance();
+/**
+ * REST API endpoint for site stats
+ */
+add_action('rest_api_init', function() {
+    register_rest_route('rts/v1', '/site-stats', [
+        'methods' => 'GET',
+        'permission_callback' => '__return_true',
+        'callback' => function() {
+            $shortcodes = new RTS_Shortcodes();
+            // Use reflection to call private method
+            $reflection = new ReflectionClass($shortcodes);
+            $method = $reflection->getMethod('get_site_stats');
+            $method->setAccessible(true);
+            return $method->invoke($shortcodes);
+        }
+    ]);
+});

@@ -292,7 +292,7 @@ const RTSLetterSystem = {
 
     const cleanup = () => {
       const element = document.getElementById(testId);
-      if (element && document.body.contains(element)) document.body.removeChild(element);
+      if (element && document.body.contains(element)) document.try { element.remove(); } catch(e) {}
     };
 
     setTimeout(() => {
@@ -892,40 +892,25 @@ const RTSLetterSystem = {
     try {
       this.prefetchInFlight = true;
 
-      // Prefetch is an optimization. If REST auth is blocked (common with some security layers),
-      // skip REST here and use admin-ajax instead to avoid noisy 403s in the console.
-      const headers = this.getHeaders ? this.getHeaders() : {};
-      const hasNonce = !!(headers && headers['X-WP-Nonce']);
-
-      let data = null;
-
-      if (!this.restPrefetchDisabled && hasNonce) {
-        const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
-          method: 'POST',
-          headers,
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            preferences: this.preferences,
-            viewed: this.viewedLetterIds,
-            timestamp: Date.now()
-          })
-        });
-
-        // If REST is forbidden or the route isn't available, disable REST prefetch for this session.
-        if (response && (response.status === 403 || response.status === 404)) {
-          this.restPrefetchDisabled = true;
-        } else {
-          data = await response.json().catch(() => ({}));
-        }
-      }
-
-      if (!data || !data.success) {
-        data = await this.ajaxPost('rts_get_next_letter', {
+      const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
+        method: 'POST',
+        headers: this.getHeaders(),
+        credentials: 'same-origin',
+        body: JSON.stringify({
           preferences: this.preferences,
           viewed: this.viewedLetterIds,
           timestamp: Date.now()
-        });
-      }
+        })
+      });
+
+	      let data = await response.json().catch(() => ({}));
+	      if ((response.status === 403 || response.status === 404) && (!data || !data.success)) {
+	        data = await this.ajaxPost('rts_get_next_letter', {
+	          preferences: this.preferences,
+	          viewed: this.viewedLetterIds,
+	          timestamp: Date.now()
+	        });
+	      }
       if (data && data.success && data.letter && data.letter.id) {
         if (!this.viewedLetterIds.includes(data.letter.id)) this.prefetchedLetter = data.letter;
         this.trackSuccess('prefetch');

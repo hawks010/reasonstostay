@@ -540,6 +540,7 @@ class RTS_Content_Analyzer {
             'url' => admin_url()
         ];
         
+        (function_exists("session_status") && session_status() === PHP_SESSION_ACTIVE) ? session_write_close() : null; 
         wp_remote_post($webhook_url, [
             'method' => 'POST',
             'timeout' => 5,
