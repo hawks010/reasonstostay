@@ -25,6 +25,10 @@ class RTS_CPT_Letters_Complete {
         add_action('init', [$this, 'register_post_type']);
         add_action('init', [$this, 'register_taxonomies']);
         
+        // Meta boxes (Author / Email / Reading Time / Manual Stats)
+        add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
+        add_action('save_post_letter', [$this, 'save_meta_boxes']);
+        
         // CLEAN columns
         add_filter('manage_letter_posts_columns', [$this, 'set_columns']);
         add_action('manage_letter_posts_custom_column', [$this, 'render_column'], 10, 2);
@@ -72,7 +76,7 @@ class RTS_CPT_Letters_Complete {
             'show_ui' => true,
             'menu_position' => 5,
             'menu_icon' => 'dashicons-email-alt',
-            'supports' => ['title', 'editor', 'author', 'custom-fields'],
+            'supports' => ['title', 'editor', 'author', 'custom-fields', 'thumbnail'],
             'capability_type' => 'post',
             // CRITICAL FIX: map_meta_cap is required for capability_type='post' to work correctly
             // This ensures 'delete_post' maps to 'delete_posts' so admins can actually Trash items.
@@ -95,6 +99,103 @@ class RTS_CPT_Letters_Complete {
             'hierarchical' => false,
         ]);
     }
+
+    // -----------------------
+    // Meta boxes
+    // -----------------------
+public function add_meta_boxes() {
+        add_meta_box(
+            'rts_letter_meta',
+            'Letter Details',
+            [$this, 'render_meta_box'],
+            'letter',
+            'side',
+            'default'
+        );
+    }
+
+    public function render_meta_box($post) {
+        wp_nonce_field('rts_letter_meta_save', 'rts_letter_meta_nonce');
+
+        $author_name  = get_post_meta($post->ID, 'author_name', true);
+        $author_email = get_post_meta($post->ID, 'author_email', true);
+        $reading_time = get_post_meta($post->ID, 'reading_time', true);
+        $view_count   = get_post_meta($post->ID, 'view_count', true);
+        $help_count   = get_post_meta($post->ID, 'help_count', true);
+
+        $reading_opts = [
+            '' => 'Auto',
+            'short' => 'Short (under 1 min)',
+            'medium' => 'Medium (1-3 mins)',
+            'long' => 'Long (3+ mins)',
+        ];
+
+        echo '<p><label for="rts_author_name"><strong>Author name</strong></label><br>';
+        echo '<input type="text" id="rts_author_name" name="rts_author_name" value="' . esc_attr($author_name) . '" style="width:100%;" /></p>';
+
+        echo '<p><label for="rts_author_email"><strong>Author email</strong></label><br>';
+        echo '<input type="email" id="rts_author_email" name="rts_author_email" value="' . esc_attr($author_email) . '" style="width:100%;" /></p>';
+
+        echo '<p><label for="rts_reading_time"><strong>Reading time</strong></label><br>';
+        echo '<select id="rts_reading_time" name="rts_reading_time" style="width:100%;">';
+        foreach ($reading_opts as $val => $label) {
+            echo '<option value="' . esc_attr($val) . '"' . selected($reading_time, $val, false) . '>' . esc_html($label) . '</option>';
+        }
+        echo '</select></p>';
+
+        echo '<p style="font-size:12px;color:#666;">If Reading time is set to Auto, the system will estimate it from the letter length.</p>';
+        
+        echo '<hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">';
+        
+        echo '<p style="margin-bottom: 10px;"><strong>Manual Stats Override</strong></p>';
+        echo '<p style="font-size:12px;color:#666;margin-bottom:10px;">Use these fields when importing letters from Wix to preserve view/help counts. Leave blank for new letters.</p>';
+        
+        echo '<p><label for="rts_view_count"><strong>View Count</strong></label><br>';
+        echo '<input type="number" id="rts_view_count" name="rts_view_count" value="' . esc_attr($view_count) . '" min="0" style="width:100%;" placeholder="0" />';
+        echo '<span style="font-size:11px;color:#999;">Number of times this letter was viewed</span></p>';
+        
+        echo '<p><label for="rts_help_count"><strong>Help Count</strong></label><br>';
+        echo '<input type="number" id="rts_help_count" name="rts_help_count" value="' . esc_attr($help_count) . '" min="0" style="width:100%;" placeholder="0" />';
+        echo '<span style="font-size:11px;color:#999;">Number of "This helped" clicks</span></p>';
+    }
+
+    public function save_meta_boxes($post_id) {
+        if (!isset($_POST['rts_letter_meta_nonce']) || !wp_verify_nonce($_POST['rts_letter_meta_nonce'], 'rts_letter_meta_save')) return;
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+        if (!current_user_can('edit_post', $post_id)) return;
+
+        $author_name  = isset($_POST['rts_author_name']) ? sanitize_text_field($_POST['rts_author_name']) : '';
+        $author_email = isset($_POST['rts_author_email']) ? sanitize_email($_POST['rts_author_email']) : '';
+        $reading_time = isset($_POST['rts_reading_time']) ? sanitize_key($_POST['rts_reading_time']) : '';
+
+        if ($author_email && !is_email($author_email)) $author_email = '';
+
+        update_post_meta($post_id, 'author_name', $author_name);
+        update_post_meta($post_id, 'author_email', $author_email);
+
+        // If set explicitly, store it. If blank/auto, allow other systems to set it.
+        if ($reading_time === '') {
+            delete_post_meta($post_id, 'reading_time');
+        } else {
+            update_post_meta($post_id, 'reading_time', $reading_time);
+        }
+        
+        // Manual stats override (for Wix imports)
+        if (isset($_POST['rts_view_count'])) {
+            $view_count = intval($_POST['rts_view_count']);
+            if ($view_count >= 0) {
+                update_post_meta($post_id, 'view_count', $view_count);
+            }
+        }
+        
+        if (isset($_POST['rts_help_count'])) {
+            $help_count = intval($_POST['rts_help_count']);
+            if ($help_count >= 0) {
+                update_post_meta($post_id, 'help_count', $help_count);
+            }
+        }
+    }
+
 
     /**
      * Helper: Generate consistent cache key

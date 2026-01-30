@@ -359,8 +359,25 @@ class RTS_Admin_Settings {
             echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> ' . esc_html(urldecode($_GET['error'])) . '</p></div>';
         }
         
-        // Get status
-        $status = RTS_Cron_Processing::get_status();
+        // Get status (hardened - prevents fatal if module returns unexpected data)
+        $status = class_exists('RTS_Cron_Processing') ? RTS_Cron_Processing::get_status() : [];
+        if (!is_array($status)) $status = [];
+        $status = array_merge([
+            'enabled' => true,
+            'next_run' => 'N/A',
+            'next_run_in' => 'N/A',
+            'is_locked' => false,
+            'last_run' => 0,
+            'last_processed' => 0,
+            'last_published' => 0,
+            'last_flagged' => 0,
+            'last_errors' => 0,
+            'last_error_message' => '',
+            'last_mode' => 'pending',
+            'last_source' => 'system',
+            'recheck_active' => false,
+            'recheck_progress' => 'Not running',
+        ], $status);
         $recheck_active = get_option('rts_recheck_all_active', 0);
         $auto_publish = get_option('rts_auto_publish_enabled', '1') === '1';
         $min_score = get_option('rts_min_quality_score', 70);
