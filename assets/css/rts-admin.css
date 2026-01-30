@@ -1,0 +1,188 @@
+/**
+ * Reasons to Stay - Admin Dashboard Styles
+ */
+
+.rts-dashboard {
+    padding: 20px 20px 40px;
+}
+
+.rts-dashboard h1 {
+    margin-bottom: 30px;
+}
+
+/* Stats Grid */
+.rts-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.rts-stats-grid-4 {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+/* Card */
+.rts-card {
+    background: #fff;
+    padding: 24px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.rts-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px 0;
+}
+
+.rts-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    margin: 0 0 8px 0;
+}
+
+.rts-big-number {
+    font-size: 36px;
+    font-weight: 700;
+    color: #1A1A1A;
+    margin-bottom: 8px;
+}
+
+.rts-number {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1A1A1A;
+}
+
+.rts-big-number.rts-pending {
+    color: #f57c00;
+}
+
+.rts-stat-meta {
+    font-size: 13px;
+    color: #666;
+}
+
+.rts-card-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.rts-card-link:hover {
+    text-decoration: underline;
+}
+
+/* Section */
+.rts-section {
+    margin-bottom: 40px;
+}
+
+.rts-section h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1A1A1A;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ddd;
+}
+
+/* Share Breakdown */
+.rts-share-breakdown {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.rts-share-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.rts-share-item:last-child {
+    border-bottom: none;
+}
+
+.rts-share-platform {
+    font-weight: 600;
+    color: #1A1A1A;
+}
+
+.rts-share-count {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2271b1;
+}
+
+/* Dashboard Widget (Main WP Dashboard) */
+.rts-widget {
+    padding: 12px;
+}
+
+.rts-widget-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.rts-stat-box {
+    background: #f8f8f8;
+    padding: 16px;
+    border-radius: 6px;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+}
+
+.rts-stat-box.rts-stat-pending {
+    background: #fff3e0;
+    border-color: #ffe0b2;
+}
+
+.rts-stat-number {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1A1A1A;
+    margin-bottom: 6px;
+}
+
+.rts-stat-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+}
+
+.rts-stat-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.rts-stat-link:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 782px) {
+    .rts-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .rts-widget-stats {
+        grid-template-columns: 1fr;
+    }
+}
