@@ -143,11 +143,14 @@ if (!class_exists('RTS_Moderation_Engine')) {
 				delete_post_meta($post_id, 'rts_system_error');
 
 				// 6. Final Gate (publish only if ALL pass)
-				$all_pass = (
-					$results['safety']['pass'] === true
-					&& $results['ip']['pass'] === true
-					&& $results['quality']['pass'] === true
-				);
+				$external_flag = (get_post_meta($post_id, 'needs_review', true) === '1');
+
+            $all_pass = (
+                $results['safety']['pass'] === true
+                && $results['ip']['pass'] === true
+                && $results['quality']['pass'] === true
+                && !$external_flag
+            );
 
 				if ($all_pass) {
 					wp_update_post([

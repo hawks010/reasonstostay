@@ -765,14 +765,7 @@ $letters = new WP_Query($args);
             delete_post_thumbnail($post_id);
         }
 
-        // Auto-analyze and tag immediately so new submissions appear scored and categorized.
-        if (class_exists('RTS_Content_Analyzer')) {
-            try {
-                RTS_Content_Analyzer::get_instance()->analyze_and_tag($post_id, true);
-            } catch (Throwable $e) {
-                // Fail silently - analysis can be re-run from admin tools.
-            }
-        }
+        // Moderation/analysis is handled by the RTS Moderation Engine via save_post and background processing.
         
         // Send notification email
         $this->notify_admin_new_submission($post_id);
