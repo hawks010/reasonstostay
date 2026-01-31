@@ -8,6 +8,9 @@ if (!defined('ABSPATH')) exit;
 
 class RTS_Shortcodes {
     
+    // Flag to prevent duplicate onboarding modals on the same page
+    private static $onboarding_rendered = false;
+    
     public function __construct() {
         add_shortcode('rts_letter_viewer', [$this, 'letter_viewer']);
         add_shortcode('rts_onboarding', [$this, 'onboarding']);
@@ -22,12 +25,16 @@ class RTS_Shortcodes {
         $atts = shortcode_atts([
             'show_helpful' => 'yes',
             'show_share' => 'yes',
-            'show_next' => 'yes'
+            'show_next' => 'yes',
+            'show_onboarding' => 'yes'
         ], $atts);
         
         ob_start();
-        // Always render onboarding overlay (JS will only show it for new users)
-        echo $this->onboarding([]);
+        
+        // Only show onboarding if enabled
+        if ($atts['show_onboarding'] === 'yes') {
+            echo $this->onboarding([]);
+        }
         ?>
         <div class="rts-letter-viewer" data-component="viewer">
             
@@ -40,20 +47,34 @@ class RTS_Shortcodes {
             <!-- Letter display (populated by JS) -->
             <div class="rts-letter-display" style="display:none;">
                 <div class="rts-letter-card">
-                    <div class="rts-letter-content"></div>
+                    <div class="rts-letter-tabs" aria-label="Letter options">
+                        <button type="button"
+                                class="rts-feedback-tab rts-feedback-open"
+                                aria-haspopup="dialog"
+                                aria-controls="rts-feedback-modal"
+                                aria-label="Give feedback on this letter">
+                            Feedback
+                        </button>
+                    </div>
+                    <div class="rts-letter-content">
+                        <div class="rts-letter-body" tabindex="-1"></div>
+                        <div class="rts-letter-footer" aria-label="Letter actions">
+                            <?php if ($atts['show_next'] === 'yes') : ?>
+                            <button class="rts-report-link rts-trigger-open" type="button" data-rts-trigger="1" aria-label="Report about this letter">
+                                Report
+                            </button>
+                            <button class="rts-btn rts-btn-next" type="button" aria-label="Read another letter">
+                                Read Another Letter
+                            </button>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                     
-                    <div class="rts-letter-signature"></div>
+                    
                 </div>
                 
-                <!-- Action buttons -->
-                <div class="rts-letter-actions">
-                    <?php if ($atts['show_next'] === 'yes') : ?>
-                    <button class="rts-btn rts-btn-next" aria-label="Read another letter">
-                        Read Another Letter
-                    </button>
-                    <?php endif; ?>
                 
-                    <!-- Rating prompt (shown on Next click to reduce button clutter) -->
+                <div class="rts-letter-rate-wrap" aria-label="Rate this letter">
                     <?php if ($atts['show_helpful'] === 'yes') : ?>
                     <div class="rts-rate-prompt" hidden aria-live="polite" aria-label="Rate this letter before continuing">
                         <span class="rts-rate-prompt-text">Before the next letter, how was that one?</span>
@@ -79,17 +100,9 @@ class RTS_Shortcodes {
                     </div>
                     <?php endif; ?>
                 </div>
+</div>
                 
                 
-                <div class="rts-letter-feedback-link" aria-label="Feedback options">
-                    <button type="button" class="rts-feedback-open" aria-haspopup="dialog" aria-controls="rts-feedback-modal">
-                        Give feedback on this letter
-                    </button>
-                    <button type="button" class="rts-trigger-open" aria-haspopup="dialog" aria-controls="rts-feedback-modal" data-rts-trigger="1">
-                        Report a concern
-                    </button>
-                </div>
-
                 <!-- Feedback modal (subtle, internal, letter-linked) -->
                 <div class="rts-modal" id="rts-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title" aria-hidden="true">
                     <div class="rts-modal-backdrop" data-rts-close></div>
@@ -156,6 +169,15 @@ class RTS_Shortcodes {
                             <i class="fab fa-whatsapp" aria-hidden="true"></i>
                             <span>WhatsApp</span>
                         </a>
+                        <a href="#" class="share-btn rts-share-btn" data-platform="reddit" target="_blank" rel="noopener noreferrer" aria-label="Share on Reddit (opens in new tab)">
+                            <i class="fab fa-reddit-alien" aria-hidden="true"></i>
+                            <span>Reddit</span>
+                        </a>
+                        <a href="#" class="share-btn rts-share-btn" data-platform="threads" target="_blank" rel="noopener noreferrer" aria-label="Share on Threads (opens in new tab)">
+                            <i class="fab fa-threads" aria-hidden="true"></i>
+                            <span>Threads</span>
+                        </a>
+
                         <button class="share-btn rts-share-btn" type="button" data-platform="copy" aria-label="Copy link">
                             <i class="fas fa-link" aria-hidden="true"></i>
                             <span>Copy link</span>
@@ -182,101 +204,120 @@ class RTS_Shortcodes {
      * [rts_onboarding] - Preference selector
      */
     public function onboarding($atts) {
+        // Prevent duplicate rendering if called multiple times or via different shortcodes
+        if (self::$onboarding_rendered) {
+            return '';
+        }
+        self::$onboarding_rendered = true;
+
         ob_start();
         ?>
         <div class="rts-onboarding-overlay" style="display:none;">
             <div class="rts-onboarding-modal">
-                <div class="rts-onboarding-content">
-                    <h2>Would you like a letter chosen just for you?</h2>
-                    <p>Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
-                    
-                    <!-- Step 1: Feelings -->
-                    <div class="rts-onboarding-step" data-step="1">
-                        <h3>What are you feeling right now?</h3>
-                        <p class="rts-step-subtitle">Select all that apply</p>
+                <!-- Side Tag for exiting immediately (Hangs outside modal) -->
+                <button class="rts-skip-tag" type="button" aria-label="Exit onboarding">
+                    EXIT / SKIP
+                </button>
+            
+                <!-- NEW: Inner wrapper handles scrolling so tag is not clipped -->
+                <div class="rts-onboarding-scroll-wrapper">
+                    <div class="rts-onboarding-content">
+                        <h2>Would you like a letter chosen just for you?</h2>
+                        <p>Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
+                        <!-- Debug logging for localhost -->
+                        <script>
+                        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                            console.log('RTS Onboarding Modal Loaded');
+                            document.addEventListener('DOMContentLoaded', function() {
+                                console.log('Steps found:', document.querySelectorAll('.rts-onboarding-step').length);
+                            });
+                        }
+                        </script>
                         
-                        <div class="rts-checkbox-group">
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="hopeless">
-                                <span>Hopeless</span>
-                            </label>
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="alone">
-                                <span>Alone</span>
-                            </label>
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="anxious">
-                                <span>Anxious</span>
-                            </label>
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="grieving">
-                                <span>Grieving</span>
-                            </label>
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="tired">
-                                <span>Tired of fighting</span>
-                            </label>
-                            <label class="rts-checkbox-label">
-                                <input type="checkbox" name="feelings[]" value="struggling">
-                                <span>Just struggling</span>
-                            </label>
+                        <!-- Step 1: Feelings -->
+                        <div class="rts-onboarding-step" data-step="1">
+                            <h3>What are you feeling right now?</h3>
+                            <p class="rts-step-subtitle">Select all that apply</p>
+                            
+                            <div class="rts-checkbox-group">
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="hopeless">
+                                    <span>Hopeless</span>
+                                </label>
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="alone">
+                                    <span>Alone</span>
+                                </label>
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="anxious">
+                                    <span>Anxious</span>
+                                </label>
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="grieving">
+                                    <span>Grieving</span>
+                                </label>
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="tired">
+                                    <span>Tired of fighting</span>
+                                </label>
+                                <label class="rts-checkbox-label">
+                                    <input type="checkbox" name="feelings[]" value="struggling">
+                                    <span>Just struggling</span>
+                                </label>
+                            </div>
+                            
+                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
                         </div>
                         
-                        <button class="rts-btn rts-btn-next-step" type="button">Next</button>
-                    </div>
-                    
-                    <!-- Step 2: Reading time -->
-                    <div class="rts-onboarding-step" data-step="2" style="display:none;">
-                        <h3>How much time do you have?</h3>
-                        
-                        <div class="rts-radio-group">
-                            <label class="rts-radio-label">
-                                <input type="radio" name="readingTime" value="short">
-                                <span>Just a minute</span>
-                            </label>
-                            <label class="rts-radio-label">
-                                <input type="radio" name="readingTime" value="medium">
-                                <span>A few minutes</span>
-                            </label>
-                            <label class="rts-radio-label">
-                                <input type="radio" name="readingTime" value="long" checked>
-                                <span>I can read for a bit</span>
-                            </label>
+                        <!-- Step 2: Reading time -->
+                        <div class="rts-onboarding-step" data-step="2" style="display:none;">
+                            <h3>How much time do you have?</h3>
+                            
+                            <div class="rts-radio-group">
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="readingTime" value="short">
+                                    <span>Just a minute</span>
+                                </label>
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="readingTime" value="medium">
+                                    <span>A few minutes</span>
+                                </label>
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="readingTime" value="long" checked>
+                                    <span>I can read for a bit</span>
+                                </label>
+                            </div>
+                            
+                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
                         </div>
                         
-                        <button class="rts-btn rts-btn-next-step" type="button">Next</button>
-                    </div>
-                    
-                    <!-- Step 3: Tone -->
-                    <div class="rts-onboarding-step" data-step="3" style="display:none;">
-                        <h3>What kind of voice helps you?</h3>
-                        
-                        <div class="rts-radio-group">
-                            <label class="rts-radio-label">
-                                <input type="radio" name="tone" value="gentle">
-                                <span>Warm and gentle</span>
-                            </label>
-                            <label class="rts-radio-label">
-                                <input type="radio" name="tone" value="real">
-                                <span>Straight-talking and real</span>
-                            </label>
-                            <label class="rts-radio-label">
-                                <input type="radio" name="tone" value="hopeful">
-                                <span>Hopeful and uplifting</span>
-                            </label>
-                            <label class="rts-radio-label">
-                                <input type="radio" name="tone" value="any" checked>
-                                <span>Surprise me</span>
-                            </label>
+                        <!-- Step 3: Tone -->
+                        <div class="rts-onboarding-step" data-step="3" style="display:none;">
+                            <h3>What kind of voice helps you?</h3>
+                            
+                            <div class="rts-radio-group">
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="tone" value="gentle">
+                                    <span>Warm and gentle</span>
+                                </label>
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="tone" value="real">
+                                    <span>Straight-talking and real</span>
+                                </label>
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="tone" value="hopeful">
+                                    <span>Hopeful and uplifting</span>
+                                </label>
+                                <label class="rts-radio-label">
+                                    <input type="radio" name="tone" value="any" checked>
+                                    <span>Surprise me</span>
+                                </label>
+                            </div>
+                            
+                            <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
                         </div>
-                        
-                        <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
                     </div>
                 </div>
-                
-                <button class="rts-btn-skip" type="button" aria-label="Skip to read any letter">
-                    Skip, show me any letter
-                </button>
             </div>
         </div>
         <?php
@@ -670,7 +711,7 @@ class RTS_Shortcodes {
                         }
                         if (data.feel_better_percent !== undefined) {
                             document.getElementById('rts-feel-better').textContent = 
-                                data.feel_better_percent;
+                                String(data.feel_better_percent) + '%';
                         }
                         if (data.letters_submitted !== undefined) {
                             document.getElementById('rts-letters-submitted').textContent = 
@@ -696,6 +737,31 @@ class RTS_Shortcodes {
      */
     private function get_site_stats() {
         global $wpdb;
+
+        // Optional additive offsets (keeps stats "live" while allowing a migration bump)
+        $override_raw = get_option('rts_stats_override', []);
+        if (!is_array($override_raw)) {
+            $override_raw = [];
+        }
+        $override = wp_parse_args($override_raw, [
+            'enabled' => 0,
+            // Interpreted as additive offsets when enabled
+            'letters_delivered' => 0,
+            'letters_submitted' => 0,
+            // Optional: add to helpful/"feel better" numerator
+            'helps' => 0,
+            // Optional: if set (0-100), override computed percentage
+            'feel_better_percent' => '',
+            // Legacy key from earlier UI versions (treated as letters_submitted offset)
+            'total_letters' => 0,
+        ]);
+
+        $use_offsets = !empty($override['enabled']);
+        $offset_delivered = $use_offsets ? max(0, intval($override['letters_delivered'])) : 0;
+        $legacy_submitted  = $use_offsets ? max(0, intval($override['total_letters'])) : 0;
+        $offset_submitted  = $use_offsets ? max(0, intval($override['letters_submitted'])) : 0;
+        $offset_submitted  = max($offset_submitted, $legacy_submitted);
+        $offset_helps      = $use_offsets ? max(0, intval($override['helps'])) : 0;
         
         // Total letters delivered (sum of all view_count)
         $letters_delivered = $wpdb->get_var("
@@ -712,19 +778,32 @@ class RTS_Shortcodes {
             WHERE meta_key = 'help_count'
         ");
         $total_helps = intval($total_helps);
+
+        // Apply offsets (migration bump) while keeping stats live
+        $letters_delivered_total = $letters_delivered + $offset_delivered;
+        $total_helps_total       = $total_helps + $offset_helps;
         
-        // Calculate feel better percentage
+        // Calculate (or override) feel better percentage
         $feel_better_percent = 0;
-        if ($letters_delivered > 0) {
-            $feel_better_percent = round(($total_helps / $letters_delivered) * 100);
+        $manual_percent = $use_offsets ? $override['feel_better_percent'] : '';
+        if ($manual_percent !== '' && is_numeric($manual_percent)) {
+            $feel_better_percent = max(0, min(100, (int) round(floatval($manual_percent))));
+        } else {
+            if ($letters_delivered_total > 0) {
+                $feel_better_percent = round(($total_helps_total / $letters_delivered_total) * 100);
+            }
+            // Keep within sane bounds (helps can exceed views if a user clicks multiple times)
+            $feel_better_percent = max(0, min(100, intval($feel_better_percent)));
         }
         
         // Total submitted letters (published + pending)
         $letters_submitted = wp_count_posts('letter');
         $total_submitted = intval($letters_submitted->publish) + intval($letters_submitted->pending);
+
+        $total_submitted = $total_submitted + $offset_submitted;
         
         return [
-            'letters_delivered' => $letters_delivered,
+            'letters_delivered' => $letters_delivered_total,
             'feel_better_percent' => $feel_better_percent,
             'letters_submitted' => $total_submitted
         ];

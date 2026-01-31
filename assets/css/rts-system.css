@@ -64,7 +64,7 @@
 .rts-letter-card {
     background: var(--rts-white);
     /* Extra top padding to make room for top-left tag icons */
-    padding: 58px 40px 40px;
+    padding: 100px 100px 50px;
     position: relative;
     box-shadow: 
         0 1px 3px rgba(0,0,0,0.06),
@@ -204,20 +204,6 @@
     box-shadow: 0 2px 4px var(--rts-shadow);
 }
 
-/* Letter intro text */
-/* Intro text removed - now placed above letter on page */
-/* .rts-letter-intro {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--rts-gray-light);
-    font-family: 'Special Elite', 'Courier New', monospace;
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.1rem;
-    color: var(--rts-gray-mid);
-    font-style: normal;
-} */
-
 /* Letter content */
 .rts-letter-content {
     font-size: 1rem;
@@ -303,7 +289,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 7px 0px;
+    padding: 7px 22px;
     background: #F1E3D3;
     color: var(--rts-black);
     border: none;
@@ -480,6 +466,7 @@
 .rts-share-label {
     font-size: 16px;
     font-weight: 600;
+    font-family: 'Special Elite', sans-serif;
     color: var(--rts-black);
     margin-bottom: 20px;
 }
@@ -527,21 +514,33 @@
     font-size: 18px;
 }
 
-/* Ensure Font Awesome is loaded */
-
 /* ==========================================
    ONBOARDING MODAL
    ========================================== */
 
+/* 50% transparency overlay */
 .rts-onboarding-overlay {
     position: fixed!important;
     inset: 0!important;
-    background: rgba(0,0,0,0.8)!important;
-    display: flex!important;
+    background: rgba(0,0,0,0.5)!important;
+    /* Default hidden. JS toggles display to flex when onboarding is active. */
+    display: none;
     align-items: center!important;
     justify-content: center!important;
     z-index: 10000!important;
     padding: 20px!important;
+}
+
+/*
+  IMPORTANT:
+  The overlay uses display:flex!important by default.
+  When JS hides it, we must win the specificity battle.
+*/
+.rts-onboarding-overlay.rts-hidden-force{
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
 }
 
 .rts-onboarding-modal {
@@ -551,8 +550,16 @@
     border-radius: 8px!important;
     box-shadow: 0 10px 40px rgba(0,0,0,0.3)!important;
     position: relative!important;
-    max-height: 90vh!important;
-    overflow-y: auto!important;
+    overflow: visible !important; 
+}
+
+/* New inner wrapper for scrolling content */
+.rts-onboarding-scroll-wrapper {
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 100%;
+    border-radius: 8px; /* Match modal */
+    background: var(--rts-white); /* Ensure bg matches */
 }
 
 .rts-onboarding-content {
@@ -653,26 +660,38 @@
     border-color: var(--rts-black);
 }
 
-/* Skip button */
-.rts-btn-skip {
-    display: block;
-    padding: 20px;
-    background: transparent;
-    color: var(--rts-gray-mid);
-    border: none;
-    border-top: 1px solid var(--rts-gray-light);
+/* Prominent Exit/Skip Tag */
+.rts-skip-tag {
+    position: absolute;
+    top: 30px;
+    right: -45px; /* Hanging off the side */
+    width: 45px;
+    min-height: 120px;
+    background-color: #d63031; /* Urgent/Visible Red */
+    color: #fff;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    text-align: center;
+    font-weight: 700;
     font-size: 15px;
+    border-radius: 0 8px 8px 0;
     cursor: pointer;
-    transition: all 0.2s ease;
+    z-index: 1001; /* Above modal content */
+    box-shadow: 4px 0 15px rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-left: none;
+    transition: right 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding: 20px 0;
+    letter-spacing: 1px;
 }
 
-.rts-btn-skip:hover {
-    background: var(--rts-cream);
-    color: var(--rts-black);
+.rts-skip-tag:hover {
+    right: -55px; /* Slide out slightly on hover */
+    background-color: #e17055;
 }
 
-.rts-btn-skip:focus-visible {
-    outline: 3px solid var(--rts-black);
+.rts-skip-tag:focus-visible {
+    outline: 3px solid #fff;
     outline-offset: -3px;
 }
 
@@ -917,6 +936,28 @@
         font-size: 14px;
         padding: 10px 16px;
     }
+
+    /* FIX: Mobile version of the skip tag */
+    .rts-skip-tag {
+        position: static;
+        width: 100%;
+        min-height: auto;
+        writing-mode: horizontal-tb;
+        border-radius: 4px;
+        margin-top: 30px;
+        padding: 15px;
+        border: none;
+        box-shadow: none;
+        background: #f8f8f8;
+        color: #d63031;
+        border: 2px solid #d63031;
+    }
+    
+    .rts-skip-tag:hover {
+        background: #d63031;
+        color: #fff;
+        right: auto;
+    }
 }
 
 /* ==========================================
@@ -1098,7 +1139,6 @@ body.rts-modal-open{overflow:hidden;}
 }
 
 /* Buttons */
-.rts-btn{appearance:none;border:1px solid transparent;border-radius:6px;padding:12px 22px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background-color .15s ease,color .15s ease,border-color .15s ease,transform .15s ease}
 .rts-btn:focus-visible{outline:3px solid rgba(252,163,17,.55);outline-offset:3px}
 .rts-btn-next{background:#F1E3D3; border: none; color:#000000; min-width:200px; text-align:center}
 .rts-btn-next:hover,.rts-btn-next:focus{background:#FCA311;color:#000}
@@ -1118,3 +1158,183 @@ body.rts-modal-open{overflow:hidden;}
 
 @media (max-width:900px){.rts-submit-grid{grid-template-columns:1fr}}
 @media (max-width:768px){.rts-letter-card-footer{justify-content:stretch}.rts-btn-next{width:100%;min-width:0}.rts-submit-actions{justify-content:stretch}.rts-submit-actions .rts-submit-btn{width:100%;min-width:0}}
+
+/* =========================================================
+   RTS Letter Viewer Layout Clean-up (Hotfix)
+   ========================================================= */
+
+.rts-letter-card{
+  position: relative;
+}
+
+.rts-letter-content{
+  display:flex;
+  flex-direction:column;
+  min-height: 100%;
+}
+
+.rts-letter-body{
+  width:100%;
+}
+
+.rts-letter-footer{
+  margin-top: 50px;
+  display:block;
+  width:100%;
+}
+
+@media (max-width: 767px){
+  .rts-letter-footer .rts-btn-next{
+    width:100%;
+    justify-content:center;
+  }
+}
+
+/* Rating prompt stays hidden until JS reveals it */
+.rts-rate-prompt[hidden]{ display:none !important; }
+
+/* =========================================================
+   Letter viewer refinements - tabs, padding, footer
+   ========================================================= */
+
+/* Bigger "real letter" padding */
+.rts-letter-content{
+  display:flex;
+  flex-direction:column;
+  min-height:100%;
+  padding: 0px;
+  position: relative;
+}
+
+@media (max-width: 768px){
+  .rts-letter-content{
+    padding: 28px 18px 22px;
+  }
+}
+
+/* Footer spacing + Next button alignment */
+.rts-letter-footer{
+  margin-top: 50px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px){
+  .rts-letter-footer{
+    justify-content: stretch;
+  }
+  .rts-letter-footer .rts-btn-next{
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Rating prompt stays hidden until JS reveals it */
+.rts-rate-prompt[hidden]{ display:none !important; }
+
+/* (Removed legacy icon tab styles; viewer now uses text Feedback tab only) */
+
+/* Make sure old feedback link block can't reappear */
+.rts-letter-feedback-link{ display:none !important; }
+
+
+/* =========================================================
+   HOTFIX: Viewer feedback/report UI changes
+   - Letter font: Special Elite (client request)
+   - Report: text link left of "Read Another Letter"
+   - Feedback: slim vertical tab (desktop), top tab (mobile)
+   ========================================================= */
+
+.rts-letter-content,
+.rts-letter-body{
+  font-family: 'Special Elite', sans-serif;
+}
+
+/* Footer layout: Report + Read Another Letter aligned to the right */
+.rts-letter-footer{
+  display:flex;
+  width:100%;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+
+/* Report text link (no button styling) */
+.rts-report-link{
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin-left: auto !important; /* Pushes this element to the right */
+  margin-right: 30px !important;
+  font-family: 'Special Elite', sans-serif;
+  font-size: 0.9rem;
+  color: #000000;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rts-report-link:hover,
+.rts-report-link:focus-visible{
+  text-decoration: underline;
+}
+
+.rts-report-link:focus-visible{
+  outline: 3px solid #FCA311;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Feedback tab wrapper (desktop): outside the letter */
+.rts-letter-tabs{
+  position: absolute;
+  z-index: 6;
+  top: 50px;
+  left: -22px;
+  transform: translateY(-50%);
+}
+
+/* Feedback tab (desktop): slim vertical text tab */
+.rts-feedback-tab{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background: #F1E3D3 !important;
+  color: #000000 !important;
+  border: 0;
+  font-family: 'Special Elite', sans-serif;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 15px 7px;
+  cursor: pointer;
+  border-radius: 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.02em;
+}
+
+.rts-feedback-tab:hover,
+.rts-feedback-tab:focus-visible{
+  background: #000000 !important;
+  color: #FFFFFF !important;
+}
+
+.rts-feedback-tab:focus-visible{
+  outline: 3px solid #FCA311;
+  outline-offset: 3px;
+}
+
+/* Mobile: move Feedback tab inside top-right and make horizontal + slim */
+@media (max-width: 768px){
+  .rts-letter-tabs{
+    top: 12px;
+    right: 12px;
+    left: auto;
+    transform: none;
+  }
+  .rts-feedback-tab{
+    writing-mode: horizontal-tb;
+    text-orientation: initial;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+  }
+}

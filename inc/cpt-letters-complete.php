@@ -36,9 +36,12 @@ class RTS_CPT_Letters_Complete {
         
         // Sorting Logic (Fix: Actually handle the sorting)
         add_action('pre_get_posts', [$this, 'handle_sorting']);
-        
-        // DASHBOARD at top + BIG process button + smart filters
-        add_action('admin_notices', [$this, 'show_dashboard_and_controls']);
+        // Dashboard/legacy processing UI removed (migrated to RTS Dashboard).
+		// New: lightweight analytics header on the Letters list screen (powered by the Moderation Engine).
+		add_action('all_admin_notices', [$this, 'show_letters_analytics_header']);
+		// Admin actions
+		add_action('admin_post_rts_run_analytics_now', [$this, 'handle_run_analytics_now']);
+		add_action('admin_post_rts_rescan_letters', [$this, 'handle_rescan_letters']);
         
         // Smart filters
         add_action('restrict_manage_posts', [$this, 'add_smart_filters']);
@@ -53,18 +56,20 @@ class RTS_CPT_Letters_Complete {
         // Bulk Actions
         add_filter('bulk_actions-edit-letter', [$this, 'register_bulk_actions']);
         add_filter('handle_bulk_actions-edit-letter', [$this, 'handle_bulk_actions'], 10, 3);
-        
-        // AJAX Handler for Dashboard Button
-        add_action('wp_ajax_rts_process_unrated_letters', [$this, 'ajax_process_batch']);
+        // Legacy AJAX processing removed (handled by RTS Moderation Engine via Action Scheduler).
         
         // Custom CSS
         add_action('admin_head', [$this, 'admin_css']);
-        
-        // Register Quick Approve Handler
-        add_action('admin_post_rts_quick_approve', [$this, 'handle_quick_approve']);
+        // Legacy quick-approve removed.
     }
     
     public function register_post_type() {
+        // One source of truth: if something else already registered the post type,
+        // don't register it again (prevents duplicate menus / conflicting args).
+        if (post_type_exists('letter')) {
+            return;
+        }
+
         register_post_type('letter', [
             'labels' => [
                 'name' => 'Letters',
@@ -221,6 +226,23 @@ class RTS_CPT_Letters_Complete {
                         'quality_score', 'letter'
                     );
                     break;
+                case 'needs_review':
+                    $min_score = (int) get_option('rts_min_quality_score', 70);
+                    $min_score = max(0, min(100, $min_score));
+                    $query = $wpdb->prepare(
+                        "SELECT COUNT(DISTINCT p.ID)
+                         FROM {$wpdb->posts} p
+                         LEFT JOIN {$wpdb->postmeta} q ON p.ID = q.post_id AND q.meta_key = %s
+                         LEFT JOIN {$wpdb->postmeta} n ON p.ID = n.post_id AND n.meta_key = %s
+                         WHERE p.post_type = %s
+                         AND p.post_status IN ('publish','pending')
+                         AND (
+                            (n.meta_value = %s)
+                            OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
+                         )",
+                        'quality_score', 'needs_review', 'letter', '1', $min_score
+                    );
+                    break;
                 case 'flagged':
                     $query = $wpdb->prepare(
                         "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = %s WHERE p.post_type = %s AND p.post_status IN ('publish', 'pending') AND pm.meta_value = %s",
@@ -228,11 +250,8 @@ class RTS_CPT_Letters_Complete {
                     );
                     break;
                 case 'low_quality':
-                    $query = $wpdb->prepare(
-                        "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = %s WHERE p.post_type = %s AND p.post_status IN ('publish', 'pending') AND CAST(pm.meta_value AS UNSIGNED) < 50",
-                        'quality_score', 'letter'
-                    );
-                    break;
+                    // Back-compat: low_quality is now part of needs_review.
+                    return $this->get_count('needs_review');
                 default:
                     return 0;
             }
@@ -253,234 +272,187 @@ class RTS_CPT_Letters_Complete {
     /**
      * DASHBOARD STATS + PROCESS BUTTON at top of All Letters
      */
-    public function show_dashboard_and_controls() {
-        $screen = get_current_screen();
-        if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
-        
-        // Relaxed permission check: allow editors to see dashboard
-        if (!current_user_can('edit_posts')) return;
-        
-        $total_letters = wp_count_posts('letter');
-        $published = $total_letters->publish;
-        $pending = $total_letters->pending;
-        
-        $unrated = $this->get_count('unrated');
-        $flagged = $this->get_count('flagged');
-        $low_quality = $this->get_count('low_quality');
-        
-        $auto_enabled = get_option('rts_auto_processing_enabled', '1') === '1';
-        $batch_size = get_option('rts_auto_processing_batch_size', 50);
-        
-        ?>
-        <style>
-        .rts-dashboard-header {
-            background: white;
-            border: 1px solid #c3c4c7;
-            border-radius: 4px;
-            padding: 20px;
-            margin: 15px 0 20px 0;
-        }
-        .rts-stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .rts-stat-card {
-            text-align: center;
-            padding: 15px;
-            background: #f6f7f7;
-            border-radius: 4px;
-        }
-        .rts-stat-number {
-            font-size: 36px;
-            font-weight: 700;
-            margin: 5px 0;
-        }
-        .rts-stat-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #666;
-        }
-        .rts-stat-link {
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        .rts-controls-row {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .rts-control-card {
-            flex: 1;
-            min-width: 300px;
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 4px;
-            border-left: 4px solid #2271b1;
-        }
-        </style>
-        
-        <div class="rts-dashboard-header">
-            <h2 style="margin:0 0 15px 0;font-size:18px;">📊 Letters Overview</h2>
-            
-            <div class="rts-stats-grid">
-                <div class="rts-stat-card">
-                    <div class="rts-stat-number" style="color:#00a32a;"><?php echo number_format($published); ?></div>
-                    <div class="rts-stat-label">Published</div>
-                    <div class="rts-stat-link"><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&post_status=publish')); ?>">View →</a></div>
-                </div>
-                
-                <div class="rts-stat-card">
-                    <div class="rts-stat-number" style="color:<?php echo $pending > 0 ? '#d63638' : '#00a32a'; ?>;"><?php echo number_format($pending); ?></div>
-                    <div class="rts-stat-label">Pending Review</div>
-                    <?php if ($pending > 0): ?>
-                    <div class="rts-stat-link"><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&post_status=pending')); ?>">Review →</a></div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="rts-stat-card">
-                    <div class="rts-stat-number" style="color:<?php echo $unrated > 0 ? '#f0b849' : '#00a32a'; ?>;"><?php echo number_format($unrated); ?></div>
-                    <div class="rts-stat-label">Need Processing</div>
-                </div>
-                
-                <div class="rts-stat-card">
-                    <div class="rts-stat-number" style="color:<?php echo $flagged > 0 ? '#d63638' : '#00a32a'; ?>;"><?php echo number_format($flagged); ?></div>
-                    <div class="rts-stat-label">Flagged</div>
-                    <?php if ($flagged > 0): ?>
-                    <div class="rts-stat-link"><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&safety_status=flagged')); ?>">Review →</a></div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="rts-stat-card">
-                    <div class="rts-stat-number" style="color:<?php echo $low_quality > 0 ? '#d63638' : '#00a32a'; ?>;"><?php echo number_format($low_quality); ?></div>
-                    <div class="rts-stat-label">Low Quality</div>
-                    <?php if ($low_quality > 0): ?>
-                    <div class="rts-stat-link"><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&quality_filter=low')); ?>">Review →</a></div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            
-            <div class="rts-controls-row">
-                <?php if ($unrated > 0): ?>
-                <div class="rts-control-card">
-                    <h3 style="margin:0 0 10px 0;font-size:14px;">⚡ Process Unrated Letters</h3>
-                    <p style="margin:0 0 10px 0;font-size:13px;color:#666;">
-                        <?php echo number_format($unrated); ?> letters need quality analysis and tagging.
-                    </p>
-                    <button type="button" class="button button-primary" id="rts-process-btn">
-                        🚀 Process All Now
-                    </button>
-                    <span id="rts-process-status" style="margin-left:10px;font-size:12px;"></span>
-                </div>
-                <?php endif; ?>
-                
-                <div class="rts-control-card" style="border-left-color:<?php echo $auto_enabled ? '#00a32a' : '#d63638'; ?>;">
-                    <h3 style="margin:0 0 10px 0;font-size:14px;">
-                        <?php echo $auto_enabled ? '✓' : '⚠'; ?> Auto-Processing
-                    </h3>
-                    <p style="margin:0 0 10px 0;font-size:13px;color:#666;">
-                        <?php if ($auto_enabled): ?>
-                            <strong>Enabled</strong> - Processes <?php echo $batch_size; ?> letters every 5 minutes
-                        <?php else: ?>
-                            <strong>Disabled</strong> - Letters won't be processed automatically
-                        <?php endif; ?>
-                    </p>
-                    <a href="<?php echo apply_filters('rts_settings_page_url', esc_url(admin_url('admin.php?page=rts-settings'))); ?>" class="button">
-                        ⚙️ Settings
-                    </a>
-                </div>
-            </div>
-        </div>
-        
-        <?php if ($unrated > 0): ?>
-        <!-- Progress indicator (hidden initially) -->
-        <div id="rts-process-progress" style="display:none;margin:-10px 0 20px 0;background:white;border:1px solid #c3c4c7;border-radius:4px;padding:15px;">
-            <div style="background:#f0f0f0;border-radius:8px;height:30px;overflow:hidden;position:relative;">
-                <div id="rts-process-bar" style="background:#2271b1;height:100%;width:0%;transition:width 0.3s;display:flex;align-items:center;justify-content:center;">
-                    <strong id="rts-process-text" style="color:white;font-size:13px;"></strong>
-                </div>
-            </div>
-            <p id="rts-process-detail" style="margin:10px 0 0 0;font-size:13px;color:#666;"></p>
-        </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('#rts-process-btn').on('click', function() {
-                var btn = $(this);
-                var status = $('#rts-process-status');
-                var progress = $('#rts-process-progress');
-                var bar = $('#rts-process-bar');
-                var text = $('#rts-process-text');
-                var detail = $('#rts-process-detail');
-                
-                btn.prop('disabled', true).text('Processing...');
-                status.text('Starting...');
-                progress.show();
-                
-                var total = <?php echo $unrated; ?>;
-                var ui_batch = 10; // Matches PHP limit
-                
-                function processChunk() {
-                    $.ajax({
-                        url: ajaxurl,
-                        type: 'POST',
-                        data: {
-                            action: 'rts_process_unrated_letters',
-                            nonce: '<?php echo wp_create_nonce('rts_process_unrated'); ?>'
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                var remaining = response.data.remaining;
-                                var processedInChunk = response.data.processed;
-                                
-                                // Calculate total progress
-                                var currentProcessed = total - remaining;
-                                if (currentProcessed < 0) currentProcessed = 0;
-                                if (currentProcessed > total) currentProcessed = total;
 
-                                var percent = Math.round((currentProcessed / total) * 100);
-                                if (percent > 100) percent = 100;
-                                
-                                bar.css('width', percent + '%');
-                                text.text(currentProcessed + ' / ' + total);
-                                detail.text('Processing... ' + percent + '% complete (' + remaining + ' remaining)');
-                                status.text(percent + '% done');
-                                
-                                if (response.data.done || remaining <= 0) {
-                                    bar.css('background', '#00a32a').css('width', '100%');
-                                    text.text('✓ Complete!');
-                                    detail.html('<strong style="color:#00a32a;">All done! Refreshing page...</strong>');
-                                    status.html('<strong style="color:#00a32a;">✓ Complete</strong>');
-                                    setTimeout(function() { location.reload(); }, 2000);
-                                } else {
-                                    // Smart Throttling: If we processed fewer than max, server might be slow
-                                    var delay = 500;
-                                    if (processedInChunk < ui_batch / 2) {
-                                        delay = 1000;
-                                    }
-                                    setTimeout(processChunk, delay); 
-                                }
-                            } else {
-                                detail.html('<strong style="color:red;">Error: ' + response.data.message + '</strong>');
-                                btn.prop('disabled', false).text('Try Again');
-                            }
-                        },
-                        error: function() {
-                             detail.html('<strong style="color:red;">Connection Error. Please refresh.</strong>');
-                        }
-                    });
-                }
-                
-                processChunk();
-            });
-        });
-        </script>
-        <?php
-        endif;
+	public function show_letters_analytics_header() {
+		if (!is_admin()) return;
+		if (!current_user_can('manage_options')) return;
+		if (!$this->is_letters_screen()) return;
+
+		// Prefer cached stats from the moderation engine (daily), fall back to quick live counts.
+		$stats = get_option('rts_aggregated_stats', []);
+		if (!is_array($stats)) $stats = [];
+
+		$letters_total     = isset($stats['letters_total']) ? (int) $stats['letters_total'] : (int) wp_count_posts('letter')->publish + (int) wp_count_posts('letter')->pending;
+		$letters_published = isset($stats['letters_published']) ? (int) $stats['letters_published'] : (int) wp_count_posts('letter')->publish;
+		$letters_pending   = isset($stats['letters_pending']) ? (int) $stats['letters_pending'] : (int) wp_count_posts('letter')->pending;
+		$needs_review      = isset($stats['letters_needs_review']) ? (int) $stats['letters_needs_review'] : $this->count_needs_review_live();
+		$feedback_total    = isset($stats['feedback_total']) ? (int) $stats['feedback_total'] : (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
+		$generated_gmt     = isset($stats['generated_gmt']) ? (string) $stats['generated_gmt'] : '';
+
+		$run_analytics_url = wp_nonce_url(admin_url('admin-post.php?action=rts_run_analytics_now'), 'rts_run_analytics_now');
+		$rescan_url        = wp_nonce_url(admin_url('admin-post.php?action=rts_rescan_pending_letters'), 'rts_rescan_pending_letters');
+		$rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
+
+		?>
+		<div class="rts-letters-analytics" style="margin:16px 0 10px;">
+			<div style="background:#fff;border:1px solid #dcdcde;border-radius:12px;padding:14px 14px 10px;max-width:1180px;">
+				<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;">
+					<div>
+						<div style="font-size:18px;font-weight:700;line-height:1.2;">Letters analytics</div>
+						<div style="color:#646970;font-size:12px;margin-top:2px;">Powered by RTS Moderation Engine<?php echo $generated_gmt ? ' • cached ' . esc_html($generated_gmt) : ''; ?></div>
+					</div>
+					<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+						<a class="button" href="<?php echo esc_url($rts_dashboard_url); ?>">Open RTS Dashboard</a>
+						<a class="button button-secondary" href="<?php echo esc_url($run_analytics_url); ?>">Run analytics now</a>
+						<a class="button button-primary" href="<?php echo esc_url($rescan_url); ?>">Rescan pending / review</a>
+					</div>
+				</div>
+
+				<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+					<?php $this->render_stat_pill('Total', $letters_total, '#070C13', '#F1E3D3'); ?>
+					<?php $this->render_stat_pill('Published', $letters_published, '#0B3D2E', '#E7F7EF'); ?>
+					<?php $this->render_stat_pill('Pending', $letters_pending, '#6B4E00', '#FFF4CC'); ?>
+					<?php $this->render_stat_pill('Needs review', $needs_review, '#5B1B1B', '#FCE8E8'); ?>
+					<?php $this->render_stat_pill('Feedback', $feedback_total, '#1B3D5B', '#E8F3FC'); ?>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Detect whether we are on the Letters list table screen.
+	 *
+	 * WordPress screen IDs:
+	 * - edit-letter: list table (edit.php?post_type=letter)
+	 * - letter: single edit screen (post.php?post=ID&action=edit)
+	 *
+	 * We only want the analytics header on the list table.
+	 */
+	private function is_letters_screen(): bool {
+		if (!is_admin()) {
+			return false;
+		}
+
+		// get_current_screen() is not available on some early hooks.
+		if (function_exists('get_current_screen')) {
+			$screen = get_current_screen();
+			if ($screen && !empty($screen->id) && $screen->id === 'edit-letter') {
+				return true;
+			}
+		}
+
+		// Fallback detection (works on most admin requests).
+		global $pagenow;
+		$post_type = isset($_GET['post_type']) ? sanitize_key((string) $_GET['post_type']) : '';
+		return ($pagenow === 'edit.php' && $post_type === 'letter');
+	}
+
+	private function count_needs_review_live(): int {
+		global $wpdb;
+		try {
+			return (int) $wpdb->get_var($wpdb->prepare(
+				"SELECT COUNT(1) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id=p.ID WHERE p.post_type=%s AND pm.meta_key=%s AND pm.meta_value=%s",
+				'letter',
+				'needs_review',
+				'1'
+			));
+		} catch (\Throwable $e) {
+			return 0;
+		}
+	}
+
+	private function render_stat_pill(string $label, int $val, string $fg, string $bg): void {
+		?>
+		<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:<?php echo esc_attr($bg); ?>;color:<?php echo esc_attr($fg); ?>;">
+			<strong style="font-size:13px;"><?php echo esc_html($label); ?>:</strong>
+			<span style="font-variant-numeric:tabular-nums;font-weight:800;"><?php echo esc_html(number_format_i18n($val)); ?></span>
+		</div>
+		<?php
+	}
+    public function handle_run_analytics_now(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die('Forbidden');
+        }
+        check_admin_referer('rts_run_analytics_now');
+
+        if (function_exists('as_enqueue_async_action')) {
+            as_enqueue_async_action('rts_aggregate_analytics', [], 'rts');
+        } else {
+            // Safe fallback: run inline (fast) if Action Scheduler is missing.
+            if (class_exists('RTS_Analytics_Aggregator')) {
+                RTS_Analytics_Aggregator::aggregate();
+            }
+        }
+
+        wp_safe_redirect(wp_get_referer() ?: admin_url('edit.php?post_type=letter'));
+        exit;
     }
+
+    public function handle_enqueue_letter_rescan(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die('Forbidden');
+        }
+        check_admin_referer('rts_enqueue_letter_rescan');
+
+        if (!function_exists('as_schedule_single_action')) {
+            wp_safe_redirect(wp_get_referer() ?: admin_url('edit.php?post_type=letter'));
+            exit;
+        }
+
+        global $wpdb;
+
+        // Rescan up to 300 letters that are pending or marked needs_review=1.
+        $limit = 300;
+
+        $ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT p.ID
+                 FROM {$wpdb->posts} p
+                 LEFT JOIN {$wpdb->postmeta} pm
+                   ON pm.post_id = p.ID AND pm.meta_key = 'needs_review'
+                 WHERE p.post_type = %s
+                   AND (p.post_status = %s OR pm.meta_value = %s)
+                 ORDER BY p.ID DESC
+                 LIMIT %d",
+                'letter',
+                'pending',
+                '1',
+                $limit
+            )
+        );
+
+        if (is_array($ids)) {
+            $scheduled = 0;
+            foreach ($ids as $id) {
+                $id = (int) $id;
+                if ($id <= 0) continue;
+
+                // Avoid duplicates
+                $already = function_exists('as_next_scheduled_action')
+                    ? as_next_scheduled_action('rts_process_letter', [$id], 'rts')
+                    : false;
+
+                if (!$already) {
+                    as_schedule_single_action(time() + 5, 'rts_process_letter', [$id], 'rts');
+                    $scheduled++;
+                }
+            }
+
+            // Also refresh analytics after rescans start.
+            as_enqueue_async_action('rts_aggregate_analytics', [], 'rts');
+
+            update_option('rts_last_admin_action', [
+                'time' => gmdate('c'),
+                'action' => 'rescan_pending_letters',
+                'scheduled' => (int) $scheduled,
+            ], false);
+        }
+
+        wp_safe_redirect(wp_get_referer() ?: admin_url('edit.php?post_type=letter'));
+        exit;
+    }
+
 
     /**
      * AJAX HANDLER (Fixed #1, #5, #9, #10)
@@ -503,7 +475,7 @@ class RTS_CPT_Letters_Complete {
         $batch_size = (int) get_option('rts_auto_processing_batch_size', 50);
         $ui_batch = min($batch_size, 10); // Cap at 10 for UI responsiveness
 
-        $result = RTS_Cron_Processing::process_letters_batch('pending', $ui_batch, 'dashboard_manual');
+        $result = RTS_Cron_Processing::process_letters_batch('unrated', $ui_batch, 'dashboard_manual');
         
         if (isset($result['error'])) {
              wp_send_json_error(['message' => $result['error']]);
@@ -595,6 +567,19 @@ class RTS_CPT_Letters_Complete {
             }
         }
         
+        if (isset($_GET['review_status']) && $_GET['review_status'] !== '') {
+            $rv = sanitize_text_field($_GET['review_status']);
+            if ($rv === 'needs_review') {
+                $min_score = (int) get_option('rts_min_quality_score', 70);
+                $min_score = max(0, min(100, $min_score));
+                $meta_query[] = [
+                    'relation' => 'OR',
+                    [ 'key' => 'needs_review', 'value' => '1' ],
+                    [ 'key' => 'quality_score', 'value' => $min_score, 'compare' => '<', 'type' => 'NUMERIC' ],
+                ];
+            }
+        }
+
         if (isset($_GET['safety_status']) && $_GET['safety_status'] !== '') {
             $safety = sanitize_text_field($_GET['safety_status']);
             
@@ -625,29 +610,18 @@ class RTS_CPT_Letters_Complete {
     }
     
     public function add_custom_views($views) {
-        $flagged_count = $this->get_count('flagged');
-        $low_quality_count = $this->get_count('low_quality');
-        
-        if ($flagged_count > 0) {
-            $current = (isset($_GET['safety_status']) && $_GET['safety_status'] === 'flagged') ? 'class="current"' : '';
-            $views['flagged'] = sprintf(
-                '<a href="%s" %s>⚠️ Flagged <span class="count">(%d)</span></a>',
-                esc_url(admin_url('edit.php?post_type=letter&safety_status=flagged')),
+        $needs_review_count = $this->get_count('needs_review');
+
+        if ($needs_review_count > 0) {
+            $current = (isset($_GET['review_status']) && $_GET['review_status'] === 'needs_review') ? 'class="current"' : '';
+            $views['needs_review'] = sprintf(
+                '<a href="%s" %s>Needs Review <span class="count">(%d)</span></a>',
+                esc_url(admin_url('edit.php?post_type=letter&review_status=needs_review')),
                 $current,
-                $flagged_count
+                $needs_review_count
             );
         }
-        
-        if ($low_quality_count > 0) {
-            $current = (isset($_GET['quality_filter']) && $_GET['quality_filter'] === 'low') ? 'class="current"' : '';
-            $views['low_quality'] = sprintf(
-                '<a href="%s" %s>Low Quality <span class="count">(%d)</span></a>',
-                esc_url(admin_url('edit.php?post_type=letter&quality_filter=low')),
-                $current,
-                $low_quality_count
-            );
-        }
-        
+
         return $views;
     }
     

@@ -432,25 +432,8 @@ add_shortcode('rts_site_stats_row', function () {
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
 require_once get_stylesheet_directory() . '/inc/letter-system.php';      // Core API & matching
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
-require_once get_stylesheet_directory() . '/inc/admin-menu-consolidated.php'; // CLEAN consolidated menu - no confusing sub-menus
 require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
-require_once get_stylesheet_directory() . '/inc/admin-settings.php';   // Settings page with tabs (ENABLED for v2.0.10.90)
-// OLD ADMIN PAGES - DISABLED (replaced by consolidated menu)
-// require_once get_stylesheet_directory() . '/inc/admin-dashboard-clean.php';
-// require_once get_stylesheet_directory() . '/inc/admin-moderation.php';
-// require_once get_stylesheet_directory() . '/inc/admin-letter-bulk-actions.php';
-// require_once get_stylesheet_directory() . '/inc/admin-letter-management.php';
-require_once get_stylesheet_directory() . '/inc/cron-processing.php'; // Automated scoring/tagging
 
-// Initialize automated cron processing
-if (class_exists('RTS_Cron_Processing')) {
-    RTS_Cron_Processing::init();
-}
-
-// Boot Moderation Hub
-if (class_exists('RTS_Admin_Moderation')) {
-    new RTS_Admin_Moderation();
-}
 
 /**
  * Get site stats with manual override support
@@ -555,87 +538,8 @@ add_action('admin_post_rts_export_letters', function() {
     exit;
 });
 
-/**
- * ADMIN POST: Run processing now
- */
-add_action('admin_post_rts_run_processing_now', function() {
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-    
-    check_admin_referer('rts_manual_controls');
-    
-    $result = RTS_Cron_Processing::process_letters_batch('pending', 25, 'manual');
-    
-    $redirect_args = [
-        'page' => 'rts-settings',
-        'tab' => 'autoprocess'
-    ];
-    
-    if (isset($result['processed'])) {
-        $redirect_args['processed'] = $result['processed'];
-        $redirect_args['published'] = $result['published'] ?? 0;
-        $redirect_args['flagged'] = $result['flagged'] ?? 0;
-    }
-    
-    if (isset($result['error'])) {
-        $redirect_args['error'] = urlencode($result['error']);
-    }
-    
-    wp_redirect(add_query_arg($redirect_args, admin_url('edit.php?post_type=letter')));
-    exit;
-});
-
-/**
- * ADMIN POST: Start recheck all
- */
-add_action('admin_post_rts_start_recheck_all', function() {
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-    
-    check_admin_referer('rts_manual_controls');
-    
-    // Count total letters
-    $total = wp_count_posts('letter');
-    $count = $total->publish + $total->pending;
-    
-    // Initialize recheck
-    update_option('rts_recheck_all_active', 1);
-    update_option('rts_recheck_all_offset', 0);
-    update_option('rts_recheck_all_total', $count);
-    update_option('rts_recheck_all_last_run', time());
-    
-    // Run first batch
-    RTS_Cron_Processing::process_letters_batch('recheck_all', 25, 'manual');
-    
-    wp_redirect(add_query_arg([
-        'page' => 'rts-settings',
-        'tab' => 'autoprocess',
-        'recheck_started' => 1
-    ], admin_url('edit.php?post_type=letter')));
-    exit;
-});
-
-/**
- * ADMIN POST: Stop recheck
- */
-add_action('admin_post_rts_stop_recheck', function() {
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-    
-    check_admin_referer('rts_manual_controls');
-    
-    update_option('rts_recheck_all_active', 0);
-    
-    wp_redirect(add_query_arg([
-        'page' => 'rts-settings',
-        'tab' => 'autoprocess',
-        'recheck_stopped' => 1
-    ], admin_url('edit.php?post_type=letter')));
-    exit;
-});
+// NOTE: Manual processing admin-post handlers are registered inside inc/cron-processing.php
+// (RTS_Cron_Processing::init). Keeping them in one place prevents double-execution.
 
 // Boot client-friendly admin menu and clean list columns
 if (class_exists('RTS_Letter_Management_Admin')) {
@@ -807,16 +711,9 @@ function rts_get_site_stats() {
  */
 // v2.x enterprise components
 $rts_optional_includes = [
-    'enterprise-monitoring.php',
-    'content-analyzer.php',
-    'security.php',
     'admin-preview.php',
-    'import-export.php',
     'ally-widget.php',
-    'background-processor.php',
     'feedback-system.php',
-    'auto-approval.php',
-    'bulk-letter-processor.php',
 ];
 
 foreach ($rts_optional_includes as $file) {
@@ -845,118 +742,12 @@ add_action('manage_letter_posts_custom_column', function($column, $post_id){
     }
 }, 0, 2);
 
-/**
- * Admin notices for bulk operations
- */
-add_action('admin_notices', 'rts_v2_bulk_notices');
-function rts_v2_bulk_notices() {
-    if (isset($_GET['bulk_tagged'])) {
-        $count = intval($_GET['bulk_tagged']);
-        echo '<div class="notice notice-success is-dismissible">';
-        echo '<p><strong>RTS:</strong> ' . sprintf(_n('%s letter auto-tagged successfully.', '%s letters auto-tagged successfully.', $count), number_format($count)) . '</p>';
-        echo '</div>';
-    }
-    
-    if (isset($_GET['bulk_scanned'])) {
-        $scanned = intval($_GET['bulk_scanned']);
-        $flagged = isset($_GET['bulk_flagged']) ? intval($_GET['bulk_flagged']) : 0;
-        echo '<div class="notice notice-success is-dismissible">';
-        echo '<p><strong>RTS:</strong> Scanned ' . number_format($scanned) . ' letters. ';
-        if ($flagged > 0) {
-            echo '<strong style="color:#d63638;">' . number_format($flagged) . ' flagged for review.</strong> ';
-            echo '<a href="' . admin_url('edit.php?post_type=letter&flagged=1') . '">Review flagged letters &rarr;</a>';
-        } else {
-            echo 'No issues found.';
-        }
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['bulk_og_generated'])) {
-        $count = intval($_GET['bulk_og_generated']);
-        echo '<div class="notice notice-success is-dismissible">';
-        echo '<p><strong>RTS:</strong> ' . sprintf(_n('%s social media image generated.', '%s social media images generated.', $count), number_format($count)) . '</p>';
-        echo '</div>';
-    }
-}
 
-/**
- * Add RTS quick links to admin bar
- */
-add_action('admin_bar_menu', 'rts_v2_admin_bar', 100);
-function rts_v2_admin_bar($admin_bar) {
-    if (!current_user_can('edit_posts')) {
-        return;
-    }
-    
-    // Get pending count
-    $pending = wp_count_posts('letter')->pending;
-    
-    $title = 'RTS Letters';
-    if ($pending > 0) {
-        $title .= ' <span class="ab-label awaiting-mod pending-count count-' . $pending . '"><span class="pending-count">' . $pending . '</span></span>';
-    }
-    
-    $admin_bar->add_node([
-        'id' => 'rts-letters',
-        'title' => $title,
-        'href' => admin_url('edit.php?post_type=letter'),
-        'meta' => ['title' => 'RTS Letters Management']
-    ]);
-    
-    if ($pending > 0) {
-        $admin_bar->add_node([
-            'id' => 'rts-pending',
-            'parent' => 'rts-letters',
-            'title' => '⚠️ Review Pending (' . $pending . ')',
-            'href' => admin_url('edit.php?post_type=letter&post_status=pending')
-        ]);
-    }
-    
-    $admin_bar->add_node([
-        'id' => 'rts-analytics',
-        'parent' => 'rts-letters',
-        'title' => '📊 Analytics',
-        'href' => admin_url('edit.php?post_type=letter&page=rts-analytics')
-    ]);
-}
 
-/**
- * Show v2.0 welcome notice on first activation
- */
-add_action('admin_notices', 'rts_v2_welcome_notice');
-function rts_v2_welcome_notice() {
-    if (!current_user_can('manage_options')) {
-        return;
-    }
-    
-    if (get_option('rts_v2_welcome_shown')) {
-        return;
-    }
-    
-    ?>
-    <div class="notice notice-success is-dismissible">
-        <h2>🎉 Reasons to Stay v2.0 Enterprise Edition Activated!</h2>
-        <p><strong>New Enterprise Features:</strong></p>
-        <ul style="list-style: disc; margin-left: 20px;">
-            <li><strong>Enterprise Monitoring:</strong> Automatic error detection with email alerts to webmaster@inkfire.co.uk</li>
-            <li><strong>Auto-Tagging:</strong> Letters are automatically tagged with feelings and tone (no manual work!)</li>
-            <li><strong>Social Sharing:</strong> Auto-generated Open Graph images for Facebook/Twitter sharing</li>
-            <li><strong>Security Hardening:</strong> Rate limiting, spam detection, and bot protection</li>
-        </ul>
-        <p>
-            <a href="<?php echo admin_url('edit.php?post_type=letter&page=rts-analytics'); ?>" class="button button-primary">View Analytics Dashboard</a>
-            <a href="<?php echo admin_url('edit.php?post_type=letter'); ?>" class="button">Manage Letters</a>
-            <button class="button" onclick="this.closest('.notice').remove(); fetch('<?php echo admin_url('admin-ajax.php'); ?>?action=rts_dismiss_welcome');">Dismiss</button>
-        </p>
-    </div>
-    <?php
-    
-    update_option('rts_v2_welcome_shown', true);
-}
 
-// Dismiss welcome notice via AJAX
-add_action('wp_ajax_rts_dismiss_welcome', function() {
-    update_option('rts_v2_welcome_shown', true);
-    wp_die();
-});
+// Include the new Moderation Engine
+$rts_engine_path = get_stylesheet_directory() . '/inc/rts-moderation-engine.php';
+if (file_exists($rts_engine_path)) {
+    require_once $rts_engine_path;
+}
 

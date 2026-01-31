@@ -53,9 +53,8 @@ class RTS_Feedback_System {
             'labels' => $labels,
             'public' => false,
             'show_ui' => true,
-            // Consolidated UI: feedback is managed under Letters → Moderation.
-            // Keep CPT UI accessible via direct URL, but hide it from the menu.
-            'show_in_menu' => false,
+            // Expose feedback under Letters so admins can manage it alongside letters.
+            'show_in_menu' => 'edit.php?post_type=letter',
             'capability_type' => 'post',
             'supports' => ['title'],
             'menu_position' => 25,
