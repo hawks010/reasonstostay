@@ -278,7 +278,7 @@ if (!class_exists('RTS_Moderation_Engine')) {
 				$ip
 			));
 
-			$threshold = (int) apply_filters('rts_ip_daily_threshold', (int) get_option(RTS_Admin_Dashboard::OPTION_IP_THRESHOLD, 20));
+			$threshold = (int) apply_filters('rts_ip_daily_threshold', (int) get_option(RTS_Engine_Dashboard::OPTION_IP_THRESHOLD, 20));
 			if ($count > $threshold) {
 				set_transient($ip_lock_key, 1, 300);
 			return ['pass' => false, 'reason' => 'rate_limit_exceeded'];
@@ -666,10 +666,10 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 }
 
 /* =========================================================
-   RTS_Admin_Dashboard: Single top-level menu + REST endpoint
+   RTS_Engine_Dashboard: Single top-level menu + REST endpoint
    ========================================================= */
-if (!class_exists('RTS_Admin_Dashboard')) {
-	class RTS_Admin_Dashboard {
+if (!class_exists('RTS_Engine_Dashboard')) {
+	class RTS_Engine_Dashboard {
 
 		// Keep the same option names as the engine settings shim so existing saved values remain valid.
 		public const OPTION_AUTO_ENABLED = 'rts_auto_processing_enabled';
@@ -1549,7 +1549,7 @@ if (!class_exists('RTS_Auto_Processor')) {
  * Engine Settings (shim)
  *
  * Some parts of the engine reference RTS_Engine_Settings.
- * The dashboard/settings UI is driven by RTS_Admin_Dashboard constants,
+ * The dashboard/settings UI is driven by RTS_Engine_Dashboard constants,
  * but to keep the engine stable (and avoid fatal errors) we provide
  * a small settings helper with the same option keys.
  */
@@ -1661,7 +1661,7 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 			add_action('save_post_rts_feedback', [__CLASS__, 'on_save_post_feedback'], 20, 3);
 
 			if (is_admin()) {
-				RTS_Admin_Dashboard::init();
+				RTS_Engine_Dashboard::init();
 				// Settings UI is provided inside the all-in-one RTS Dashboard.
 			}
 
