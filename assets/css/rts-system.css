@@ -1,0 +1,1340 @@
+/**
+ * Reasons to Stay - Main Styles
+ * WCAG 2.2 AA Compliant
+ * Black & white color scheme with paper texture
+ */
+
+:root {
+    --rts-white: #FAFAFA;
+    --rts-cream: #F8F7F4;
+    --rts-black: #1A1A1A;
+    --rts-gray-dark: #2C2C2C;
+    --rts-gray-mid: #4A4A4A;
+    --rts-gray-light: #E5E5E5;
+    --rts-shadow: rgba(0,0,0,0.08);
+    --rts-shadow-strong: rgba(0,0,0,0.15);
+}
+
+/* ==========================================
+   LETTER VIEWER
+   ========================================== */
+
+.rts-letter-viewer {
+    width: 100%;
+    padding: 0;
+}
+
+/* Typewriter font for letter titles and standalone headings */
+.rts-letter-signature {
+    font-family: 'Special Elite', 'Courier New', monospace;
+}
+
+.rts-letter-signature {
+    font-size: 20px;
+    font-style: normal;
+}
+
+/* Loading state */
+.rts-loading {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.rts-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--rts-gray-light);
+    border-top-color: var(--rts-black);
+    border-radius: 50%;
+    animation: rts-spin 0.8s linear infinite;
+}
+
+@keyframes rts-spin {
+    to { transform: rotate(360deg); }
+}
+
+.rts-loading p {
+    margin-top: 20px;
+    color: var(--rts-gray-mid);
+    font-size: 16px;
+}
+
+/* Letter card with paper effect */
+.rts-letter-card {
+    background: var(--rts-white);
+    /* Extra top padding to make room for top-left tag icons */
+    padding: 100px 100px 50px;
+    position: relative;
+    box-shadow: 
+        0 1px 3px rgba(0,0,0,0.06),
+        0 4px 8px rgba(0,0,0,0.04),
+        0 0 0 1px rgba(0,0,0,0.02);
+    border-radius: 2px;
+    margin-bottom: 0px;
+}
+
+/* Top-left tag icons (Feedback / Report) */
+.rts-letter-top-tags{
+    position: absolute;
+    top: 35px;
+    left: -45px; /* sit outside the paper */
+    display: inline-flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 3;
+}
+
+.rts-tag-btn{
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--rts-black);
+    color: var(--rts-white);
+    border: 2px solid var(--rts-black);
+    border-radius: 0px; /* square-ish tag */
+    cursor: pointer;
+    transition: all 0.18s ease;
+    position: relative;
+}
+
+.rts-tag-btn:hover{
+    transform: translateY(-1px);
+    color: #FCA311;
+    box-shadow: 0 6px 14px var(--rts-shadow);
+}
+
+.rts-tag-btn:focus-visible{
+    outline: 3px solid #FCA311;
+    outline-offset: 3px;
+}
+
+.rts-tag-btn i{
+    font-size: 18px;
+    line-height: 1;
+}
+
+/* Tooltip label (hover + keyboard focus) */
+.rts-tag-btn::after{
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 50%;
+    left: 54px; /* show label to the right of the tag */
+    background: rgba(7, 12, 19, 0.95);
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(-50%) translateX(-4px);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.rts-tag-btn:hover::after,
+.rts-tag-btn:focus-visible::after{
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
+/* Card footer keeps Next button visually attached to the letter */
+.rts-letter-card-footer{
+    margin-top: 26px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Site stats row - [rts_site_stats_row] */
+.rts-stats-row{
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 35px;
+    width: 100%;
+    margin: 0;
+}
+
+.rts-stat{
+    background: transparent;
+    border: none;
+    text-align: center;
+}
+
+.rts-stat-number{
+    font-weight: 700;
+    font-size: clamp(28px, 3.2vw, 44px);
+    font-family: var(--e-global-typography-primary-font-family), Sans-serif;
+    line-height: 1;
+    color: var(--rts-black);
+}
+
+.rts-stat-label{
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--rts-gray-mid);
+}
+
+/* Paper texture overlay */
+.rts-letter-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    border-radius: 2px;
+}
+
+/* Stacked paper layers effect */
+.rts-letter-card::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    background: linear-gradient(to bottom, #E8E8E8, #F0F0F0);
+    z-index: -1;
+    border-radius: 0 0 2px 2px;
+    box-shadow: 0 2px 4px var(--rts-shadow);
+}
+
+/* Letter content */
+.rts-letter-content {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    color: var(--rts-black);
+    position: relative;
+    z-index: 1;
+}
+
+.rts-letter-content p {
+    margin-bottom: 1.2em;
+}
+
+.rts-letter-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Letter signature */
+.rts-letter-signature {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rts-gray-light);
+    text-align: right;
+    font-size: 16px;
+    color: var(--rts-gray-mid);
+}
+
+/* Card footer: centers Next button inside the letter */
+.rts-letter-card-footer{
+    margin-top: 26px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Fade in animation */
+.rts-letter-display {
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.rts-letter-display.rts-fade-in {
+    opacity: 1;
+}
+
+/* ==========================================
+   LETTER ACTIONS
+   ========================================== */
+
+.rts-letter-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  justify-content:flex-start;
+  flex-wrap:wrap;
+  margin-top:22px;
+}
+/* Footer icon buttons (Feedback / Report) */
+.rts-letter-actions .rts-trigger{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding: 10px 12px;
+    min-height: 44px;
+    min-width: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(7,12,19,0.18);
+    background: rgba(7,12,19,0.06);
+    color: var(--rts-black);
+    cursor:pointer;
+}
+
+.rts-letter-actions .rts-trigger:hover{
+    background: rgba(7,12,19,0.10);
+}
+
+.rts-letter-actions .rts-trigger:focus-visible{
+    outline: 3px solid rgba(252,163,17,0.55);
+    outline-offset: 2px;
+}
+
+/* Primary button (Next Letter) */
+.rts-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 22px;
+    background: #F1E3D3;
+    color: var(--rts-black);
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Special Elite', monospace;
+    font-size: .85rem;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    min-height: 40px;
+    min-width: 48px;
+}
+
+.rts-btn:hover {
+    background: var(--rts-gray-dark);
+    border-color: var(--rts-gray-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px var(--rts-shadow);
+}
+
+.rts-btn:focus-visible {
+    outline: 3px solid var(--rts-black);
+    outline-offset: 3px;
+}
+
+.rts-btn:active{
+  transform: translateY(1px);
+}
+
+/* ==========================================
+   QUICK RATING PROMPT (shown on Next)
+   ========================================== */
+
+.rts-rate-prompt {
+    width: 100%;
+    display: flex;
+    max-width: 100%;
+    padding: 25px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+}
+
+.rts-rate-text {
+    margin: 0 0 10px 0;
+    text-align: center;
+    font-size: 14px;
+    color: var(--rts-gray-dark);
+}
+
+.rts-rate-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.rts-rate-btn {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 2px solid rgba(0,0,0,0.15);
+    background: var(--rts-white);
+    color: var(--rts-black);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rts-rate-btn:hover {
+    border-color: var(--rts-pink);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px var(--rts-shadow);
+}
+
+.rts-rate-btn:focus-visible {
+    outline: 3px solid var(--rts-black);
+    outline-offset: 3px;
+}
+
+.rts-rate-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.rts-rate-skip {
+    border: none;
+    background: transparent;
+    color: var(--rts-gray-dark);
+    text-decoration: underline;
+    padding: 10px 12px;
+}
+
+.rts-rate-skip:hover {
+    color: var(--rts-black);
+}
+
+/* Helpful button */
+.rts-btn-helpful {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: transparent;
+    color: var(--rts-black);
+    border: 2px solid var(--rts-gray-light);
+    border-radius: 4px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 48px;
+}
+
+.rts-btn-helpful:hover {
+    background: var(--rts-cream);
+    border-color: var(--rts-gray-mid);
+}
+
+.rts-btn-helpful:focus-visible {
+    outline: 3px solid var(--rts-black);
+    outline-offset: 3px;
+}
+
+.rts-btn-helpful.rts-helped {
+    background: var(--rts-black);
+    color: var(--rts-white);
+    border-color: var(--rts-black);
+    cursor: default;
+}
+
+.rts-btn-helpful svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Helpful toast */
+.rts-helpful-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--rts-black);
+    color: var(--rts-white);
+    padding: 16px 24px;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px var(--rts-shadow-strong);
+    transition: transform 0.3s ease;
+    z-index: 9999;
+}
+
+.rts-helpful-toast.rts-toast-show {
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ==========================================
+   SHARE SECTION
+   ========================================== */
+
+.rts-letter-share {
+    text-align: center;
+    padding: 50px 0px 0px 0px;
+}
+
+.rts-share-label {
+    font-size: 16px;
+    font-weight: 600;
+    font-family: 'Special Elite', sans-serif;
+    color: var(--rts-black);
+    margin-bottom: 20px;
+}
+
+.rts-share-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.rts-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: #070C13;
+    color: #F1E3D3;
+    border: none;
+    border-radius: 999px;
+    font-size: 16px;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    min-height: 44px;
+}
+
+.rts-share-btn:hover {
+    color: #FCA311;
+    background: #070C13 !important;
+    
+}
+
+.rts-share-btn:focus {
+    outline: none;
+}
+
+.rts-share-btn:focus-visible {
+    outline: 3px solid var(--rts-black);
+    outline-offset: 3px;
+}
+
+.rts-share-btn i {
+    font-size: 18px;
+}
+
+/* ==========================================
+   ONBOARDING MODAL
+   ========================================== */
+
+/* 50% transparency overlay */
+.rts-onboarding-overlay {
+    position: fixed!important;
+    inset: 0!important;
+    background: rgba(0,0,0,0.5)!important;
+    /* Default hidden. JS toggles display to flex when onboarding is active. */
+    display: none;
+    align-items: center!important;
+    justify-content: center!important;
+    z-index: 10000!important;
+    padding: 20px!important;
+}
+
+/*
+  IMPORTANT:
+  The overlay uses display:flex!important by default.
+  When JS hides it, we must win the specificity battle.
+*/
+.rts-onboarding-overlay.rts-hidden-force{
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+}
+
+.rts-onboarding-modal {
+    background: var(--rts-white)!important;
+    max-width: 900px !important;
+    width: 100%!important;
+    border-radius: 8px!important;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3)!important;
+    position: relative!important;
+    overflow: visible !important; 
+}
+
+/* New inner wrapper for scrolling content */
+.rts-onboarding-scroll-wrapper {
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 100%;
+    border-radius: 8px; /* Match modal */
+    background: var(--rts-white); /* Ensure bg matches */
+}
+
+.rts-onboarding-content {
+    padding: 50px 60px!important;
+}
+
+.rts-onboarding-content h2 {
+    font-size: 32px!important;
+    color: var(--rts-black)!important;
+    margin-bottom: 12px!important;
+    line-height: 1.3!important;
+}
+
+.rts-onboarding-content > p {
+    color: var(--rts-gray-mid)!important;
+    margin-bottom: 40px!important;
+    font-size: 16px!important;
+}
+
+.rts-onboarding-step h3 {
+    font-size: 24px!important;
+    color: var(--rts-black)!important;
+    margin-bottom: 10px!important;
+}
+
+.rts-step-subtitle {
+    font-size: 14px!important;
+    color: var(--rts-gray-mid)!important;
+    margin-bottom: 25px!important;
+}
+
+/* Checkbox group - 2 columns on larger screens */
+.rts-checkbox-group {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.rts-checkbox-label {
+    display: flex;
+    align-items: center;
+    padding: 16px 18px;
+    border: 2px solid var(--rts-gray-light);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.rts-checkbox-label:hover {
+    background: var(--rts-cream);
+    border-color: var(--rts-gray-mid);
+}
+
+.rts-checkbox-label input[type="checkbox"] {
+    margin-right: 12px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.rts-checkbox-label:has(input:checked) {
+    background: var(--rts-black);
+    color: var(--rts-white);
+    border-color: var(--rts-black);
+}
+
+/* Radio group */
+.rts-radio-group {
+    display: grid;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.rts-radio-label {
+    display: flex;
+    align-items: center;
+    padding: 16px 18px;
+    border: 2px solid var(--rts-gray-light);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.rts-radio-label:hover {
+    background: var(--rts-cream);
+    border-color: var(--rts-gray-mid);
+}
+
+.rts-radio-label input[type="radio"] {
+    margin-right: 12px;
+    cursor: pointer;
+}
+
+.rts-radio-label:has(input:checked) {
+    background: var(--rts-black);
+    color: var(--rts-white);
+    border-color: var(--rts-black);
+}
+
+/* Prominent Exit/Skip Tag */
+.rts-skip-tag {
+    position: absolute;
+    top: 30px;
+    right: -45px; /* Hanging off the side */
+    width: 45px;
+    min-height: 120px;
+    background-color: #d63031; /* Urgent/Visible Red */
+    color: #fff;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    text-align: center;
+    font-weight: 700;
+    font-size: 15px;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    z-index: 1001; /* Above modal content */
+    box-shadow: 4px 0 15px rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-left: none;
+    transition: right 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding: 20px 0;
+    letter-spacing: 1px;
+}
+
+.rts-skip-tag:hover {
+    right: -55px; /* Slide out slightly on hover */
+    background-color: #e17055;
+}
+
+.rts-skip-tag:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: -3px;
+}
+
+/* ==========================================
+   SUBMIT FORM
+   ========================================== */
+
+.rts-submit-form-wrapper {
+    width: 100%;
+    padding: 0;
+}
+
+.rts-form {
+    background: var(--rts-white);
+    padding: 40px;
+    box-shadow: 
+        0 1px 3px rgba(0,0,0,0.06),
+        0 4px 8px rgba(0,0,0,0.04);
+    border-radius: 2px;
+}
+
+.rts-form-intro {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: var(--rts-cream);
+    border-left: 4px solid var(--rts-black);
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.rts-form-intro p {
+    margin-bottom: 10px;
+}
+
+.rts-form-intro p:last-child {
+    margin-bottom: 0;
+}
+
+.rts-form-field {
+    margin-bottom: 25px;
+}
+
+.rts-form-field label {
+    display: block;
+    font-weight: 600;
+    color: var(--rts-black);
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.rts-optional,
+.rts-required {
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--rts-gray-mid);
+}
+
+.rts-form-field input[type="text"],
+.rts-form-field input[type="email"],
+.rts-form-field textarea {
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--rts-gray-light);
+    border-radius: 4px;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--rts-black);
+    background: var(--rts-white);
+    transition: all 0.2s ease;
+}
+
+.rts-form-field input:focus,
+.rts-form-field textarea:focus {
+    outline: none;
+    border-color: var(--rts-black);
+    box-shadow: 0 0 0 3px rgba(26,26,26,0.1);
+}
+
+.rts-form-field textarea {
+    resize: vertical;
+    min-height: 200px;
+    line-height: 1.6;
+}
+
+.rts-char-count {
+    display: block;
+    font-size: 13px;
+    color: var(--rts-gray-mid);
+    margin-top: 6px;
+}
+
+.rts-field-help {
+    display: block;
+    font-size: 13px;
+    color: var(--rts-gray-mid);
+    margin-top: 6px;
+}
+
+/* Checkbox field */
+.rts-checkbox-field .rts-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.rts-checkbox-field input[type="checkbox"] {
+    margin-top: 3px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+/* Form actions */
+.rts-form-actions {
+    margin-top: 30px;
+}
+
+.rts-btn-submit {
+    width: 100%;
+    position: relative;
+}
+
+.rts-btn-spinner {
+    display: none;
+}
+
+/* Form response */
+.rts-form-response {
+    margin-top: 20px;
+}
+
+.rts-error {
+    padding: 15px;
+    background: #ffebee;
+    border-left: 4px solid #d32f2f;
+    color: #c62828;
+    font-size: 15px;
+}
+
+/* Success message */
+.rts-submit-success {
+    text-align: center;
+    padding: 60px 40px;
+    background: var(--rts-white);
+    border-radius: 2px;
+    box-shadow: 
+        0 1px 3px rgba(0,0,0,0.06),
+        0 4px 8px rgba(0,0,0,0.04);
+}
+
+.rts-success-icon {
+    width: 80px;
+    height: 80px;
+    background: #2e7d32;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    margin: 0 auto 20px;
+}
+
+.rts-submit-success h3 {
+    font-size: 28px;
+    color: var(--rts-black);
+    margin-bottom: 15px;
+}
+
+.rts-submit-success p {
+    font-size: 16px;
+    color: var(--rts-gray-mid);
+    margin-bottom: 25px;
+    line-height: 1.6;
+}
+
+/* ==========================================
+   RESPONSIVE
+   ========================================== */
+
+@media (max-width: 768px) {
+    .rts-letter-card {
+        /* Keep room for the top-left tag icons */
+        padding: 52px 20px 26px;
+    }
+
+    .rts-tag-btn i {
+        font-size: 13px;
+    }
+    
+    .rts-tag-btn{
+        width: 25px;
+        height: 25px;
+    }
+    .rts-letter-top-tags{
+        top: 12px;
+        left: auto;
+        right: 12px;
+        flex-direction: row;
+    }
+
+    .rts-stat{
+        min-width: 100%;
+    }
+    
+    .rts-form {
+        padding: 30px 20px;
+    }
+    
+    .rts-onboarding-content {
+        padding: 30px 20px;
+    }
+    
+    .rts-onboarding-content h2 {
+        font-size: 24px;
+    }
+    
+    .rts-onboarding-step h3 {
+        font-size: 20px;
+    }
+    
+    /* Single column for checkboxes on mobile */
+    .rts-checkbox-group {
+        grid-template-columns: 1fr;
+    }
+    
+    .rts-letter-actions {
+        flex-direction: column;
+    }
+    
+    .rts-btn,
+    .rts-btn-helpful {
+        width: 100%;
+    }
+    
+    .rts-share-buttons {
+        gap: 10px;
+    }
+    
+    .rts-share-btn {
+        font-size: 14px;
+        padding: 10px 16px;
+    }
+
+    /* FIX: Mobile version of the skip tag */
+    .rts-skip-tag {
+        position: static;
+        width: 100%;
+        min-height: auto;
+        writing-mode: horizontal-tb;
+        border-radius: 4px;
+        margin-top: 30px;
+        padding: 15px;
+        border: none;
+        box-shadow: none;
+        background: #f8f8f8;
+        color: #d63031;
+        border: 2px solid #d63031;
+    }
+    
+    .rts-skip-tag:hover {
+        background: #d63031;
+        color: #fff;
+        right: auto;
+    }
+}
+
+/* ==========================================
+   ACCESSIBILITY: REDUCED MOTION
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+
+/* =========================================
+   FEEDBACK MODAL (SUBTLE)
+   ========================================= */
+.rts-letter-feedback-link {
+    max-width: 100%;
+    width: 100%;
+    margin: 0px;
+    padding: 25px 0px !important;
+    text-align: left;
+    display: flex;
+    gap: 15px;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    align-items: center;
+}
+.rts-feedback-open,
+.rts-trigger-open {
+    appearance: none;
+    background: #000000 !important;
+    color: #ffffff;
+    border: 0;
+    font-family: 'Special Elite', 'Courier New', monospace;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.2s ease;
+}
+.rts-feedback-open:hover,
+.rts-trigger-open:hover {
+    background: #FCA311 !important;
+    color: #000000 !important;
+}
+.rts-feedback-open:focus-visible,
+.rts-trigger-open:focus-visible {
+    outline: 3px solid var(--rts-blue);
+    outline-offset: 3px;
+    border-radius: 8px;
+}
+
+.rts-modal{
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: none;
+}
+.rts-modal[aria-hidden="false"]{ display:block; }
+.rts-modal-backdrop{
+    position:absolute;
+    inset:0;
+    background: rgba(0,0,0,0.55);
+}
+.rts-modal-panel{
+    position: relative;
+    width: min(640px, calc(100% - 24px));
+    height:fit-content;
+    margin: 10vh auto 0;
+    background: var(--rts-white);
+    border: 2px solid rgba(0,0,0,0.12);
+    border-radius: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    padding: 18px 18px 16px;
+}
+.rts-modal-header{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.rts-modal-header h3{
+    margin:0;
+    font-size: 1.2rem;
+    line-height: 1.2;
+}
+.rts-modal-close{
+    appearance:none;
+    border:0;
+    background: transparent;
+    font-size: 26px;
+    line-height: 1;
+    cursor:pointer;
+    color: var(--rts-black);
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+.rts-modal-close:focus-visible{
+    outline: 3px solid var(--rts-blue);
+    outline-offset: 3px;
+}
+.rts-field{ margin: 10px 0; text-align:left; }
+.rts-field label{ display:block; font-weight:700; margin-bottom:6px; }
+.rts-field-inline{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+}
+.rts-field-inline label{ margin:0; font-weight:700; }
+.rts-field input[type="email"],
+.rts-field select,
+.rts-field textarea{
+    width:100%;
+    border:2px solid rgba(0,0,0,0.18);
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    background: var(--rts-white);
+}
+.rts-field textarea{ resize: vertical; min-height: 110px; }
+.rts-field input:focus-visible,
+.rts-field select:focus-visible,
+.rts-field textarea:focus-visible{
+    outline: 3px solid var(--rts-blue);
+    outline-offset: 2px;
+}
+.rts-actions{
+    display:flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 12px;
+}
+.rts-muted{
+    margin-top: 10px;
+    font-size: 0.88rem;
+    color: rgba(0,0,0,0.68);
+}
+
+body.rts-modal-open{overflow:hidden;}
+
+/* =========================================
+   SUBMIT PAGE (WRITE A LETTER) LAYOUT
+   2fr / 1fr grid with branded instructions panel
+   ========================================= */
+
+.rts-submit-grid{
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+    align-items: start;
+    width: 100%;
+}
+
+.rts-submit-instructions{
+    background: #182437;
+    color: #F1E3D3;
+    border-radius: 16px;
+    padding: 22px 20px;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.10);
+}
+
+.rts-submit-instructions h3{
+    margin: 0 0 12px;
+    color: #FCA311;
+    font-size: 1.35rem;
+    line-height: 1.15;
+}
+
+.rts-instruction-block{
+  border-top: 1px solid rgba(241,227,211,0.18);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+/* Buttons */
+.rts-btn:focus-visible{outline:3px solid rgba(252,163,17,.55);outline-offset:3px}
+.rts-btn-next{background:#F1E3D3; border: none; color:#000000; min-width:200px; text-align:center}
+.rts-btn-next:hover,.rts-btn-next:focus{background:#FCA311;color:#000}
+.rts-submit-btn{background:#070C13;border-color:#070C13;color:#fff;padding:12px 22px;border-radius:10px}
+.rts-submit-btn:hover,.rts-submit-btn:focus{background:#FCA311;border-color:#FCA311;color:#000}
+
+/* Footer button placement */
+.rts-letter-card-footer{display:flex;justify-content:flex-end;margin-top:26px}
+
+/* Write a letter layout */
+.rts-submit-grid{display:grid;grid-template-columns:1.25fr .9fr;gap:28px;align-items:start}
+.rts-submit-form{display:flex;flex-direction:column;gap:14px}
+.rts-submit-form .rts-field{display:flex;flex-direction:column;gap:6px}
+.rts-consent-row{display:flex;align-items:flex-start;gap:10px}
+.rts-submit-actions{display:flex;justify-content:flex-end;margin-top:10px}
+.rts-submit-actions .rts-submit-btn{min-width:180px}
+
+@media (max-width:900px){.rts-submit-grid{grid-template-columns:1fr}}
+@media (max-width:768px){.rts-letter-card-footer{justify-content:stretch}.rts-btn-next{width:100%;min-width:0}.rts-submit-actions{justify-content:stretch}.rts-submit-actions .rts-submit-btn{width:100%;min-width:0}}
+
+/* =========================================================
+   RTS Letter Viewer Layout Clean-up (Hotfix)
+   ========================================================= */
+
+.rts-letter-card{
+  position: relative;
+}
+
+.rts-letter-content{
+  display:flex;
+  flex-direction:column;
+  min-height: 100%;
+}
+
+.rts-letter-body{
+  width:100%;
+}
+
+.rts-letter-footer{
+  margin-top: 50px;
+  display:block;
+  width:100%;
+}
+
+@media (max-width: 767px){
+  .rts-letter-footer .rts-btn-next{
+    width:100%;
+    justify-content:center;
+  }
+}
+
+/* Rating prompt stays hidden until JS reveals it */
+.rts-rate-prompt[hidden]{ display:none !important; }
+
+/* =========================================================
+   Letter viewer refinements - tabs, padding, footer
+   ========================================================= */
+
+/* Bigger "real letter" padding */
+.rts-letter-content{
+  display:flex;
+  flex-direction:column;
+  min-height:100%;
+  padding: 0px;
+  position: relative;
+}
+
+@media (max-width: 768px){
+  .rts-letter-content{
+    padding: 28px 18px 22px;
+  }
+}
+
+/* Footer spacing + Next button alignment */
+.rts-letter-footer{
+  margin-top: 50px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px){
+  .rts-letter-footer{
+    justify-content: stretch;
+  }
+  .rts-letter-footer .rts-btn-next{
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Rating prompt stays hidden until JS reveals it */
+.rts-rate-prompt[hidden]{ display:none !important; }
+
+/* (Removed legacy icon tab styles; viewer now uses text Feedback tab only) */
+
+/* Make sure old feedback link block can't reappear */
+.rts-letter-feedback-link{ display:none !important; }
+
+
+/* =========================================================
+   HOTFIX: Viewer feedback/report UI changes
+   - Letter font: Special Elite (client request)
+   - Report: text link left of "Read Another Letter"
+   - Feedback: slim vertical tab (desktop), top tab (mobile)
+   ========================================================= */
+
+.rts-letter-content,
+.rts-letter-body{
+  font-family: 'Special Elite', sans-serif;
+}
+
+/* Footer layout: Report + Read Another Letter aligned to the right */
+.rts-letter-footer{
+  display:flex;
+  width:100%;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+
+/* Report text link (no button styling) */
+.rts-report-link{
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin-left: auto !important; /* Pushes this element to the right */
+  margin-right: 30px !important;
+  font-family: 'Special Elite', sans-serif;
+  font-size: 0.9rem;
+  color: #000000;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rts-report-link:hover,
+.rts-report-link:focus-visible{
+  text-decoration: underline;
+}
+
+.rts-report-link:focus-visible{
+  outline: 3px solid #FCA311;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Feedback tab wrapper (desktop): outside the letter */
+.rts-letter-tabs{
+  position: absolute;
+  z-index: 6;
+  top: 50px;
+  left: -22px;
+  transform: translateY(-50%);
+}
+
+/* Feedback tab (desktop): slim vertical text tab */
+.rts-feedback-tab{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background: #F1E3D3 !important;
+  color: #000000 !important;
+  border: 0;
+  font-family: 'Special Elite', sans-serif;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 15px 7px;
+  cursor: pointer;
+  border-radius: 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.02em;
+}
+
+.rts-feedback-tab:hover,
+.rts-feedback-tab:focus-visible{
+  background: #000000 !important;
+  color: #FFFFFF !important;
+}
+
+.rts-feedback-tab:focus-visible{
+  outline: 3px solid #FCA311;
+  outline-offset: 3px;
+}
+
+/* Mobile: move Feedback tab inside top-right and make horizontal + slim */
+@media (max-width: 768px){
+  .rts-letter-tabs{
+    top: 12px;
+    right: 12px;
+    left: auto;
+    transform: none;
+  }
+  .rts-feedback-tab{
+    writing-mode: horizontal-tb;
+    text-orientation: initial;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+  }
+}

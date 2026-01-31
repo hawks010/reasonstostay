@@ -597,6 +597,35 @@ function rts_enqueue_frontend_assets() {
         $js_ver,
         true
     );
+    
+    function rts_enqueue_admin_scripts($hook) {
+    // Only load on RTS admin pages
+    if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
+        $js_file = get_stylesheet_directory() . '/inc/js/rts-dashboard.js';
+        $js_ver  = file_exists($js_file) ? (string) filemtime($js_file) : '2.40';
+
+        wp_enqueue_script(
+            'rts-dashboard-js',
+            get_stylesheet_directory_uri() . '/inc/js/rts-dashboard.js',
+            ['jquery'],
+            $js_ver,
+            true
+        );
+
+        // Localize script with nonce and URLs
+        wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'resturl' => rest_url('rts/v1/'),
+            'nonce'   => wp_create_nonce('wp_rest'),
+            'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce')
+        ]);
+        
+        // Ensure CSS is loaded too if not already
+        wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], '2.40');
+    }
+}
+
+add_action('admin_enqueue_scripts', 'rts_enqueue_admin_scripts');
 
     // Provide REST base URL (fixes viewer failures on subdirectory installs / language prefixes)
     // and a sensible request timeout to avoid infinite loading states.

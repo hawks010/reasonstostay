@@ -1,0 +1,285 @@
+/**
+ * RTS Admin Styles
+ * Used for admin dashboard, settings pages, and metaboxes.
+ */
+
+/* =========================================================
+   1. Dashboard & General Layout (Legacy Support)
+   ========================================================= */
+.rts-dashboard-wrapper {
+    max-width: 1200px;
+    margin: 20px 20px 0 0;
+}
+
+.rts-header {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+}
+
+.rts-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+/* =========================================================
+   2. Modern Dashboard Styles (v2.40+)
+   ========================================================= */
+.rts-wrap {
+    max-width: 1200px;
+    margin: 20px auto 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+.rts-header-modern {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.rts-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rts-title small {
+    font-size: 13px;
+    font-weight: 400;
+    color: #646970;
+    background: #f0f0f1;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* Modern Grid System */
+.rts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+/* Modern Card Design */
+.rts-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px; /* Fallback for non-grid layouts */
+}
+
+/* Accent Borders */
+.rts-card.accent-left { border-left: 4px solid transparent; }
+
+/* Typography inside Cards */
+.rts-stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #646970;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.rts-stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1d2327;
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.rts-stat-sub {
+    font-size: 13px;
+    color: #50575e;
+}
+
+.rts-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0 0 15px;
+}
+
+/* Action Bar */
+.rts-actions-bar {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.rts-spacer { flex-grow: 1; }
+
+.rts-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+/* Navigation Tabs */
+.rts-nav-tabs {
+    border-bottom: 1px solid #c3c4c7;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 20px;
+}
+
+.rts-nav-link {
+    text-decoration: none;
+    color: #50575e;
+    padding: 10px 0;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.rts-nav-link:hover { color: #2271b1; }
+.rts-nav-link.active { color: #2271b1; border-bottom-color: #2271b1; }
+
+/* Progress Bar */
+.rts-progress-container {
+    height: 8px;
+    background: #f0f0f1;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 15px 0;
+}
+
+.rts-progress-bar {
+    height: 100%;
+    background: #2271b1;
+    transition: width 0.5s;
+}
+
+.rts-progress-text {
+    font-size: 12px;
+    color: #646970;
+}
+
+/* =========================================================
+   3. Utility Classes & Colors
+   ========================================================= */
+.color-success { color: #00a32a; }
+.bg-success { background: #00a32a; }
+.color-warning { color: #dba617; }
+.bg-warning { background: #dba617; }
+.color-danger { color: #d63638; }
+.bg-danger { background: #d63638; }
+.color-info { color: #2271b1; }
+.bg-info { background: #2271b1; }
+
+.rts-hidden { display: none; }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+
+/* =========================================================
+   4. Tables & Lists (Shared)
+   ========================================================= */
+.rts-table-wrapper { overflow-x: auto; }
+
+table.rts-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+table.rts-table th,
+table.rts-table td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+table.rts-table th {
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.rts-status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.rts-status-pending { background: #f0f0f1; color: #50575e; }
+.rts-status-publish { background: #edfaef; color: #00a32a; }
+.rts-status-flagged { background: #fcf0f1; color: #d63638; }
+
+/* =========================================================
+   5. Metaboxes (Edit Letter Screen)
+   ========================================================= */
+#rts_letter_meta .inside { margin: 0; padding: 0; }
+
+.rts-meta-row {
+    padding: 12px;
+    border-bottom: 1px solid #f0f0f1;
+    display: flex;
+    align-items: center;
+}
+
+.rts-meta-row:last-child { border-bottom: none; }
+
+.rts-meta-label {
+    width: 140px;
+    font-weight: 600;
+    color: #50575e;
+    flex-shrink: 0;
+}
+
+.rts-meta-value { flex-grow: 1; }
+
+/* Quality Score Visuals */
+.rts-score-bar {
+    height: 8px;
+    background: #f0f0f1;
+    border-radius: 4px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 200px;
+    margin-top: 5px;
+}
+
+.rts-score-fill { height: 100%; background: #2271b1; }
+.rts-score-fill.low    { background: #d63638; }
+.rts-score-fill.medium { background: #dba617; }
+.rts-score-fill.high   { background: #00a32a; }
+
+/* =========================================================
+   6. Moderation Actions
+   ========================================================= */
+.rts-moderation-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.button.rts-btn-approve { border-color: #00a32a; color: #00a32a; }
+.button.rts-btn-approve:hover { background: #00a32a; color: #fff; border-color: #00a32a; }
+
+.button.rts-btn-reject { border-color: #d63638; color: #d63638; }
+.button.rts-btn-reject:hover { background: #d63638; color: #fff; border-color: #d63638; }
