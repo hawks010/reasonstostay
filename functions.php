@@ -8,6 +8,7 @@
  * 3. Styles & Enqueueing (Parent/Child theme setup)
  * 4. Maintenance (Weekly Debug Log Wipe)
  * 5. Auto-Migration (Self-healing URLs for Elementor)
+ * 6. Reasons to Stay - Letter System (Core Includes & Logic)
  */
 
 // =============================================================================
@@ -430,7 +431,7 @@ add_shortcode('rts_site_stats_row', function () {
  * Load RTS System Components
  */
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
-require_once get_stylesheet_directory() . '/inc/letter-system.php';      // Core API & matching
+require_once get_stylesheet_directory() . '/inc/letter-system.php';       // Core API & matching
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
 require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
 
@@ -598,35 +599,6 @@ function rts_enqueue_frontend_assets() {
         true
     );
     
-    function rts_enqueue_admin_scripts($hook) {
-    // Only load on RTS admin pages
-    if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
-        $js_file = get_stylesheet_directory() . '/inc/js/rts-dashboard.js';
-        $js_ver  = file_exists($js_file) ? (string) filemtime($js_file) : '2.40';
-
-        wp_enqueue_script(
-            'rts-dashboard-js',
-            get_stylesheet_directory_uri() . '/inc/js/rts-dashboard.js',
-            ['jquery'],
-            $js_ver,
-            true
-        );
-
-        // Localize script with nonce and URLs
-        wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'resturl' => rest_url('rts/v1/'),
-            'nonce'   => wp_create_nonce('wp_rest'),
-            'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce')
-        ]);
-        
-        // Ensure CSS is loaded too if not already
-        wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], '2.40');
-    }
-}
-
-add_action('admin_enqueue_scripts', 'rts_enqueue_admin_scripts');
-
     // Provide REST base URL (fixes viewer failures on subdirectory installs / language prefixes)
     // and a sensible request timeout to avoid infinite loading states.
     wp_localize_script('rts-system', 'RTS_CONFIG', [
@@ -771,7 +743,42 @@ add_action('manage_letter_posts_custom_column', function($column, $post_id){
     }
 }, 0, 2);
 
+function rts_enqueue_admin_scripts($hook) {
+    // Only load on RTS admin pages
+    if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
+        
+        // CSS
+        wp_enqueue_style(
+            'rts-admin-css', 
+            get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', 
+            [], 
+            '2.41' // Bumped version to force cache clear
+        );
 
+        // JS
+        $js_file = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
+        // Note: Ensure the file actually exists at this path! 
+        // If you put it in assets/js/, change the path below.
+        
+        if (file_exists($js_file)) {
+             wp_enqueue_script(
+                'rts-dashboard-js',
+                get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js',
+                ['jquery'],
+                '2.41',
+                true
+            );
+
+            wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'resturl' => rest_url('rts/v1/'),
+                'nonce'   => wp_create_nonce('wp_rest'),
+                'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce')
+            ]);
+        }
+    }
+}
+add_action('admin_enqueue_scripts', 'rts_enqueue_admin_scripts');
 
 
 // Include the new Moderation Engine
@@ -779,4 +786,3 @@ $rts_engine_path = get_stylesheet_directory() . '/inc/rts-moderation-engine.php'
 if (file_exists($rts_engine_path)) {
     require_once $rts_engine_path;
 }
-
