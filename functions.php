@@ -757,8 +757,6 @@ function rts_enqueue_admin_scripts($hook) {
 
         // JS
         $js_file = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
-        // Note: Ensure the file actually exists at this path! 
-        // If you put it in assets/js/, change the path below.
         
         if (file_exists($js_file)) {
              wp_enqueue_script(
@@ -772,8 +770,8 @@ function rts_enqueue_admin_scripts($hook) {
             wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
                 'ajaxurl' => admin_url('admin-ajax.php'),
                 'resturl' => rest_url('rts/v1/'),
-                'nonce'   => wp_create_nonce('wp_rest'),
-                'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce')
+                'nonce'   => wp_create_nonce('wp_rest'), // General REST nonce
+                'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce') // Specific action nonce
             ]);
         }
     }
