@@ -92,16 +92,35 @@ class RTS_CPT_Letters_Complete {
     public function register_taxonomies() {
         register_taxonomy('letter_feeling', 'letter', [
             'label' => 'Feelings',
+            'labels' => [
+                'name' => 'Feelings',
+                'singular_name' => 'Feeling',
+                'all_items' => 'All Feelings',
+                'edit_item' => 'Edit Feeling',
+                'add_new_item' => 'Add New Feeling',
+            ],
             'public' => false,
             'show_ui' => true,
+            'show_admin_column' => true,
             'hierarchical' => true,
+            'show_in_quick_edit' => true,
+            'meta_box_cb' => 'post_categories_meta_box',
         ]);
         
         register_taxonomy('letter_tone', 'letter', [
             'label' => 'Tone',
+            'labels' => [
+                'name' => 'Tone',
+                'singular_name' => 'Tone',
+                'all_items' => 'All Tones',
+                'edit_item' => 'Edit Tone',
+                'add_new_item' => 'Add New Tone',
+            ],
             'public' => false,
             'show_ui' => true,
+            'show_admin_column' => true,
             'hierarchical' => false,
+            'show_in_quick_edit' => true,
         ]);
     }
     /**
@@ -294,26 +313,134 @@ class RTS_CPT_Letters_Complete {
 		$rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
 
 		?>
-		<div class="rts-letters-analytics" style="margin:16px 0 10px;">
-			<div style="background:#fff;border:1px solid #dcdcde;border-radius:12px;padding:14px 14px 10px;max-width:1180px;">
-				<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;">
+		<style>
+			.rts-analytics-container {
+				margin: 16px 0 10px;
+			}
+			.rts-analytics-box {
+				background: #fff;
+				border: 1px solid #dcdcde;
+				border-radius: 12px;
+				padding: 20px;
+				max-width: 1400px;
+			}
+			.rts-analytics-header {
+				display: flex;
+				gap: 16px;
+				flex-wrap: wrap;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: 20px;
+			}
+			.rts-analytics-title {
+				font-size: 18px;
+				font-weight: 700;
+				line-height: 1.2;
+				color: #1d2327;
+			}
+			.rts-analytics-subtitle {
+				color: #646970;
+				font-size: 12px;
+				margin-top: 4px;
+			}
+			.rts-analytics-actions {
+				display: flex;
+				gap: 10px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+			.rts-analytics-actions .button {
+				height: 36px;
+				line-height: 34px;
+				padding: 0 16px;
+				font-size: 13px;
+				font-weight: 500;
+				border-radius: 6px;
+				text-decoration: none;
+				transition: all 0.2s ease;
+			}
+			.rts-analytics-actions .button:hover {
+				transform: translateY(-1px);
+				box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+			}
+			.rts-analytics-actions .button-primary {
+				background: #2271b1;
+				border-color: #2271b1;
+				color: #fff;
+			}
+			.rts-analytics-actions .button-primary:hover {
+				background: #135e96;
+				border-color: #135e96;
+			}
+			.rts-analytics-actions .button-secondary {
+				background: #f6f7f7;
+				border-color: #dcdcde;
+				color: #2c3338;
+			}
+			.rts-analytics-actions .button-secondary:hover {
+				background: #f0f0f1;
+				border-color: #8c8f94;
+			}
+			.rts-stats-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+				gap: 14px;
+			}
+			@media (min-width: 1200px) {
+				.rts-stats-grid {
+					grid-template-columns: repeat(5, 1fr);
+				}
+			}
+			.rts-stat-box {
+				background: linear-gradient(135deg, var(--stat-bg-start), var(--stat-bg-end));
+				border: 1px solid var(--stat-border);
+				border-radius: 10px;
+				padding: 18px 16px;
+				text-align: center;
+				transition: all 0.2s ease;
+				cursor: default;
+			}
+			.rts-stat-box:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+			}
+			.rts-stat-label {
+				font-size: 12px;
+				font-weight: 600;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				color: var(--stat-label-color);
+				margin-bottom: 8px;
+				opacity: 0.85;
+			}
+			.rts-stat-value {
+				font-size: 32px;
+				font-weight: 800;
+				line-height: 1;
+				color: var(--stat-value-color);
+				font-variant-numeric: tabular-nums;
+			}
+		</style>
+		<div class="rts-analytics-container">
+			<div class="rts-analytics-box">
+				<div class="rts-analytics-header">
 					<div>
-						<div style="font-size:18px;font-weight:700;line-height:1.2;">Letters analytics</div>
-						<div style="color:#646970;font-size:12px;margin-top:2px;">Powered by RTS Moderation Engine<?php echo $generated_gmt ? ' • cached ' . esc_html($generated_gmt) : ''; ?></div>
+						<div class="rts-analytics-title">Letters Analytics</div>
+						<div class="rts-analytics-subtitle">Powered by RTS Moderation Engine<?php echo $generated_gmt ? ' • cached ' . esc_html($generated_gmt) : ''; ?></div>
 					</div>
-					<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-						<a class="button" href="<?php echo esc_url($rts_dashboard_url); ?>">Open RTS Dashboard</a>
-						<a class="button button-secondary" href="<?php echo esc_url($run_analytics_url); ?>">Run analytics now</a>
-						<a class="button button-primary" href="<?php echo esc_url($rescan_url); ?>">Rescan pending / review</a>
+					<div class="rts-analytics-actions">
+						<a class="button" href="<?php echo esc_url($rts_dashboard_url); ?>">📊 Open Dashboard</a>
+						<a class="button button-secondary" href="<?php echo esc_url($run_analytics_url); ?>">🔄 Refresh Stats</a>
+						<a class="button button-primary" href="<?php echo esc_url($rescan_url); ?>">🔍 Scan Pending & Quarantine</a>
 					</div>
 				</div>
 
-				<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-					<?php $this->render_stat_pill('Total', $letters_total, '#070C13', '#F1E3D3'); ?>
-					<?php $this->render_stat_pill('Published', $letters_published, '#0B3D2E', '#E7F7EF'); ?>
-					<?php $this->render_stat_pill('Pending', $letters_pending, '#6B4E00', '#FFF4CC'); ?>
-					<?php $this->render_stat_pill('Needs review', $needs_review, '#5B1B1B', '#FCE8E8'); ?>
-					<?php $this->render_stat_pill('Feedback', $feedback_total, '#1B3D5B', '#E8F3FC'); ?>
+				<div class="rts-stats-grid">
+					<?php $this->render_stat_box('Total', $letters_total, '#1d2327', '#f0f0f1', '#dcdcde'); ?>
+					<?php $this->render_stat_box('Published', $letters_published, '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
+					<?php $this->render_stat_box('Pending', $letters_pending, '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
+					<?php $this->render_stat_box('Needs Review', $needs_review, '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
+					<?php $this->render_stat_box('Feedback', $feedback_total, '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
 				</div>
 			</div>
 		</div>
@@ -362,11 +489,12 @@ class RTS_CPT_Letters_Complete {
 		}
 	}
 
-	private function render_stat_pill(string $label, int $val, string $fg, string $bg): void {
+	private function render_stat_box(string $label, int $val, string $value_color, string $bg_start, string $border): void {
+		$bg_end = $bg_start; // Can be different for gradient effect
 		?>
-		<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:<?php echo esc_attr($bg); ?>;color:<?php echo esc_attr($fg); ?>;">
-			<strong style="font-size:13px;"><?php echo esc_html($label); ?>:</strong>
-			<span style="font-variant-numeric:tabular-nums;font-weight:800;"><?php echo esc_html(number_format_i18n($val)); ?></span>
+		<div class="rts-stat-box" style="--stat-bg-start:<?php echo esc_attr($bg_start); ?>;--stat-bg-end:<?php echo esc_attr($bg_end); ?>;--stat-border:<?php echo esc_attr($border); ?>;--stat-label-color:<?php echo esc_attr($value_color); ?>;--stat-value-color:<?php echo esc_attr($value_color); ?>;">
+			<div class="rts-stat-label"><?php echo esc_html($label); ?></div>
+			<div class="rts-stat-value"><?php echo esc_html(number_format_i18n($val)); ?></div>
 		</div>
 		<?php
 	}

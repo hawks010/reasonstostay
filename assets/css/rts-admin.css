@@ -30,12 +30,11 @@
 /* =========================================================
    2. Modern Dashboard Styles (v2.40+)
    ========================================================= */
-.rts-letters-analytics {
-    border: 1px solid #dcdcde;
-    border-radius: 12px;
+.rts-analytics-box{
     max-width: 100% !important;
     margin: 20px 20px 20px 0px !important
 }
+
 .rts-dashboard {
     max-width: 100%;
     margin: 20px 20px 20px 0px !important;
@@ -45,6 +44,7 @@
 /* Matches PHP: <header class="rts-dashboard-header"> */
 .rts-dashboard-header {
     display: flex;
+    flex-direction: column-reverse;
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 30px;
@@ -336,7 +336,7 @@
 }
 
 .rts-progress-bar-container {
-    height: 8px;
+    height: auto;
     background: #f0f0f1;
     border-radius: 4px;
     overflow: hidden;

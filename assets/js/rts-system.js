@@ -404,7 +404,22 @@
         return headers;
       },
 
-      async ajaxPost(action, payload) {
+      
+      async parseJson(resp) {
+        const ct = (resp.headers && resp.headers.get) ? (resp.headers.get('content-type') || '') : '';
+        // If it's JSON, parse normally
+        if (ct.toLowerCase().includes('application/json')) {
+          return await this.parseJson(resp);
+        }
+        // Some hosts/WAFs return HTML for 403/500. Capture a small snippet for debugging.
+        const text = await resp.text().catch(() => '');
+        const snippet = (text || '').toString().slice(0, 400).replace(/\s+/g, ' ').trim();
+        const err = new Error(`Non-JSON response (HTTP ${resp.status})`);
+        err.http_status = resp.status;
+        err.body_snippet = snippet;
+        throw err;
+      },
+async ajaxPost(action, payload) {
         const cfg = (typeof window.RTS_CONFIG !== 'undefined' && window.RTS_CONFIG) ? window.RTS_CONFIG : {};
         const url = cfg.ajaxUrl || '/wp-admin/admin-ajax.php';
         const params = new URLSearchParams();
@@ -428,7 +443,7 @@
             body: params.toString(),
             signal: controller ? controller.signal : undefined
           });
-          const data = await resp.json().catch(() => ({}));
+          const data = await this.parseJson(resp).catch(() => ({}));
           return data;
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
@@ -864,7 +879,7 @@
 
                   if (response && response.ok) {
                       try {
-                          data = await response.json();
+                          data = await this.parseJson(response);
                       } catch (e) {
                           data = { success: false, message: 'Invalid response format' };
                       }
@@ -932,7 +947,7 @@
             })
           });
 
-              let data = await response.json().catch(() => ({}));
+              let data = await this.parseJson(response).catch(() => ({}));
               if ((response.status === 403 || response.status === 404) && (!data || !data.success)) {
                 data = await this.ajaxPost('rts_get_next_letter', {
                   preferences: this.preferences,
@@ -1274,7 +1289,7 @@
               credentials: 'same-origin',
               body: JSON.stringify(payload)
             });
-            data = await response.json().catch(() => ({}));
+            data = await this.parseJson(response).catch(() => ({}));
             if (!response.ok) {
               data = data || {};
               data.success = false;
@@ -1542,7 +1557,7 @@ async submitLetter(formData) {
       return;
     }
 
-    const data = await response.json().catch(() => ({}));
+    const data = await this.parseJson(response).catch(() => ({}));
 
     if (response.ok && data && data.success) {
       const formWrap = document.querySelector('.rts-submit-form-wrapper form');

@@ -156,22 +156,95 @@ if (!class_exists('RTS_Moderation_Engine')) {
 			return mb_substr($msg, 0, 300);
 		}
 
-		private static function safety_scan(int $post_id): array {
-			$content = (string) get_post_field('post_content', $post_id);
-			$content_lc = mb_strtolower($content);
-			$patterns = [
-				'/\bkill myself\b/i', '/\bsuicide\b/i', '/\bend it all\b/i',
-				'/\bno reason to live\b/i', '/\bself[-\s]?harm\b/i',
-				'/\boverdose\b/i', '/\bcutting\b/i', '/\bi want to die\b/i',
-			];
-			$flags = [];
-			foreach ($patterns as $pattern) {
-				$ok = @preg_match($pattern, $content_lc);
-				if ($ok === false) return ['pass' => false, 'flags' => ['regex_error']];
-				if ($ok === 1) $flags[] = trim($pattern, '/i');
+	private static function safety_scan(int $post_id): array {
+		$content = (string) get_post_field('post_content', $post_id);
+		$content_lc = mb_strtolower($content);
+		
+		// Context-aware safety scanning for mental health support site
+		// Only flag ACTUAL dangers, not expressions of struggle or support
+		
+		$flags = [];
+		$flag_score = 0;
+		
+		// SPAM/ABUSE PATTERNS (High priority - always flag)
+		$spam_patterns = [
+			'/\b(viagra|cialis|casino|poker|lottery|bitcoin|crypto)\b/i' => 'spam_keywords',
+			'/https?:\/\/[^\s]+\.(ru|cn|tk|ml|ga)\b/i' => 'suspicious_links',
+			'/<script|javascript:|onclick=/i' => 'malicious_code',
+			'/\b(fuck you|kill yourself|you should die|worthless piece)\b/i' => 'abusive_language',
+		];
+		
+		foreach ($spam_patterns as $pattern => $flag_name) {
+			$ok = @preg_match($pattern, $content_lc);
+			if ($ok === 1) {
+				$flags[] = $flag_name;
+				$flag_score += 10; // Instant fail
 			}
-			return ['pass' => empty($flags), 'flags' => $flags];
 		}
+		
+		// SPECIFIC METHOD PATTERNS (Medium priority - concerning but context matters)
+		// Only flag if multiple indicators or very specific methods
+		$method_patterns = [
+			'/\b(\d+)\s*(pills?|tablets?|capsules?)\b/i' => 'specific_dosage',
+			'/\b(rope|noose|hanging|bridge|jump|pills? and alcohol)\b/i' => 'method_mention',
+			'/\b(tonight|today|right now|going to do it)\b/i' => 'imminent_timing',
+		];
+		
+		foreach ($method_patterns as $pattern => $flag_name) {
+			$ok = @preg_match($pattern, $content_lc);
+			if ($ok === 1) {
+				$flags[] = $flag_name;
+				$flag_score += 3;
+			}
+		}
+		
+		// ENCOURAGEMENT OF HARM (High priority - never acceptable)
+		$encouragement_patterns = [
+			'/\b(you should|just do it|go ahead|nobody will miss)\b.*\b(kill|die|end it)\b/i' => 'encouragement',
+			'/\b(better off dead|world.*better without)\b/i' => 'harmful_encouragement',
+		];
+		
+		foreach ($encouragement_patterns as $pattern => $flag_name) {
+			$ok = @preg_match($pattern, $content_lc);
+			if ($ok === 1) {
+				$flags[] = $flag_name;
+				$flag_score += 10; // Instant fail
+			}
+		}
+		
+		// SUPPORTIVE CONTEXT DETECTION (Reduces score - these are GOOD)
+		$supportive_patterns = [
+			'/\b(you are not alone|here for you|it gets better|please stay|reach out)\b/i',
+			'/\b(helpline|crisis|support|therapy|counseling|help is available)\b/i',
+			'/\b(i understand|me too|i\'ve been there|you matter|you\'re important)\b/i',
+			'/\b(keep going|hang in there|tomorrow|hope|future|better days)\b/i',
+		];
+		
+		foreach ($supportive_patterns as $pattern) {
+			$ok = @preg_match($pattern, $content_lc);
+			if ($ok === 1) {
+				$flag_score -= 2; // Reduce concern
+			}
+		}
+		
+		// PAST TENSE DETECTION (Reduces score - talking about past, not present danger)
+		if (preg_match('/\b(used to|in the past|when i was|back then|years ago|months ago)\b/i', $content_lc)) {
+			$flag_score -= 1;
+		}
+		
+		// DECISION LOGIC:
+		// - Score >= 10: Definite flag (spam, abuse, encouragement)
+		// - Score >= 5: Multiple concerning indicators
+		// - Score < 5: Likely safe (normal mental health discussion)
+		
+		$needs_review = ($flag_score >= 5);
+		
+		return [
+			'pass' => !$needs_review,
+			'flags' => $flags,
+			'score' => $flag_score
+		];
+	}
 
 		private static function ip_history_check(int $post_id): array {
 			global $wpdb;
@@ -210,7 +283,7 @@ if (!class_exists('RTS_Moderation_Engine')) {
 			if ($content === '') return ['pass' => false, 'score' => 0, 'notes' => ['empty']];
 			$len = (int) mb_strlen($content);
 			$score = (int) min(100, (int) floor($len / 5));
-			$threshold = (int) apply_filters('rts_quality_threshold', (int) get_option(RTS_Engine_Settings::OPTION_MIN_QUALITY_SCORE, 70));
+			$threshold = (int) apply_filters('rts_quality_threshold', (int) get_option(RTS_Engine_Settings::OPTION_MIN_QUALITY_SCORE, 40));
 			$pass = ($score >= $threshold);
 			$notes = [];
 			if ($len < 100) $notes[] = 'short';
@@ -222,20 +295,108 @@ if (!class_exists('RTS_Moderation_Engine')) {
 			$content = mb_strtolower((string) get_post_field('post_content', $post_id));
 			$applied = [];
 			if ($content === '') return ['applied' => $applied];
-			$positive_needles = ['hope', 'better', 'tomorrow', 'keep going', 'you can', 'it gets easier', 'you are not alone'];
-			$should_tag_hopeful = false;
-			foreach ($positive_needles as $needle) {
-				if ($needle !== '' && mb_strpos($content, $needle) !== false) {
-					$should_tag_hopeful = true; break;
+			
+			// Intelligent context-aware tagging for mental health letters
+			// Uses weighted scoring to handle nuance and mixed emotions
+			
+			// FEELINGS: Detect primary emotional states
+			$feeling_patterns = [
+				'hopeless' => [
+					'keywords' => ['hopeless', 'no hope', 'pointless', 'give up', 'no point', 'nothing matters', 'no future', 'can\'t see', 'no way out', 'trapped', 'stuck forever'],
+					'weight' => 3
+				],
+				'alone' => [
+					'keywords' => ['alone', 'lonely', 'nobody', 'no one', 'isolated', 'by myself', 'no friends', 'abandoned', 'left behind', 'on my own', 'all alone'],
+					'weight' => 2
+				],
+				'anxious' => [
+					'keywords' => ['anxious', 'anxiety', 'panic', 'worried', 'scared', 'afraid', 'terrified', 'nervous', 'can\'t breathe', 'heart racing', 'overwhelming'],
+					'weight' => 2
+				],
+				'grieving' => [
+					'keywords' => ['grief', 'grieving', 'loss', 'lost', 'died', 'death', 'miss', 'gone', 'passed away', 'mourning', 'bereaved'],
+					'weight' => 3
+				],
+				'tired' => [
+					'keywords' => ['tired', 'exhausted', 'drained', 'worn out', 'can\'t anymore', 'too much', 'burnt out', 'weary', 'fatigued', 'no energy'],
+					'weight' => 2
+				],
+				'struggling' => [
+					'keywords' => ['struggling', 'hard', 'difficult', 'can\'t cope', 'too hard', 'battle', 'fighting', 'barely', 'hanging on', 'drowning'],
+					'weight' => 2
+				],
+				'hopeful' => [
+					'keywords' => ['hope', 'hopeful', 'better', 'tomorrow', 'keep going', 'you can', 'it gets easier', 'you are not alone', 'hang in there', 'brighter', 'will pass'],
+					'weight' => 2
+				]
+			];
+			
+			// TONE: Detect communication style
+			$tone_patterns = [
+				'gentle' => [
+					'keywords' => ['softly', 'gently', 'quietly', 'whisper', 'tender', 'kind', 'warm', 'safe', 'comfort', 'hug', 'hold'],
+					'weight' => 2
+				],
+				'real' => [
+					'keywords' => ['honestly', 'truth', 'real', 'raw', 'actually', 'really', 'genuinely', 'authentic', 'no sugar', 'straight up'],
+					'weight' => 2
+				],
+				'hopeful' => [
+					'keywords' => ['hope', 'believe', 'possible', 'can', 'will', 'better', 'brighter', 'light', 'tomorrow', 'future'],
+					'weight' => 2
+				]
+			];
+			
+			// Score each feeling
+			$feeling_scores = [];
+			foreach ($feeling_patterns as $feeling => $pattern) {
+				$score = 0;
+				foreach ($pattern['keywords'] as $keyword) {
+					if (mb_strpos($content, $keyword) !== false) {
+						$score += $pattern['weight'];
+					}
+				}
+				if ($score > 0) {
+					$feeling_scores[$feeling] = $score;
 				}
 			}
-			if ($should_tag_hopeful) {
-				$term_ids = self::get_existing_term_ids('letter_feeling', ['hopeful']);
-				if (!empty($term_ids)) {
-					wp_set_post_terms($post_id, $term_ids, 'letter_feeling', false);
-					$applied['letter_feeling'] = $term_ids;
+			
+			// Score each tone
+			$tone_scores = [];
+			foreach ($tone_patterns as $tone => $pattern) {
+				$score = 0;
+				foreach ($pattern['keywords'] as $keyword) {
+					if (mb_strpos($content, $keyword) !== false) {
+						$score += $pattern['weight'];
+					}
+				}
+				if ($score > 0) {
+					$tone_scores[$tone] = $score;
 				}
 			}
+			
+			// Apply top 2 feelings (if any)
+			if (!empty($feeling_scores)) {
+				arsort($feeling_scores);
+				$top_feelings = array_slice(array_keys($feeling_scores), 0, 2);
+				$feeling_term_ids = self::get_existing_term_ids('letter_feeling', $top_feelings);
+				if (!empty($feeling_term_ids)) {
+					wp_set_post_terms($post_id, $feeling_term_ids, 'letter_feeling', false);
+					$applied['letter_feeling'] = $feeling_term_ids;
+				}
+			}
+			
+			// Apply top tone (if any)
+			if (!empty($tone_scores)) {
+				arsort($tone_scores);
+				$top_tone = array_key_first($tone_scores);
+				$tone_term_ids = self::get_existing_term_ids('letter_tone', [$top_tone]);
+				if (!empty($tone_term_ids)) {
+					wp_set_post_terms($post_id, $tone_term_ids, 'letter_tone', false);
+					$applied['letter_tone'] = $tone_term_ids;
+				}
+			}
+			
 			return ['applied' => $applied];
 		}
 
@@ -486,11 +647,14 @@ if (!class_exists('RTS_Engine_Dashboard')) {
         public const OPTION_OFFSET_SHARES  = 'rts_stat_offset_shares';
 
 		public static function init(): void {
+			// REST API must be registered globally (not just in admin)
+			add_action('rest_api_init', [__CLASS__, 'register_rest']);
+			
+			// Admin-only hooks
 			if (!is_admin()) return;
 			add_action('admin_menu', [__CLASS__, 'register_menu'], 80);
 			add_action('admin_init', [__CLASS__, 'register_settings'], 5);
 			add_action('admin_post_rts_dashboard_action', [__CLASS__, 'handle_post_action']);
-			add_action('rest_api_init', [__CLASS__, 'register_rest']);
             add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
             
             // Add AJAX handlers for modern dashboard
@@ -505,7 +669,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                 wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], '2.40');
                 
                 // Dashboard Logic Script
-                wp_enqueue_script('rts-dashboard-js', get_stylesheet_directory_uri() . '/inc/js/rts-dashboard.js', ['jquery'], '2.40', true);
+                wp_enqueue_script('rts-dashboard-js', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], '2.40', true);
                 
                 // Localize variables for JS
                 wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
@@ -607,9 +771,27 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 						?>
 						</p>
 					</div>
-				<?php endif; ?>
+					<?php endif; ?>
+					
+					<!-- Auto-Processing Active Banner -->
+					<?php if (get_option(self::OPTION_AUTO_ENABLED, '1') === '1' && $stats['pending'] > 0): ?>
+					<div class="notice notice-info" style="margin: 20px 0; padding: 15px; border-left: 4px solid #2271b1; background: #f0f6fc;">
+						<p style="margin: 0; font-size: 14px; line-height: 1.6;">
+							<span class="dashicons dashicons-update" style="color: #2271b1; animation: rotation 2s infinite linear;"></span>
+							<strong>Auto-Processing Active:</strong> The system is automatically working through <strong><?php echo number_format_i18n($stats['pending']); ?> pending letter(s)</strong> in the inbox. 
+							Each letter is being quality-checked, safety-scanned, and tagged. Letters that pass all checks will be automatically published. 
+							<a href="<?php echo esc_url(self::url_for_tab('letters')); ?>">View progress →</a>
+						</p>
+					</div>
+					<style>
+						@keyframes rotation {
+							from { transform: rotate(0deg); }
+							to { transform: rotate(359deg); }
+						}
+					</style>
+					<?php endif; ?>
 
-                <!-- Primary Stats Grid -->
+	                <!-- Primary Stats Grid -->
 				<div class="rts-stats-grid">
                     <?php self::stat_card('Live on Site', number_format_i18n($stats['published']), 'published', 'Letters live on the website'); ?>
                     <?php self::stat_card('Inbox', number_format_i18n($stats['pending']), 'inbox', 'Awaiting your decision'); ?>
@@ -969,11 +1151,23 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                                     </a>
                                     <div class="rts-letter-excerpt"><?php echo esc_html($excerpt); ?></div>
                                 </td>
-                                <td>
-                                    <span class="rts-status-badge rts-status-<?php echo esc_attr($status); ?>">
-                                        <?php echo esc_html($status); ?>
-                                    </span>
-                                </td>
+				                <td>
+				                    <span class="rts-status-badge rts-status-<?php echo esc_attr($status); ?>">
+				                        <?php echo esc_html($status); ?>
+				                    </span>
+				                    <?php 
+				                    $processing_last = get_post_meta($id, 'rts_processing_last', true);
+				                    if ($status === 'pending' && empty($processing_last)): 
+				                    ?>
+				                    <div style="font-size: 11px; color: #2271b1; margin-top: 3px;">
+				                        <span class="dashicons dashicons-clock" style="font-size: 11px; width: 11px; height: 11px;"></span> Queued for processing
+				                    </div>
+				                    <?php elseif ($processing_last): ?>
+				                    <div style="font-size: 11px; color: #50575e; margin-top: 3px;">
+				                        ✓ Processed
+				                    </div>
+				                    <?php endif; ?>
+				                </td>
                                 <td>
                                     <div class="rts-quality-score">
                                         <?php if ($score !== ''): ?>
@@ -1129,7 +1323,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 		private static function render_tab_settings(): void {
 			$auto_enabled = get_option(self::OPTION_AUTO_ENABLED, '1') === '1';
 			$batch        = (int) get_option(self::OPTION_AUTO_BATCH, 50);
-			$min_quality  = (int) get_option(self::OPTION_MIN_QUALITY, 70);
+			$min_quality  = (int) get_option(self::OPTION_MIN_QUALITY, 40);
 			$ip_thresh    = (int) get_option(self::OPTION_IP_THRESHOLD, 20);
             
             $off_letters  = (int) get_option(self::OPTION_OFFSET_LETTERS, 0);
@@ -1391,9 +1585,40 @@ if (!class_exists('RTS_Auto_Processor')) {
 			if (function_exists('as_schedule_recurring_action')) as_schedule_recurring_action(time() + 90, 300, 'rts_auto_process_tick', [], self::GROUP);
             else as_schedule_single_action(time() + 90, 'rts_auto_process_tick', [], self::GROUP);
 		}
-		public static function tick(): void {
-			// Trigger processing logic if needed here, mostly handled by single actions now.
-		}
+			public static function tick(): void {
+				// Auto-process pending letters in the inbox
+				if (!rts_as_available()) return;
+				if (get_option(RTS_Engine_Settings::OPTION_AUTO_ENABLED, '1') !== '1') return;
+				
+				$batch = (int) get_option(RTS_Engine_Settings::OPTION_AUTO_BATCH, 50);
+				$batch = max(1, min(200, $batch));
+				
+				// Find pending letters that haven't been processed yet
+				$pending = new \WP_Query([
+					'post_type' => 'letter',
+					'post_status' => 'pending',
+					'posts_per_page' => $batch,
+					'fields' => 'ids',
+					'orderby' => 'date',
+					'order' => 'ASC',
+					'no_found_rows' => true,
+					'meta_query' => [
+						[
+							'key' => 'rts_processing_last',
+							'compare' => 'NOT EXISTS',
+						],
+					],
+				]);
+				
+				if (!empty($pending->posts)) {
+					foreach ($pending->posts as $id) {
+						$id = (int) $id;
+						if (!as_next_scheduled_action('rts_process_letter', [$id], self::GROUP)) {
+							as_schedule_single_action(time() + 2, 'rts_process_letter', [$id], self::GROUP);
+						}
+					}
+				}
+			}
 	}
 }
 

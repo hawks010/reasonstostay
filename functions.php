@@ -430,6 +430,12 @@ add_shortcode('rts_site_stats_row', function () {
 /**
  * Load RTS System Components
  */
+// Include the Moderation Engine FIRST to ensure REST routes register early
+$rts_engine_path = get_stylesheet_directory() . '/inc/rts-moderation-engine.php';
+if (file_exists($rts_engine_path)) {
+    require_once $rts_engine_path;
+}
+
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
 require_once get_stylesheet_directory() . '/inc/letter-system.php';       // Core API & matching
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
@@ -777,10 +783,3 @@ function rts_enqueue_admin_scripts($hook) {
     }
 }
 add_action('admin_enqueue_scripts', 'rts_enqueue_admin_scripts');
-
-
-// Include the new Moderation Engine
-$rts_engine_path = get_stylesheet_directory() . '/inc/rts-moderation-engine.php';
-if (file_exists($rts_engine_path)) {
-    require_once $rts_engine_path;
-}
