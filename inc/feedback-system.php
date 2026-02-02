@@ -84,6 +84,8 @@ class RTS_Feedback_System {
         }
 
         $rating = sanitize_text_field((string) $request->get_param('rating')); // up|down|neutral
+        $mood_change = sanitize_text_field((string) $request->get_param('mood_change')); // much_better|little_better|no_change|little_worse|much_worse
+        if (!in_array($mood_change, ['much_better','little_better','no_change','little_worse','much_worse'], true)) $mood_change = '';
         if (!in_array($rating, ['up','down','neutral'], true)) $rating = 'neutral';
 
         $triggered = (string) $request->get_param('triggered');
@@ -113,6 +115,9 @@ class RTS_Feedback_System {
 
         update_post_meta($feedback_id, 'letter_id', $letter_id);
         update_post_meta($feedback_id, 'rating', $rating);
+        if ($mood_change !== '') {
+            update_post_meta($feedback_id, 'mood_change', $mood_change);
+        }
         update_post_meta($feedback_id, 'triggered', $triggered);
         update_post_meta($feedback_id, 'comment', $comment);
         update_post_meta($feedback_id, 'email', $email);
@@ -194,6 +199,7 @@ class RTS_Feedback_System {
         $new['title'] = 'Submitted';
         $new['letter'] = 'Letter';
         $new['rating'] = 'Reaction';
+        $new['mood_change'] = 'Mood change';
         $new['triggered'] = 'Triggered?';
         $new['comment'] = 'Comment';
         $new['date'] = $columns['date'] ?? 'Date';
@@ -216,6 +222,19 @@ class RTS_Feedback_System {
             $label = ($r === 'up') ? '👍' : (($r === 'down') ? '👎' : '—');
             echo esc_html($label);
         }
+        if ($column === 'mood_change') {
+            $v = (string) get_post_meta($post_id, 'mood_change', true);
+            $map = [
+                'much_better'   => 'Much better',
+                'little_better' => 'A little better',
+                'no_change'     => 'No change',
+                'little_worse'  => 'A little worse',
+                'much_worse'    => 'Much worse',
+            ];
+            echo esc_html($map[$v] ?? '');
+            return;
+        }
+
 
         if ($column === 'triggered') {
             $t = get_post_meta($post_id, 'triggered', true);

@@ -6,11 +6,16 @@
  * POLISHED: Helper methods, Logging, Dynamic Throttling, Memory Management.
  * UPDATED: Added sorting logic, enhanced security checks, relaxed permissions, and URL escaping.
  * LATEST FIX: Added 'map_meta_cap' to fix Trash/Bin failure. Removed aggressive cache flushing.
+ * DASHBOARD INTEGRATION: Added clickable stat cards and quick filters for Inbox/Quarantine.
+ * RENAMED: Class changed to RTS_CPT_Letters_System to avoid conflicts with legacy files.
  */
 
 if (!defined('ABSPATH')) exit;
 
-class RTS_CPT_Letters_Complete {
+// Prevent Fatal Error: Check for new class name
+if ( ! class_exists( 'RTS_CPT_Letters_System' ) ) :
+
+class RTS_CPT_Letters_System {
     
     private static $instance = null;
     
@@ -36,12 +41,21 @@ class RTS_CPT_Letters_Complete {
         
         // Sorting Logic (Fix: Actually handle the sorting)
         add_action('pre_get_posts', [$this, 'handle_sorting']);
+        
+        // Quick Filters (Inbox / Quarantine)
+        add_action('pre_get_posts', [$this, 'apply_quick_filters']);
+
         // Dashboard/legacy processing UI removed (migrated to RTS Dashboard).
-		// New: lightweight analytics header on the Letters list screen (powered by the Moderation Engine).
-		add_action('all_admin_notices', [$this, 'show_letters_analytics_header']);
-		// Admin actions
-		add_action('admin_post_rts_run_analytics_now', [$this, 'handle_run_analytics_now']);
-		add_action('admin_post_rts_rescan_letters', [$this, 'handle_rescan_letters']);
+        // New: lightweight analytics header on the Letters list screen (powered by the Moderation Engine).
+        add_action('all_admin_notices', [$this, 'show_letters_analytics_header']);
+
+        // Ensure buttons in the analytics header work on Letters admin screens.
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_letters_admin_assets']);
+        // Admin actions
+        add_action('admin_post_rts_run_analytics_now', [$this, 'handle_run_analytics_now']);
+        add_action('admin_post_rts_rescan_letters', [$this, 'handle_rescan_letters']);
+        // Back-compat: analytics header button (Scan Pending & Quarantine)
+        add_action('admin_post_rts_rescan_pending_letters', [$this, 'handle_rescan_pending_letters']);
         
         // Smart filters
         add_action('restrict_manage_posts', [$this, 'add_smart_filters']);
@@ -219,8 +233,6 @@ class RTS_CPT_Letters_Complete {
         }
     }
 
-
-
     /**
      * Helper: Generate consistent cache key
      */
@@ -246,7 +258,7 @@ class RTS_CPT_Letters_Complete {
                     );
                     break;
                 case 'needs_review':
-                    $min_score = (int) get_option('rts_min_quality_score', 70);
+                    $min_score = (int) get_option('rts_min_quality_score', 25);
                     $min_score = max(0, min(100, $min_score));
                     $query = $wpdb->prepare(
                         "SELECT COUNT(DISTINCT p.ID)
@@ -254,12 +266,12 @@ class RTS_CPT_Letters_Complete {
                          LEFT JOIN {$wpdb->postmeta} q ON p.ID = q.post_id AND q.meta_key = %s
                          LEFT JOIN {$wpdb->postmeta} n ON p.ID = n.post_id AND n.meta_key = %s
                          WHERE p.post_type = %s
-                         AND p.post_status IN ('publish','pending')
+                         AND p.post_status = %s -- Count quarantine only (pending + flagged)
                          AND (
                             (n.meta_value = %s)
                             OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
                          )",
-                        'quality_score', 'needs_review', 'letter', '1', $min_score
+                        'quality_score', 'needs_review', 'letter', 'pending', '1', $min_score
                     );
                     break;
                 case 'flagged':
@@ -292,212 +304,283 @@ class RTS_CPT_Letters_Complete {
      * DASHBOARD STATS + PROCESS BUTTON at top of All Letters
      */
 
-	public function show_letters_analytics_header() {
-		if (!is_admin()) return;
-		if (!current_user_can('manage_options')) return;
-		if (!$this->is_letters_screen()) return;
+    public function show_letters_analytics_header() {
+        if (!is_admin()) return;
+        if (!current_user_can('manage_options')) return;
+        if (!$this->is_letters_screen()) return;
 
-		// Prefer cached stats from the moderation engine (daily), fall back to quick live counts.
-		$stats = get_option('rts_aggregated_stats', []);
-		if (!is_array($stats)) $stats = [];
+        // Prefer cached stats from the moderation engine (daily), fall back to quick live counts.
+        $stats = get_option('rts_aggregated_stats', []);
+        if (!is_array($stats)) $stats = [];
 
-		$letters_total     = isset($stats['letters_total']) ? (int) $stats['letters_total'] : (int) wp_count_posts('letter')->publish + (int) wp_count_posts('letter')->pending;
-		$letters_published = isset($stats['letters_published']) ? (int) $stats['letters_published'] : (int) wp_count_posts('letter')->publish;
-		$letters_pending   = isset($stats['letters_pending']) ? (int) $stats['letters_pending'] : (int) wp_count_posts('letter')->pending;
-		$needs_review      = isset($stats['letters_needs_review']) ? (int) $stats['letters_needs_review'] : $this->count_needs_review_live();
-		$feedback_total    = isset($stats['feedback_total']) ? (int) $stats['feedback_total'] : (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
-		$generated_gmt     = isset($stats['generated_gmt']) ? (string) $stats['generated_gmt'] : '';
+        $letters_total     = isset($stats['letters_total']) ? (int) $stats['letters_total'] : (int) wp_count_posts('letter')->publish + (int) wp_count_posts('letter')->pending;
+        $letters_published = isset($stats['letters_published']) ? (int) $stats['letters_published'] : (int) wp_count_posts('letter')->publish;
+        $letters_pending   = isset($stats['letters_pending']) ? (int) $stats['letters_pending'] : (int) wp_count_posts('letter')->pending;
+        $needs_review      = isset($stats['letters_needs_review']) ? (int) $stats['letters_needs_review'] : $this->count_needs_review_live();
+        $feedback_total    = isset($stats['feedback_total']) ? (int) $stats['feedback_total'] : (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
+        $generated_gmt     = isset($stats['generated_gmt']) ? (string) $stats['generated_gmt'] : '';
 
-		$run_analytics_url = wp_nonce_url(admin_url('admin-post.php?action=rts_run_analytics_now'), 'rts_run_analytics_now');
-		$rescan_url        = wp_nonce_url(admin_url('admin-post.php?action=rts_rescan_pending_letters'), 'rts_rescan_pending_letters');
-		$rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
+        $true_inbox        = max(0, $letters_pending - $needs_review);
 
-		?>
-		<style>
-			.rts-analytics-container {
-				margin: 16px 0 10px;
-			}
-			.rts-analytics-box {
-				background: #fff;
-				border: 1px solid #dcdcde;
-				border-radius: 12px;
-				padding: 20px;
-				max-width: 1400px;
-			}
-			.rts-analytics-header {
-				display: flex;
-				gap: 16px;
-				flex-wrap: wrap;
-				align-items: center;
-				justify-content: space-between;
-				margin-bottom: 20px;
-			}
-			.rts-analytics-title {
-				font-size: 18px;
-				font-weight: 700;
-				line-height: 1.2;
-				color: #1d2327;
-			}
-			.rts-analytics-subtitle {
-				color: #646970;
-				font-size: 12px;
-				margin-top: 4px;
-			}
-			.rts-analytics-actions {
-				display: flex;
-				gap: 10px;
-				flex-wrap: wrap;
-				align-items: center;
-			}
-			.rts-analytics-actions .button {
-				height: 36px;
-				line-height: 34px;
-				padding: 0 16px;
-				font-size: 13px;
-				font-weight: 500;
-				border-radius: 6px;
-				text-decoration: none;
-				transition: all 0.2s ease;
-			}
-			.rts-analytics-actions .button:hover {
-				transform: translateY(-1px);
-				box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-			}
-			.rts-analytics-actions .button-primary {
-				background: #2271b1;
-				border-color: #2271b1;
-				color: #fff;
-			}
-			.rts-analytics-actions .button-primary:hover {
-				background: #135e96;
-				border-color: #135e96;
-			}
-			.rts-analytics-actions .button-secondary {
-				background: #f6f7f7;
-				border-color: #dcdcde;
-				color: #2c3338;
-			}
-			.rts-analytics-actions .button-secondary:hover {
-				background: #f0f0f1;
-				border-color: #8c8f94;
-			}
-			.rts-stats-grid {
-				display: grid;
-				grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-				gap: 14px;
-			}
-			@media (min-width: 1200px) {
-				.rts-stats-grid {
-					grid-template-columns: repeat(5, 1fr);
-				}
-			}
-			.rts-stat-box {
-				background: linear-gradient(135deg, var(--stat-bg-start), var(--stat-bg-end));
-				border: 1px solid var(--stat-border);
-				border-radius: 10px;
-				padding: 18px 16px;
-				text-align: center;
-				transition: all 0.2s ease;
-				cursor: default;
-			}
-			.rts-stat-box:hover {
-				transform: translateY(-2px);
-				box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-			}
-			.rts-stat-label {
-				font-size: 12px;
-				font-weight: 600;
-				text-transform: uppercase;
-				letter-spacing: 0.5px;
-				color: var(--stat-label-color);
-				margin-bottom: 8px;
-				opacity: 0.85;
-			}
-			.rts-stat-value {
-				font-size: 32px;
-				font-weight: 800;
-				line-height: 1;
-				color: var(--stat-value-color);
-				font-variant-numeric: tabular-nums;
-			}
-		</style>
-		<div class="rts-analytics-container">
-			<div class="rts-analytics-box">
-				<div class="rts-analytics-header">
-					<div>
-						<div class="rts-analytics-title">Letters Analytics</div>
-						<div class="rts-analytics-subtitle">Powered by RTS Moderation Engine<?php echo $generated_gmt ? ' • cached ' . esc_html($generated_gmt) : ''; ?></div>
-					</div>
-					<div class="rts-analytics-actions">
-						<a class="button" href="<?php echo esc_url($rts_dashboard_url); ?>">📊 Open Dashboard</a>
-						<a class="button button-secondary" href="<?php echo esc_url($run_analytics_url); ?>">🔄 Refresh Stats</a>
-						<a class="button button-primary" href="<?php echo esc_url($rescan_url); ?>">🔍 Scan Pending & Quarantine</a>
-					</div>
-				</div>
+        $run_analytics_url = wp_nonce_url(admin_url('admin-post.php?action=rts_run_analytics_now'), 'rts_run_analytics_now');
+        $rescan_url        = wp_nonce_url(admin_url('admin-post.php?action=rts_rescan_pending_letters'), 'rts_rescan_pending_letters');
+        $rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
 
-				<div class="rts-stats-grid">
-					<?php $this->render_stat_box('Total', $letters_total, '#1d2327', '#f0f0f1', '#dcdcde'); ?>
-					<?php $this->render_stat_box('Published', $letters_published, '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
-					<?php $this->render_stat_box('Pending', $letters_pending, '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
-					<?php $this->render_stat_box('Needs Review', $needs_review, '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
-					<?php $this->render_stat_box('Feedback', $feedback_total, '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
-				</div>
-			</div>
-		</div>
-		<?php
-	}
+        ?>
+        <style>
+            .rts-analytics-container {
+                margin: 16px 0 10px;
+            }
+            .rts-analytics-box {
+                background: #fff;
+                border: 1px solid #dcdcde;
+                border-radius: 12px;
+                padding: 20px;
+                max-width: 1400px;
+            }
+            .rts-analytics-header {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 20px;
+            }
+            .rts-analytics-title {
+                font-size: 18px;
+                font-weight: 700;
+                line-height: 1.2;
+                color: #1d2327;
+            }
+            .rts-analytics-subtitle {
+                color: #646970;
+                font-size: 12px;
+                margin-top: 4px;
+            }
+            .rts-analytics-actions {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            .rts-analytics-actions .button {
+                height: 36px;
+                line-height: 34px;
+                padding: 0 16px;
+                font-size: 13px;
+                font-weight: 500;
+                border-radius: 6px;
+                text-decoration: none;
+                transition: all 0.2s ease;
+            }
+            .rts-analytics-actions .button:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .rts-analytics-actions .button-primary {
+                background: #2271b1;
+                border-color: #2271b1;
+                color: #fff;
+            }
+            .rts-analytics-actions .button-primary:hover {
+                background: #135e96;
+                border-color: #135e96;
+            }
+            .rts-analytics-actions .button-secondary {
+                background: #f6f7f7;
+                border-color: #dcdcde;
+                color: #2c3338;
+            }
+            .rts-analytics-actions .button-secondary:hover {
+                background: #f0f0f1;
+                border-color: #8c8f94;
+            }
+            .rts-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 14px;
+            }
+            @media (min-width: 1200px) {
+                .rts-stats-grid {
+                    grid-template-columns: repeat(5, 1fr);
+                }
+            }
+            .rts-stat-box {
+                background: linear-gradient(135deg, var(--stat-bg-start), var(--stat-bg-end));
+                border: 1px solid var(--stat-border);
+                border-radius: 10px;
+                padding: 18px 16px;
+                text-align: center;
+                transition: all 0.2s ease;
+                cursor: pointer;
+                display: block;
+                text-decoration: none;
+            }
+            .rts-stat-box:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            }
+            .rts-stat-label {
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--stat-label-color);
+                margin-bottom: 8px;
+                opacity: 0.85;
+            }
+            .rts-stat-value {
+                font-size: 32px;
+                font-weight: 800;
+                line-height: 1;
+                color: var(--stat-value-color);
+                font-variant-numeric: tabular-nums;
+            }
+        </style>
+        <div class="rts-analytics-container">
+            <div class="rts-analytics-box">
+                <div class="rts-analytics-header rts-letters-analytics">
+                    <div>
+                        <div class="rts-analytics-title">Letters Analytics</div>
+                        <div class="rts-analytics-subtitle">Powered by RTS Moderation Engine<?php echo $generated_gmt ? ' • cached ' . esc_html($generated_gmt) : ''; ?></div>
+                    </div>
+                    <div class="rts-analytics-actions">
+                        <a class="button" href="<?php echo esc_url($rts_dashboard_url); ?>">
+                            <span class="dashicons dashicons-chart-bar" aria-hidden="true"></span>
+                            Open Dashboard
+                        </a>
+                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_inbox=1')); ?>">
+                            <span class="dashicons dashicons-email" aria-hidden="true"></span>
+                            Review Inbox
+                        </a>
+                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_quarantine=1')); ?>">
+                            <span class="dashicons dashicons-shield" aria-hidden="true"></span>
+                            View Quarantine
+                        </a>
+                        <button type="button" class="button button-primary" id="rts-scan-inbox-btn">
+                            <span class="dashicons dashicons-search" aria-hidden="true"></span>
+                            Scan Inbox Now
+                        </button>
+                        <button type="button" class="button" id="rts-rescan-quarantine-btn">
+                            <span class="dashicons dashicons-update" aria-hidden="true"></span>
+                            Rescan Quarantine
+                        </button>
+                        <button type="button" class="button button-secondary" id="rts-refresh-status-btn">
+                            <span class="dashicons dashicons-update" aria-hidden="true"></span>
+                            Refresh Status
+                        </button>
+                    </div>
+                </div>
 
-	/**
-	 * Detect whether we are on the Letters list table screen.
-	 *
-	 * WordPress screen IDs:
-	 * - edit-letter: list table (edit.php?post_type=letter)
-	 * - letter: single edit screen (post.php?post=ID&action=edit)
-	 *
-	 * We only want the analytics header on the list table.
-	 */
-	private function is_letters_screen(): bool {
-		if (!is_admin()) {
-			return false;
-		}
+                <div class="rts-stats-grid">
+                    <?php $this->render_stat_box('Total', $letters_total, admin_url('edit.php?post_type=letter'), '#1d2327', '#f0f0f1', '#dcdcde'); ?>
+                    <?php $this->render_stat_box('Published', $letters_published, admin_url('edit.php?post_type=letter&post_status=publish'), '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
+                    <?php $this->render_stat_box('Inbox', $true_inbox, admin_url('edit.php?post_type=letter&rts_inbox=1'), '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
+                    <?php $this->render_stat_box('Needs Review', $needs_review, admin_url('edit.php?post_type=letter&rts_quarantine=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
+                    <?php $this->render_stat_box('Feedback', $feedback_total, admin_url('edit.php?post_type=rts_feedback'), '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
 
-		// get_current_screen() is not available on some early hooks.
-		if (function_exists('get_current_screen')) {
-			$screen = get_current_screen();
-			if ($screen && !empty($screen->id) && $screen->id === 'edit-letter') {
-				return true;
-			}
-		}
+    /**
+     * Detect whether we are on the Letters list table screen.
+     *
+     * WordPress screen IDs:
+     * - edit-letter: list table (edit.php?post_type=letter)
+     * - letter: single edit screen (post.php?post=ID&action=edit)
+     *
+     * We only want the analytics header on the list table.
+     */
+    private function is_letters_screen(): bool {
+        if (!is_admin()) {
+            return false;
+        }
 
-		// Fallback detection (works on most admin requests).
-		global $pagenow;
-		$post_type = isset($_GET['post_type']) ? sanitize_key((string) $_GET['post_type']) : '';
-		return ($pagenow === 'edit.php' && $post_type === 'letter');
-	}
+        // get_current_screen() is not available on some early hooks.
+        if (function_exists('get_current_screen')) {
+            $screen = get_current_screen();
+            if ($screen && !empty($screen->id) && $screen->id === 'edit-letter') {
+                return true;
+            }
+        }
 
-	private function count_needs_review_live(): int {
-		global $wpdb;
-		try {
-			return (int) $wpdb->get_var($wpdb->prepare(
-				"SELECT COUNT(1) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id=p.ID WHERE p.post_type=%s AND pm.meta_key=%s AND pm.meta_value=%s",
-				'letter',
-				'needs_review',
-				'1'
-			));
-		} catch (\Throwable $e) {
-			return 0;
-		}
-	}
+        // Fallback detection (works on most admin requests).
+        global $pagenow;
+        $post_type = isset($_GET['post_type']) ? sanitize_key((string) $_GET['post_type']) : '';
 
-	private function render_stat_box(string $label, int $val, string $value_color, string $bg_start, string $border): void {
-		$bg_end = $bg_start; // Can be different for gradient effect
-		?>
-		<div class="rts-stat-box" style="--stat-bg-start:<?php echo esc_attr($bg_start); ?>;--stat-bg-end:<?php echo esc_attr($bg_end); ?>;--stat-border:<?php echo esc_attr($border); ?>;--stat-label-color:<?php echo esc_attr($value_color); ?>;--stat-value-color:<?php echo esc_attr($value_color); ?>;">
-			<div class="rts-stat-label"><?php echo esc_html($label); ?></div>
-			<div class="rts-stat-value"><?php echo esc_html(number_format_i18n($val)); ?></div>
-		</div>
-		<?php
-	}
+        // Only render the analytics header on Letters admin screens.
+        if ($pagenow !== 'edit.php' || $post_type !== 'letter') {
+            return false;
+        }
+
+        // Do NOT render the analytics header on the Moderation Dashboard itself (prevents duplicate stats blocks).
+        $page = isset($_GET['page']) ? sanitize_key((string) $_GET['page']) : '';
+        if ($page === 'rts-dashboard') {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Enqueue the Moderation Dashboard JS/CSS on Letters admin screens so the
+     * analytics header buttons (scan/rescan/refresh) work consistently.
+     */
+    public function enqueue_letters_admin_assets(string $hook): void {
+        if (!$this->is_letters_screen()) {
+            return;
+        }
+
+        // Use the same assets the Moderation Dashboard uses.
+        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+        $js_path  = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
+
+        if (file_exists($css_path)) {
+            wp_enqueue_style('rts-admin', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], (string) filemtime($css_path));
+        }
+        if (file_exists($js_path)) {
+            wp_enqueue_script('rts-dashboard', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], (string) filemtime($js_path), true);
+            wp_localize_script('rts-dashboard', 'RTS_DASH', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce('rts_admin_nonce'),
+                'rest_url' => esc_url_raw(rest_url('rts/v1/')),
+            ]);
+        }
+    }
+
+    private function count_needs_review_live(): int {
+        global $wpdb;
+        try {
+            // Count unique letters only (guards against duplicate meta rows).
+            return (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(DISTINCT p.ID)
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+                 WHERE p.post_type = %s
+                   AND p.post_status = %s
+                   AND pm.meta_key = %s
+                   AND pm.meta_value = %s",
+                'letter',
+                'pending',
+                'needs_review',
+                '1'
+            ));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    private function render_stat_box(string $label, int $val, string $url, string $value_color, string $bg_start, string $border): void {
+        $bg_end = $bg_start; // Can be different for gradient effect
+        ?>
+        <a href="<?php echo esc_url($url); ?>" class="rts-stat-box" style="--stat-bg-start:<?php echo esc_attr($bg_start); ?>;--stat-bg-end:<?php echo esc_attr($bg_end); ?>;--stat-border:<?php echo esc_attr($border); ?>;--stat-label-color:<?php echo esc_attr($value_color); ?>;--stat-value-color:<?php echo esc_attr($value_color); ?>;">
+            <div class="rts-stat-label"><?php echo esc_html($label); ?></div>
+            <div class="rts-stat-value"><?php echo esc_html(number_format_i18n($val)); ?></div>
+        </a>
+        <?php
+    }
     public function handle_run_analytics_now(): void {
         if (!current_user_can('manage_options')) {
             wp_die('Forbidden');
@@ -515,6 +598,113 @@ class RTS_CPT_Letters_Complete {
 
         wp_safe_redirect(wp_get_referer() ?: admin_url('edit.php?post_type=letter'));
         exit;
+    }
+
+    /**
+     * Admin-post handler for the "Scan Pending & Quarantine" button in the Letters list header.
+     *
+     * Why this exists:
+     * - The analytics header builds a URL to admin-post.php?action=rts_rescan_pending_letters
+     * - On some builds the action hook was never registered, so WP core falls back to wp_die() (admin-post.php:71)
+     *
+     * This handler is intentionally lightweight: it only queues work (Action Scheduler when available,
+     * WP-Cron fallback) and then redirects back.
+     */
+    public function handle_rescan_pending_letters(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die('Forbidden');
+        }
+        check_admin_referer('rts_rescan_pending_letters');
+
+        // Use the engine batch size when present, otherwise sane default.
+        $batch = 50;
+        if (defined('RTS_Engine_Dashboard::OPTION_AUTO_BATCH')) {
+            $batch = (int) get_option(RTS_Engine_Dashboard::OPTION_AUTO_BATCH, 50);
+        }
+        $batch = max(1, min(250, $batch));
+
+        // Queue pending letters + needs_review letters.
+        $q_args = [
+            'post_type'      => 'letter',
+            'posts_per_page' => $batch,
+            'fields'         => 'ids',
+            'orderby'        => 'date',
+            'order'          => 'ASC',
+            'no_found_rows'  => true,
+        ];
+
+        $pending = new \WP_Query(array_merge($q_args, ['post_status' => 'pending']));
+        if (!empty($pending->posts)) {
+            foreach ($pending->posts as $id) {
+                $this->queue_letter_for_processing((int) $id);
+            }
+        }
+
+        $needs = new \WP_Query(array_merge($q_args, [
+            'post_status' => ['publish', 'pending', 'draft'],
+            'meta_query'  => [
+                [
+                    'key'   => 'needs_review',
+                    'value' => '1',
+                ],
+            ],
+        ]));
+        if (!empty($needs->posts)) {
+            foreach ($needs->posts as $id) {
+                $this->queue_letter_for_processing((int) $id);
+            }
+        }
+
+        // Kick quarantine loop as well (runs in chunks).
+        $this->kick_quarantine_loop($batch);
+
+        // Refresh analytics after queueing.
+        if (function_exists('as_enqueue_async_action')) {
+            as_enqueue_async_action('rts_aggregate_analytics', [], 'rts');
+        }
+
+        wp_safe_redirect(wp_get_referer() ?: admin_url('edit.php?post_type=letter'));
+        exit;
+    }
+
+    /**
+     * Queue a single letter for processing (Action Scheduler preferred, WP-Cron fallback).
+     */
+    private function queue_letter_for_processing(int $post_id): void {
+        if ($post_id <= 0 || get_post_type($post_id) !== 'letter') {
+            return;
+        }
+
+        // Prefer Action Scheduler when available.
+        if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
+            if (!as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
+                as_schedule_single_action(time() + 2, 'rts_process_letter', [$post_id], 'rts');
+            }
+            return;
+        }
+
+        // Fallback: WP-Cron single event.
+        if (!wp_next_scheduled('rts_wpcron_process_letter', [$post_id])) {
+            wp_schedule_single_event(time() + 10, 'rts_wpcron_process_letter', [$post_id]);
+        }
+    }
+
+    /**
+     * Start / continue the quarantine rescan loop.
+     */
+    private function kick_quarantine_loop(int $batch): void {
+        $batch = max(1, min(250, $batch));
+
+        if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
+            if (!as_next_scheduled_action('rts_rescan_quarantine_loop', [0, $batch], 'rts')) {
+                as_schedule_single_action(time() + 5, 'rts_rescan_quarantine_loop', [0, $batch], 'rts');
+            }
+            return;
+        }
+
+        if (!wp_next_scheduled('rts_rescan_quarantine_loop', [0, $batch])) {
+            wp_schedule_single_event(time() + 15, 'rts_rescan_quarantine_loop', [0, $batch]);
+        }
     }
 
     public function handle_enqueue_letter_rescan(): void {
@@ -647,6 +837,31 @@ class RTS_CPT_Letters_Complete {
         <?php
     }
     
+    public function apply_quick_filters($query): void {
+        if (!is_admin() || !$query->is_main_query()) return;
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
+
+        if (!empty($_GET['rts_quarantine'])) {
+            $query->set('post_status', 'pending');
+            $query->set('meta_query', [
+                [ 'key' => 'needs_review', 'value' => '1' ],
+            ]);
+            return;
+        }
+
+        if (!empty($_GET['rts_inbox'])) {
+            $query->set('post_status', 'pending');
+            $query->set('meta_query', [
+                'relation' => 'OR',
+                [ 'key' => 'needs_review', 'compare' => 'NOT EXISTS' ],
+                [ 'key' => 'needs_review', 'value' => '1', 'compare' => '!=' ],
+            ]);
+            return;
+        }
+    }
+
     public function filter_by_custom_fields($query) {
         global $pagenow, $typenow;
         
@@ -698,7 +913,7 @@ class RTS_CPT_Letters_Complete {
         if (isset($_GET['review_status']) && $_GET['review_status'] !== '') {
             $rv = sanitize_text_field($_GET['review_status']);
             if ($rv === 'needs_review') {
-                $min_score = (int) get_option('rts_min_quality_score', 70);
+                $min_score = (int) get_option('rts_min_quality_score', 25);
                 $min_score = max(0, min(100, $min_score));
                 $meta_query[] = [
                     'relation' => 'OR',
@@ -1029,4 +1244,6 @@ class RTS_CPT_Letters_Complete {
 }
 
 // Initialize
-RTS_CPT_Letters_Complete::get_instance();
+RTS_CPT_Letters_System::get_instance();
+
+endif;

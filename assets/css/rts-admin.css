@@ -6,8 +6,13 @@
 /* =========================================================
    1. Dashboard & General Layout (Legacy Support)
    ========================================================= */
+   .rts-dashboard.rts-darkmode .notice.notice-info p {
+       color: #070C13 !important;
+   }
 .rts-dashboard-wrapper {
     max-width: 100%;
+    padding: 35px!important;
+    border-radius: 35px!important;
     margin: 20px 20px 20px 0px;
 }
 
@@ -30,9 +35,20 @@
 /* =========================================================
    2. Modern Dashboard Styles (v2.40+)
    ========================================================= */
+
+.rts-analytics-title{
+    color: #fda310 !important;
+}
+.rts-analytics-subtitle{
+    color:#ffffff !important;
+}
 .rts-analytics-box{
+    border-radius: 35px !important;
+    padding: 35px !important;
     max-width: 100% !important;
-    margin: 20px 20px 20px 0px !important
+    color: #ffffff !important;
+    background: #0f1626 !important;
+    margin: 20px 20px 20px 0px !important;
 }
 
 .rts-dashboard {
@@ -123,6 +139,12 @@
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 20px;
     margin: 25px 0;
+}
+
+@media (min-width: 1200px) {
+    .rts-stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))!important;
+    }
 }
 
 /* Stat Cards */
@@ -383,8 +405,9 @@
 /* Tab Content Areas */
 .rts-tab-content {
     background: #fff;
-    border: 1px solid #c3c4c7;
-    padding: 20px;
+    border: 1px solid #0f1626;
+    padding: 35px;
+    border-radius: 35px;
     border-radius: 4px;
 }
 
@@ -428,7 +451,7 @@
 .rts-info-card p {
     margin: 0;
     font-size: 13px;
-    color: #646970;
+    color: #fda310;
     line-height: 1.4;
 }
 
@@ -491,15 +514,39 @@
     align-items: flex-start;
     gap: 12px;
     animation: rts-slide-in 0.3s ease-out;
+    /* Guard against external dark-mode overrides causing white-on-white */
+    color: #070C13;
 }
 
 .rts-toast.rts-toast-success { border-left-color: #00a32a; }
 .rts-toast.rts-toast-error { border-left-color: #d63638; }
 
 .rts-toast-content { flex: 1; }
-.rts-toast-title { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
-.rts-toast-message { font-size: 12px; color: #50575e; line-height: 1.4; }
-.rts-toast-close { background: none; border: none; font-size: 16px; cursor: pointer; color: #8c8f94; padding: 0; }
+.rts-toast-title { font-weight: 600; margin-bottom: 4px; font-size: 13px; color: inherit !important; }
+.rts-toast-message { font-size: 12px; color: rgba(7,12,19,0.78) !important; line-height: 1.4; }
+.rts-toast-close { background: none; border: none; font-size: 16px; cursor: pointer; color: rgba(7,12,19,0.65) !important; padding: 0; }
+
+/* Toast styling in RTS dark mode */
+.rts-darkmode #rts-toast-container .rts-toast {
+    background: var(--rts-surface, #0f1626);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    color: var(--rts-text, #e8eefc);
+}
+
+.rts-darkmode #rts-toast-container .rts-toast-title,
+.rts-darkmode #rts-toast-container .rts-toast-message{
+    /* Ensure readable in dark mode even though base rules use !important */
+    color: #FCA311 !important;
+}
+
+.rts-darkmode #rts-toast-container .rts-toast-message {
+    color: var(--rts-text-muted, rgba(232,238,252,0.74));
+}
+
+.rts-darkmode #rts-toast-container .rts-toast-close {
+    color: var(--rts-text-muted, rgba(232,238,252,0.74));
+}
 
 @keyframes rts-slide-in {
     from { transform: translateX(100%); opacity: 0; }
@@ -540,4 +587,282 @@
     .rts-progress-section { grid-template-columns: 1fr; }
     .rts-action-buttons { flex-direction: column; width: 100%; }
     .rts-action-btn { width: 100%; justify-content: center; }
+}
+/* =========================================================
+   RTS Engine Dark Mode (admin pages only)
+   Toggle: Settings -> "Use dark mode for RTS admin pages"
+   ========================================================= */
+
+.wp-die-message, p {
+    color: #ffffff !important;
+}
+.widefat td, .widefat th {
+    color: #ffffff !important;
+}
+.form-table th, .form-wrap label {
+    color: #fda310 !important;
+}
+.alternate, .striped>tbody>:nth-child(odd), ul.striped>:nth-child(odd) {
+    background-color: #0f1626!important;
+}
+
+.rts-dashboard.rts-darkmode{
+  /* Core palette */
+  --rts-bg: #0b0f18;
+  --rts-tab-content:#0f1626;
+  --rts-surface: #0f1626;
+  --rts-surface-2: #111a2c;
+  --rts-surface-3: #16233b;
+  --rts-text: #e8eefc;
+  --rts-text-strong: #f3f6ff;
+  --rts-text-muted: rgba(232,238,252,.74);
+  --rts-border: rgba(255,255,255,.10);
+  --rts-border-strong: rgba(255,255,255,.16);
+  --rts-link: #FCA311;
+  --rts-link-hover: #ffd18a;
+  --rts-focus: rgba(252,163,17,.28);
+  padding: 35px;
+  border-radius: 35px;
+  background: var(--rts-bg);
+  color: var(--rts-text);
+}
+
+.rts-analytics-container.rts-darkmode{
+  /* Core palette */
+  --rts-bg: #0b0f18;
+  --rts-tab-content:#0f1626;
+  --rts-surface: #0f1626;
+  --rts-surface-2: #111a2c;
+  --rts-surface-3: #16233b;
+  --rts-text: #e8eefc;
+  --rts-text-strong: #f3f6ff;
+  --rts-text-muted: rgba(232,238,252,.74);
+  --rts-border: rgba(255,255,255,.10);
+  --rts-border-strong: rgba(255,255,255,.16);
+  --rts-link: #FCA311;
+  --rts-link-hover: #ffd18a;
+  --rts-focus: rgba(252,163,17,.28);
+  padding: 35px;
+  border-radius: 35px;
+  background: var(--rts-bg);
+  color: var(--rts-text);
+}
+
+/* Headings + base text */
+.rts-dashboard.rts-darkmode h1,
+.rts-dashboard.rts-darkmode h2,
+.rts-dashboard.rts-darkmode h3,
+.rts-dashboard.rts-darkmode h4,
+.rts-dashboard.rts-darkmode .rts-title{
+  color: var(--rts-text-strong);
+}
+
+.rts-dashboard.rts-darkmode .rts-subtitle,
+.rts-dashboard.rts-darkmode .description,
+.rts-dashboard.rts-darkmode .rts-stat-label,
+.rts-dashboard.rts-darkmode .rts-stat-sublabel,
+.rts-dashboard.rts-darkmode .rts-progress-text,
+.rts-dashboard.rts-darkmode .rts-activity-meta,
+.rts-dashboard.rts-darkmode .rts-status-label{
+  color: var(--rts-text-muted);
+}
+
+.rts-dashboard.rts-darkmode .rts-dashboard-header{
+  border-bottom-color: var(--rts-border);
+}
+
+/* Links */
+.rts-dashboard.rts-darkmode a{
+  color: var(--rts-link);
+  text-decoration-color: rgba(252,163,17,.45);
+}
+.rts-dashboard.rts-darkmode a:hover,
+.rts-dashboard.rts-darkmode a:focus{
+  color: var(--rts-link-hover);
+  text-decoration-color: rgba(252,163,17,.80);
+}
+
+/* Surfaces: panels/cards/sections used by the dashboard PHP */
+.rts-dashboard.rts-darkmode .rts-card,
+.rts-dashboard.rts-darkmode .rts-box,
+.rts-dashboard.rts-darkmode .postbox,
+.rts-dashboard.rts-darkmode .rts-stat-card,
+.rts-dashboard.rts-darkmode .rts-live-status,
+.rts-dashboard.rts-darkmode .rts-quick-actions,
+.rts-dashboard.rts-darkmode .rts-progress-card,
+.rts-dashboard.rts-darkmode .rts-nav-tabs,
+.rts-dashboard.rts-darkmode .rts-tab-content,
+.rts-dashboard.rts-darkmode .rts-tab-pane,
+.rts-dashboard.rts-darkmode .rts-tab-section,
+.rts-dashboard.rts-darkmode .rts-info-card,
+.rts-dashboard.rts-darkmode .rts-activity-feed,
+.rts-dashboard.rts-darkmode .rts-activity-item{
+  background: var(--rts-surface);
+  color: var(--rts-text);
+  border-color: var(--rts-border);
+  border-radius: 20px;
+}
+
+/* Card internals */
+.rts-dashboard.rts-darkmode .rts-stat-value,
+.rts-dashboard.rts-darkmode .rts-activity-title,
+.rts-dashboard.rts-darkmode .rts-status-value{
+  color: var(--rts-text-strong);
+}
+
+.rts-dashboard.rts-darkmode .rts-live-status-header,
+.rts-dashboard.rts-darkmode .rts-progress-header{
+  border-bottom-color: var(--rts-border);
+}
+
+/* Tabs */
+.rts-dashboard.rts-darkmode .nav-tab{
+  background: var(--rts-surface-2);
+  border-color: var(--rts-border-strong);
+  color: var(--rts-text);
+}
+
+.rts-dashboard.rts-darkmode .nav-tab.nav-tab-active{
+  background: var(--rts-surface-3);
+  border-color: var(--rts-border-strong);
+  color: var(--rts-text-strong);
+}
+
+/* Tables (if any) */
+.rts-dashboard.rts-darkmode .widefat,
+.rts-dashboard.rts-darkmode .wp-list-table{
+  background: var(--rts-surface);
+  color: var(--rts-text);
+  border-color: var(--rts-border);
+}
+.rts-dashboard.rts-darkmode .widefat thead th,
+.rts-dashboard.rts-darkmode .widefat tfoot th,
+.rts-dashboard.rts-darkmode .wp-list-table thead th{
+  background: var(--rts-surface-2);
+  color: var(--rts-text-strong);
+}
+.rts-dashboard.rts-darkmode .widefat td,
+.rts-dashboard.rts-darkmode .widefat th,
+.rts-dashboard.rts-darkmode .wp-list-table td,
+.rts-dashboard.rts-darkmode .wp-list-table th{
+  border-color: var(--rts-border);
+}
+.rts-dashboard.rts-darkmode .wp-list-table tbody tr:nth-child(odd){
+  background: rgba(255,255,255,0.03);
+}
+.rts-dashboard.rts-darkmode .wp-list-table tbody tr:hover{
+  background: rgba(252,163,17,0.08);
+}
+
+/* Inputs */
+.rts-dashboard.rts-darkmode input[type="text"],
+.rts-dashboard.rts-darkmode input[type="search"],
+.rts-dashboard.rts-darkmode input[type="number"],
+.rts-dashboard.rts-darkmode input[type="email"],
+.rts-dashboard.rts-darkmode select,
+.rts-dashboard.rts-darkmode textarea{
+  background: var(--rts-bg);
+  color: var(--rts-text);
+  border-color: var(--rts-border-strong);
+}
+
+.rts-dashboard.rts-darkmode input::placeholder,
+.rts-dashboard.rts-darkmode textarea::placeholder{
+  color: rgba(232,238,252,.55);
+}
+
+.rts-dashboard.rts-darkmode input:focus,
+.rts-dashboard.rts-darkmode select:focus,
+.rts-dashboard.rts-darkmode textarea:focus{
+  border-color: rgba(252,163,17,.75);
+  box-shadow: 0 0 0 2px var(--rts-focus);
+  outline: none;
+}
+
+/* Buttons */
+.rts-dashboard.rts-darkmode .button,
+.rts-dashboard.rts-darkmode .button-secondary{
+  background: var(--rts-surface-3);
+  border-color: var(--rts-border-strong);
+  color: var(--rts-text-strong);
+}
+
+.rts-dashboard.rts-darkmode .button:hover,
+.rts-dashboard.rts-darkmode .button-secondary:hover{
+  background: #1b2b48;
+  border-color: rgba(252,163,17,.55);
+}
+
+.rts-dashboard.rts-darkmode .button-primary{
+  background: var(--rts-link);
+  border-color: var(--rts-link);
+  color: #070C13;
+}
+
+.rts-dashboard.rts-darkmode .button-primary:hover,
+.rts-dashboard.rts-darkmode .button-primary:focus{
+  background: var(--rts-link-hover);
+  border-color: var(--rts-link-hover);
+}
+
+/* Progress bars */
+.rts-dashboard.rts-darkmode .rts-progress-bar-container{
+  background: rgba(255,255,255,.08);
+}
+.rts-dashboard.rts-darkmode .rts-progress-fill{
+  filter: brightness(1.1);
+}
+
+/* Notices inside the dashboard */
+.rts-dashboard.rts-darkmode .notice{
+  background: var(--rts-surface);
+  color: var(--rts-text);
+  border-color: var(--rts-border-strong);
+}
+
+/* One specific offender: the inline "Auto-Processing Active" banner */
+.rts-dashboard.rts-darkmode .notice.notice-info{
+  background: var(--rts-surface);
+}
+
+/* =========================================================
+   Hotfixes (prod polish)
+   ========================================================= */
+
+/* Analytics header: align dashicons nicely inside button rows */
+.rts-analytics-header.rts-letters-analytics .button{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.rts-analytics-header.rts-letters-analytics .button .dashicons{
+  margin: 0;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Dark mode: make WP info notices readable (WP core can render these pale) */
+.rts-dashboard.rts-darkmode .notice.notice-info{
+  background: #e7f1ff;
+  border-left-color: #2271b1;
+  color: #070C13;
+}
+.rts-dashboard.rts-darkmode .notice.notice-info p,
+.rts-dashboard.rts-darkmode .notice.notice-info a,
+.rts-dashboard.rts-darkmode .notice.notice-info strong,
+.rts-dashboard.rts-darkmode .notice.notice-info span{
+  color: #070C13;
+}
+.rts-dashboard.rts-darkmode .notice.notice-info a{
+  text-decoration: underline;
+}
+
+/* Feedback icon: ensure testimonial dashicon is visible on light icon tiles */
+.rts-stat-feedback .rts-stat-icon{
+  background: #e7f1ff;
+  color: #070C13;
+}
+.rts-stat-feedback .rts-stat-icon .dashicons,
+.rts-stat-feedback .rts-stat-icon .dashicons-testimonial{
+  color: #070C13;
 }

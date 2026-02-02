@@ -407,11 +407,12 @@
       
       async parseJson(resp) {
         const ct = (resp.headers && resp.headers.get) ? (resp.headers.get('content-type') || '') : '';
-        // If it's JSON, parse normally
+        // If it's JSON, parse normally (WP REST typically returns application/json; charset=UTF-8)
         if (ct.toLowerCase().includes('application/json')) {
-          return await this.parseJson(resp);
+          return await resp.json();
         }
-        // Some hosts/WAFs return HTML for 403/500. Capture a small snippet for debugging.
+
+        // Some hosts/WAFs return HTML for 403/500 or a login page. Capture a small snippet for debugging.
         const text = await resp.text().catch(() => '');
         const snippet = (text || '').toString().slice(0, 400).replace(/\s+/g, ' ').trim();
         const err = new Error(`Non-JSON response (HTTP ${resp.status})`);
@@ -419,7 +420,8 @@
         err.body_snippet = snippet;
         throw err;
       },
-async ajaxPost(action, payload) {
+
+      async ajaxPost(action, payload) {
         const cfg = (typeof window.RTS_CONFIG !== 'undefined' && window.RTS_CONFIG) ? window.RTS_CONFIG : {};
         const url = cfg.ajaxUrl || '/wp-admin/admin-ajax.php';
         const params = new URLSearchParams();
@@ -861,6 +863,7 @@ async ajaxPost(action, payload) {
           if (loadingEl) loadingEl.style.display = 'block';
           if (displayEl) displayEl.style.display = 'none';
 
+          let loadedOk = false;
           try {
                 const payload = {
                   preferences: this.preferences,
@@ -892,20 +895,33 @@ async ajaxPost(action, payload) {
                   data = await this.ajaxPost('rts_get_next_letter', payload);
                 }
 
-            if (data && data.success && data.letter) {
-              this.currentLetter = data.letter;
-              this.viewedLetterIds.push(data.letter.id);
+            // Normalize response shapes from REST and admin-ajax.
+            // Supported:
+            // 1) { success: true, letter: {...} }
+            // 2) wp_send_json_success: { success: true, data: { letter: {...} } }
+            // 3) REST: { ok: true, letter: {...} }
+            const normalized = {
+              ok: (data && (data.success === true || data.ok === true)) ? true : false,
+              letter: (data && data.letter) ? data.letter : (data && data.data && data.data.letter) ? data.data.letter : null,
+              message: (data && data.message) ? data.message : (data && data.data && data.data.message) ? data.data.message : null
+            };
+
+            if (normalized.ok && normalized.letter) {
+              this.currentLetter = normalized.letter;
+              this.viewedLetterIds.push(normalized.letter.id);
               this.saveState();
 
-              this.letterCache[cacheKey] = { letter: data.letter, timestamp: Date.now() };
+              this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
 
-              this.renderLetter(data.letter);
-              this.trackView(data.letter.id);
+              this.renderLetter(normalized.letter);
+              this.trackView(normalized.letter.id);
               this.trackSuccess('nextLetter');
 
+              loadedOk = true;
+
               if (this.features.prefetch) this.prefetchNextLetter();
-            } else if (data && data.message) {
-              this.showError(data.message);
+            } else if (normalized.message) {
+              this.showError(normalized.message);
             } else {
               this.showError('No letter available right now. Please refresh the page in a moment.');
             }
@@ -914,8 +930,15 @@ async ajaxPost(action, payload) {
             this.trackError('nextLetter');
             this.showError('Unable to load letter. Please check your connection and refresh the page.');
           } finally {
-            if (loadingEl) loadingEl.style.display = 'none';
-            if (displayEl) displayEl.style.display = 'block';
+            // Only reveal the letter display when we actually have a letter.
+            // Otherwise keep the loading panel visible so errors are readable.
+            if (loadedOk) {
+              if (loadingEl) loadingEl.style.display = 'none';
+              if (displayEl) displayEl.style.display = 'block';
+            } else {
+              if (loadingEl) loadingEl.style.display = 'block';
+              if (displayEl) displayEl.style.display = 'none';
+            }
             this.endTimer('getNextLetter');
           }
         }, 'high');
@@ -948,15 +971,19 @@ async ajaxPost(action, payload) {
           });
 
               let data = await this.parseJson(response).catch(() => ({}));
-              if ((response.status === 403 || response.status === 404) && (!data || !data.success)) {
+              // REST may return { ok: true } rather than { success: true }.
+              const restOk = (data && (data.success === true || data.ok === true));
+              if ((response.status === 403 || response.status === 404) && (!data || !restOk)) {
                 data = await this.ajaxPost('rts_get_next_letter', {
                   preferences: this.preferences,
                   viewed: this.viewedLetterIds,
                   timestamp: Date.now()
                 });
               }
-          if (data && data.success && data.letter && data.letter.id) {
-            if (!this.viewedLetterIds.includes(data.letter.id)) this.prefetchedLetter = data.letter;
+          const prefetchLetter = (data && data.letter) ? data.letter : (data && data.data && data.data.letter) ? data.data.letter : null;
+          const prefetchOk = (data && (data.success === true || data.ok === true));
+          if (prefetchOk && prefetchLetter && prefetchLetter.id) {
+            if (!this.viewedLetterIds.includes(prefetchLetter.id)) this.prefetchedLetter = prefetchLetter;
             this.trackSuccess('prefetch');
           }
         } catch (e) {

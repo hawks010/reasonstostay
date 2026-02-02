@@ -437,7 +437,6 @@ if (file_exists($rts_engine_path)) {
 }
 
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
-require_once get_stylesheet_directory() . '/inc/letter-system.php';       // Core API & matching
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
 require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
 
@@ -609,6 +608,9 @@ function rts_enqueue_frontend_assets() {
     // and a sensible request timeout to avoid infinite loading states.
     wp_localize_script('rts-system', 'RTS_CONFIG', [
         'restBase'  => esc_url_raw(rest_url('rts/v1/')),
+        // Enable REST mode in the frontend letter viewer.
+        // The JS will automatically fall back to admin-ajax.php on 403/404.
+        'restEnabled' => true,
         'ajaxUrl'   => esc_url_raw(admin_url('admin-ajax.php')),
         // Optional, but helps in setups where security layers expect a REST nonce.
         'nonce'     => wp_create_nonce('wp_rest'),
@@ -750,26 +752,43 @@ add_action('manage_letter_posts_custom_column', function($column, $post_id){
 }, 0, 2);
 
 function rts_enqueue_admin_scripts($hook) {
-    // Only load on RTS admin pages
+    // Load on RTS admin pages and anywhere within the Letters CPT (list + edit screens)
+    $should_load = false;
+
     if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
+        $should_load = true;
+    }
+
+    if (function_exists('get_current_screen')) {
+        $screen = get_current_screen();
+        if ($screen && !empty($screen->post_type) && $screen->post_type === 'letter') {
+            $should_load = true;
+        }
+    }
+
+    if ($should_load) {
         
         // CSS
+        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+        $css_ver  = file_exists($css_path) ? (string) filemtime($css_path) : null;
+
         wp_enqueue_style(
-            'rts-admin-css', 
-            get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', 
-            [], 
-            '2.41' // Bumped version to force cache clear
+            'rts-admin-css',
+            get_stylesheet_directory_uri() . '/assets/css/rts-admin.css',
+            [],
+            $css_ver
         );
 
         // JS
         $js_file = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
         
         if (file_exists($js_file)) {
-             wp_enqueue_script(
+            $js_ver = (string) filemtime($js_file);
+            wp_enqueue_script(
                 'rts-dashboard-js',
                 get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js',
                 ['jquery'],
-                '2.41',
+                $js_ver,
                 true
             );
 

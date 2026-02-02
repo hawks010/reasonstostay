@@ -125,6 +125,17 @@ class RTS_Shortcodes {
                                 </select>
                             </div>
 
+                            <div class="rts-field">
+                                <label for="rts-feedback-mood-change">How did reading the letter make you feel?</label>
+                                <select id="rts-feedback-mood-change" name="mood_change" required>
+                                    <option value="" selected disabled>Select an option</option>
+                                    <option value="much_better">Much better</option>
+                                    <option value="little_better">A little better</option>
+                                    <option value="no_change">No change</option>
+                                    <option value="little_worse">A little worse</option>
+                                    <option value="much_worse">Much worse</option>
+                                </select>
+                            </div>
                             <div class="rts-field rts-field-inline">
                                 <input id="rts-feedback-triggered" type="checkbox" name="triggered" value="1">
                                 <label for="rts-feedback-triggered">This letter felt triggering or unsafe</label>
