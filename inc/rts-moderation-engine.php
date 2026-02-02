@@ -280,7 +280,8 @@ private static function safe_error_string(\Throwable $e): string {
 		$method_patterns = [
 			'/\b(\d+)\s*(pills?|tablets?|capsules?)\b/i' => 'specific_dosage',
 			'/\b(rope|noose|hanging|bridge|jump|pills? and alcohol)\b/i' => 'method_mention',
-			'/\b(tonight|today|right now|going to do it)\b/i' => 'imminent_timing',
+				// Removed "today/tonight/right now" as they caused excessive false positives.
+				'/\b(going to do it)\b/i' => 'imminent_timing',
 		];
 		
 		foreach ($method_patterns as $pattern => $flag_name) {
@@ -758,12 +759,21 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
             $count_7d  = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type='letter' AND post_date_gmt >= %s", $date_7d));
             $count_30d = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type='letter' AND post_date_gmt >= %s", $date_30d));
 
+			// Store both the newer "letters_*" keys and the legacy keys used elsewhere
+			// in the theme, so stats remain consistent even if parts of the UI expect
+			// different naming.
 			$stats = [
 				'generated_gmt'        => gmdate('c'),
+				// Canonical keys
 				'letters_total'        => $letters_total,
 				'letters_published'    => $letters_published,
 				'letters_pending'      => $letters_pending,
 				'letters_needs_review' => $needs_review,
+				// Legacy aliases
+				'total'                => $letters_total,
+				'published'            => $letters_published,
+				'pending'              => $letters_pending,
+				'needs_review'         => $needs_review,
 				'feedback_total'       => $feedback_total,
                 'velocity_24h'         => $count_24h,
                 'velocity_7d'          => $count_7d,
@@ -933,11 +943,15 @@ if (!class_exists('RTS_Engine_Dashboard')) {
         public static function enqueue_assets($hook): void {
             // Load CSS and JS on all RTS admin pages
             if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
-                // Main Admin Styles (includes dashboard styles)
-                wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], '2.40');
-                
-                // Dashboard Logic Script
-                wp_enqueue_script('rts-dashboard-js', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], '2.40', true);
+                // Main Admin Styles (includes dashboard styles) - cache-bust via filemtime
+                $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+                $css_ver  = file_exists($css_path) ? (string) filemtime($css_path) : null;
+                wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], $css_ver);
+
+                // Dashboard Logic Script - cache-bust via filemtime
+                $js_path = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
+                $js_ver  = file_exists($js_path) ? (string) filemtime($js_path) : null;
+                wp_enqueue_script('rts-dashboard-js', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], $js_ver, true);
                 
                 // Localize variables for JS
                 wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
@@ -1013,25 +1027,20 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 		}
 
 		private static function get_basic_stats(): array {
-			// Prefer cached aggregated stats so every admin view is consistent.
-			$agg = get_option('rts_aggregated_stats', []);
-			if (is_array($agg) && isset($agg['total'], $agg['published'], $agg['pending'], $agg['needs_review'])) {
-				return [
-					'total'         => (int) $agg['total'],
-					'published'     => (int) $agg['published'],
-					'pending'       => (int) $agg['pending'],
-					'needs_review'  => (int) $agg['needs_review'],
-					'feedback_total'=> (int) ($agg['feedback_total'] ?? 0),
-				];
-			}
-
+			// Use live counts for the headline cards (so the UI updates immediately
+			// after scans publish/unflag letters). Keep the cached aggregator for
+			// heavier analytics elsewhere.
 			$letters = wp_count_posts('letter');
+			$off_letters = (int) get_option(self::OPTION_OFFSET_LETTERS, 0);
+			$feedback_obj = wp_count_posts('rts_feedback');
+			$feedback_total = $feedback_obj ? (int) ($feedback_obj->publish + $feedback_obj->pending + $feedback_obj->draft + $feedback_obj->private + $feedback_obj->future) : 0;
+
 			return [
 				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $letters->future + $letters->private),
-				'published'     => (int) $letters->publish,
+				'published'     => (int) max(0, ((int) $letters->publish) + $off_letters),
 				'pending'       => (int) $letters->pending,
 				'needs_review'  => self::count_needs_review(),
-				'feedback_total'=> 0,
+				'feedback_total'=> $feedback_total,
 			];
 		}
 

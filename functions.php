@@ -752,19 +752,10 @@ add_action('manage_letter_posts_custom_column', function($column, $post_id){
 }, 0, 2);
 
 function rts_enqueue_admin_scripts($hook) {
-    // Load on RTS admin pages and anywhere within the Letters CPT (list + edit screens)
-    $should_load = false;
-
-    if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
-        $should_load = true;
-    }
-
-    if (function_exists('get_current_screen')) {
-        $screen = get_current_screen();
-        if ($screen && !empty($screen->post_type) && $screen->post_type === 'letter') {
-            $should_load = true;
-        }
-    }
+    // IMPORTANT: Keep the heavy RTS dashboard styling scoped to RTS pages only.
+    // Loading rts-admin.css on the Letters CPT list causes "dark mode" styles to bleed
+    // into the default WP list tables.
+    $should_load = (isset($_GET['page']) && strpos((string) $_GET['page'], 'rts-') !== false);
 
     if ($should_load) {
         

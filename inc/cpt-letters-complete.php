@@ -533,19 +533,19 @@ class RTS_CPT_Letters_System {
             return;
         }
 
-        // Use the same assets the Moderation Dashboard uses.
-        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
-        $js_path  = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
+        // IMPORTANT: Do NOT enqueue the heavy rts-admin.css here.
+        // This list screen should keep WordPress' native table styles.
+        // The analytics header above already includes its own scoped inline CSS.
 
-        if (file_exists($css_path)) {
-            wp_enqueue_style('rts-admin', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], (string) filemtime($css_path));
-        }
+        $js_path  = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
         if (file_exists($js_path)) {
-            wp_enqueue_script('rts-dashboard', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], (string) filemtime($js_path), true);
-            wp_localize_script('rts-dashboard', 'RTS_DASH', [
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce'    => wp_create_nonce('rts_admin_nonce'),
-                'rest_url' => esc_url_raw(rest_url('rts/v1/')),
+            $ver = (string) filemtime($js_path);
+            wp_enqueue_script('rts-dashboard-js', get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js', ['jquery'], $ver, true);
+            wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'resturl' => rest_url('rts/v1/'),
+                'nonce'   => wp_create_nonce('wp_rest'),
+                'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce')
             ]);
         }
     }
@@ -1000,7 +1000,28 @@ class RTS_CPT_Letters_System {
             case 'letter_safety':
                 $needs_review = get_post_meta($post_id, 'needs_review', true);
                 if ($needs_review) {
-                    echo '<span class="rts-safety rts-safety-flag">⚠️ Review</span>';
+					echo '<span class="rts-safety rts-safety-flag">⚠️ Review</span>';
+
+					// Show why this letter is flagged (helps diagnose false positives).
+					$flags_json   = (string) get_post_meta($post_id, 'rts_flagged_keywords', true);
+					$reasons_json = (string) get_post_meta($post_id, 'rts_flag_reasons', true);
+
+					$out = [];
+					if ($reasons_json !== '') {
+						$decoded = json_decode($reasons_json, true);
+						if (is_array($decoded)) { $out = array_merge($out, $decoded); }
+					}
+					if ($flags_json !== '') {
+						$decoded = json_decode($flags_json, true);
+						if (is_array($decoded)) { $out = array_merge($out, $decoded); }
+					}
+					$out = array_values(array_unique(array_filter(array_map('strval', $out))));
+
+					if (!empty($out)) {
+						echo '<div class="rts-flag-reasons" style="font-size:10px; color:#d63638; margin-top:4px; line-height:1.2; max-width:220px;">';
+						echo esc_html(implode(', ', array_slice($out, 0, 12)));
+						echo '</div>';
+					}
                 } else {
                     echo '<span class="rts-safety rts-safety-ok">✓ Safe</span>';
                 }
