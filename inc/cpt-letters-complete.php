@@ -361,7 +361,7 @@ class RTS_CPT_Letters_System {
                             (n.meta_value = %s)
                             OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
                          )",
-                        'quality_score', 'needs_review', 'letter', '1', $min_score
+                        'quality_score', 'needs_review', 'letter', 'draft', '1', $min_score
                     );
                     break;
                 case 'flagged':
@@ -409,7 +409,7 @@ class RTS_CPT_Letters_System {
         $needs_review      = (int) $this->count_needs_review_live();
 		$letters_quarantine = $needs_review;
 		// Match RTS Moderation Engine "Total" across admin screens.
-		$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_quarantine_status + $letters_future + $letters_private;
+		$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_future + $letters_private;
         $feedback_total    = (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
         $generated_gmt     = '';
 
@@ -656,6 +656,7 @@ class RTS_CPT_Letters_System {
                    AND pm.meta_key = %s
                    AND pm.meta_value = %s",
                 'letter',
+                'draft',
                 'needs_review',
                 '1'
             ));
@@ -936,7 +937,7 @@ class RTS_CPT_Letters_System {
         if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
 
         if (!empty($_GET['rts_quarantine'])) {
-            $query->set('post_status', ['draft', 'rts-quarantine']);
+            $query->set('post_status', 'draft');
             $query->set('meta_query', [
                 [ 'key' => 'needs_review', 'value' => '1' ],
             ]);

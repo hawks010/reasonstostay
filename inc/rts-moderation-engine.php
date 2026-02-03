@@ -850,7 +850,7 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 			$letters_published = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'publish'));
 			$letters_pending = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'pending'));
 			
-			// Needs Review Count (Quarantined): Draft or rts-quarantine status + needs_review flag.
+			// Needs Review Count (Quarantined): Draft status + needs_review flag.
 			$needs_review = (int) $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->posts} p
@@ -860,6 +860,7 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 				   AND pm.meta_key = %s
 				   AND pm.meta_value = %s",
 				'letter',
+				'draft',
 				'needs_review',
 				'1'
 			));
@@ -1166,8 +1167,8 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 				 WHERE pm.meta_key = %s
 				   AND pm.meta_value = %s
 				   AND p.post_type = %s
-				   AND p.post_status IN ('draft', 'rts-quarantine')",
-				'needs_review', '1', 'letter'
+				   AND p.post_status = %s",
+				'needs_review', '1', 'letter', 'draft'
 			));
 			return (int) $needs;
 		}
@@ -1412,7 +1413,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
             $links = [
                 'published'   => admin_url('edit.php?post_type=letter&post_status=publish'),
                 'inbox'       => admin_url('edit.php?post_type=letter&rts_inbox=1'),
-                'quarantined' => admin_url('edit.php?post_type=letter&rts_quarantine=1'),
+                'quarantined' => admin_url('edit.php?post_type=letter&post_status=draft&meta_key=needs_review&meta_value=1'),
                 'total'       => admin_url('edit.php?post_type=letter&all_posts=1'),
                 'feedback'    => admin_url('edit.php?post_type=letter&page=rts_feedback'),
             ];
@@ -3764,10 +3765,11 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 					 FROM {$wpdb->posts} p
 					 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 					 WHERE p.post_type = %s
-					   AND p.post_status IN ('draft', 'rts-quarantine')
+					   AND p.post_status = %s
 					   AND pm.meta_key = %s
 					   AND pm.meta_value = %s",
 					'letter',
+					'draft',
 					'needs_review',
 					'1'
 				));
