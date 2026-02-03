@@ -181,6 +181,9 @@ function display_test($name, $passed, $result, $action = '') {
         $tests_warning++;
         $class = 'warning';
         $icon = '⚠️';
+    } elseif ($passed === 'info') {
+        $class = 'info';
+        $icon = 'ℹ️';
     } else {
         $tests_failed++;
         $class = 'fail';
@@ -338,11 +341,20 @@ if ($as_available) {
 
 // Test 2.4: Check aggregated stats
 $stats = get_option('rts_aggregated_stats');
+$stats_generated_gmt = $stats['generated_gmt'] ?? null;
+$stats_age_hours = null;
+if (!empty($stats_generated_gmt)) {
+    $generated_time = strtotime($stats_generated_gmt);
+    if ($generated_time !== false) {
+        $stats_age_hours = (time() - $generated_time) / 3600;
+    }
+}
+$stats_stale = $stats_age_hours !== null && $stats_age_hours > 24;
 display_test(
     'Stats aggregation',
     !empty($stats),
     !empty($stats) 
-        ? sprintf('Last stats update: %s', $stats['generated_gmt'] ?? 'unknown')
+        ? sprintf('Last stats update: %s', $stats_generated_gmt ?? 'unknown')
         : 'Stats have never been aggregated',
     empty($stats) ? 'Visit Dashboard page to trigger first stats aggregation' : ''
 );
@@ -373,12 +385,17 @@ $manual_inbox = (int) $wpdb->get_var(
 );
 
 $system_inbox = isset($stats['pending']) ? (int) $stats['pending'] : 0;
+$inbox_match = $manual_inbox === $system_inbox;
+$inbox_status = $inbox_match || empty($stats) ? true : ($stats_stale ? 'warning' : false);
+$inbox_action = (!$inbox_match && !empty($stats))
+    ? ($stats_stale ? 'Counts don\'t match and stats are stale. Visit Dashboard to refresh stats.' : 'Counts don\'t match. Visit Dashboard to refresh stats.')
+    : '';
 
 display_test(
     'Inbox count accuracy',
-    $manual_inbox === $system_inbox || empty($stats),
+    $inbox_status,
     sprintf('Manual count: %d | System reports: %d', $manual_inbox, $system_inbox),
-    ($manual_inbox !== $system_inbox && !empty($stats)) ? 'Counts don\'t match. Visit Dashboard to refresh stats.' : ''
+    $inbox_action
 );
 
 // Test 3.2: Manual count vs system count - Quarantine
@@ -396,12 +413,17 @@ $manual_quarantine = (int) $wpdb->get_var(
 );
 
 $system_quarantine = isset($stats['needs_review']) ? (int) $stats['needs_review'] : 0;
+$quarantine_match = $manual_quarantine === $system_quarantine;
+$quarantine_status = $quarantine_match || empty($stats) ? true : ($stats_stale ? 'warning' : false);
+$quarantine_action = (!$quarantine_match && !empty($stats))
+    ? ($stats_stale ? 'Counts don\'t match and stats are stale. Visit Dashboard to refresh stats.' : 'Counts don\'t match. Visit Dashboard to refresh stats.')
+    : '';
 
 display_test(
     'Quarantine count accuracy',
-    $manual_quarantine === $system_quarantine || empty($stats),
+    $quarantine_status,
     sprintf('Manual count: %d | System reports: %d', $manual_quarantine, $system_quarantine),
-    ($manual_quarantine !== $system_quarantine && !empty($stats)) ? 'Counts don\'t match. Visit Dashboard to refresh stats.' : ''
+    $quarantine_action
 );
 
 // Test 3.3: Check for duplicate meta entries
@@ -446,6 +468,9 @@ display_test(
 
 // Test 4.2: Check submenu pages
 global $submenu;
+if (!did_action('admin_menu')) {
+    do_action('admin_menu');
+}
 $letter_submenu = $submenu['edit.php?post_type=letter'] ?? [];
 $dashboard_label = 'Not found';
 
@@ -453,6 +478,17 @@ foreach ($letter_submenu as $item) {
     if ($item[2] === 'rts-dashboard') {
         $dashboard_label = $item[0];
         break;
+    }
+}
+
+if ($dashboard_label === 'Not found' && class_exists('RTS_Engine_Dashboard')) {
+    RTS_Engine_Dashboard::register_menu();
+    $letter_submenu = $submenu['edit.php?post_type=letter'] ?? [];
+    foreach ($letter_submenu as $item) {
+        if ($item[2] === 'rts-dashboard') {
+            $dashboard_label = $item[0];
+            break;
+        }
     }
 }
 
