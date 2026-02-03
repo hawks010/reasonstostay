@@ -7,7 +7,7 @@
  * 
  * CRITICAL FIX: Separated quarantine from inbox by using different post statuses:
  * - Inbox letters: post_status = 'pending' (waiting for first scan)
- * - Quarantined letters: post_status = 'rts-quarantine' + needs_review=1 (flagged for review)
+ * - Quarantined letters: post_status = 'draft' + needs_review=1 (flagged for review)
  * 
  * This fixes the overlap where pending and quarantine had the same count.
  * Migration function runs once on init to convert existing quarantined letters.
@@ -236,10 +236,10 @@ if (!class_exists('RTS_Moderation_Engine')) {
 						update_post_meta($post_id, 'rts_moderation_status', 'published');
 					} else {
 						// Fail-closed: anything that doesn't pass must be quarantined (draft status).
-						// CRITICAL: Use 'rts-quarantine' status for quarantine to separate from inbox 'pending'.
+						// Quarantine letters into draft status to keep inbox pending clean.
 						$updated = wp_update_post([
 							'ID'          => $post_id,
-							'post_status' => 'rts-quarantine',
+							'post_status' => 'draft',
 						], true);
 						if (is_wp_error($updated)) {
 							throw new \RuntimeException($updated->get_error_message());
@@ -850,18 +850,16 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 			$letters_published = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'publish'));
 			$letters_pending = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'pending'));
 			
-			// Needs Review Count (Quarantined): Draft status + needs_review flag.
-			// CRITICAL FIX: Quarantined letters use 'rts-quarantine' status, not 'pending'.
+			// Needs Review Count (Quarantined): Draft or rts-quarantine status + needs_review flag.
 			$needs_review = (int) $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 				 WHERE p.post_type = %s
-				   AND p.post_status = %s
+				   AND p.post_status IN ('draft', 'rts-quarantine')
 				   AND pm.meta_key = %s
 				   AND pm.meta_value = %s",
 				'letter',
-				'rts-quarantine',
 				'needs_review',
 				'1'
 			));
@@ -1160,7 +1158,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 
 		private static function count_needs_review(): int {
 			global $wpdb;
-			// Count quarantined letters (draft status + needs_review flag).
+			// Count quarantined letters (draft or rts-quarantine status + needs_review flag).
 			$needs = $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->postmeta} pm
@@ -1168,8 +1166,8 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 				 WHERE pm.meta_key = %s
 				   AND pm.meta_value = %s
 				   AND p.post_type = %s
-				   AND p.post_status = %s",
-				'needs_review', '1', 'letter', 'rts-quarantine'
+				   AND p.post_status IN ('draft', 'rts-quarantine')",
+				'needs_review', '1', 'letter'
 			));
 			return (int) $needs;
 		}
@@ -1182,9 +1180,10 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			$off_letters = (int) get_option(self::OPTION_OFFSET_LETTERS, 0);
 			$feedback_obj = wp_count_posts('rts_feedback');
 			$feedback_total = $feedback_obj ? (int) ($feedback_obj->publish + $feedback_obj->pending + $feedback_obj->draft + $feedback_obj->private + $feedback_obj->future) : 0;
+			$quarantine_status = isset($letters->{'rts-quarantine'}) ? (int) $letters->{'rts-quarantine'} : 0;
 
 			return [
-				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $letters->future + $letters->private),
+				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $quarantine_status + $letters->future + $letters->private),
 				'published'     => (int) max(0, ((int) $letters->publish) + $off_letters),
 				'pending'       => (int) $letters->pending,
 				'needs_review'  => self::count_needs_review(),
@@ -1413,7 +1412,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
             $links = [
                 'published'   => admin_url('edit.php?post_type=letter&post_status=publish'),
                 'inbox'       => admin_url('edit.php?post_type=letter&rts_inbox=1'),
-                'quarantined' => admin_url('edit.php?post_type=letter&post_status=rts-quarantine'),
+                'quarantined' => admin_url('edit.php?post_type=letter&rts_quarantine=1'),
                 'total'       => admin_url('edit.php?post_type=letter&all_posts=1'),
                 'feedback'    => admin_url('edit.php?post_type=letter&page=rts_feedback'),
             ];
@@ -1598,7 +1597,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			$args = [
 				'post_type'      => 'letter',
 				'posts_per_page' => $limit,
-				'post_status'    => ($mode === 'pending') ? 'pending' : (($mode === 'needs_review') ? 'rts-quarantine' : ['publish','pending','rts-quarantine']),
+				'post_status'    => ($mode === 'pending') ? 'pending' : (($mode === 'needs_review') ? 'draft' : ['publish','pending','draft']),
 				'orderby'        => 'date',
 				'order'          => 'DESC',
 				'no_found_rows'  => true,
@@ -2690,7 +2689,7 @@ private static function render_tab_settings(): void {
 
 		$args = [
 			'post_type' => 'letter',
-			'post_status' => ($status === 'any') ? ['publish','pending','rts-quarantine','private','future'] : [$status],
+			'post_status' => ($status === 'any') ? ['publish','pending','draft','private','future'] : [$status],
 			'posts_per_page' => -1,
 			'orderby' => 'date',
 			'order' => 'ASC',
@@ -2832,7 +2831,7 @@ $batch = (int) get_option(self::OPTION_AUTO_BATCH, 100);
 
 $q = new \WP_Query([
     'post_type'      => 'letter',
-    'post_status'    => ['pending', 'rts-quarantine'],
+    'post_status'    => ['pending', 'draft'],
     'posts_per_page' => $batch,
     'fields'         => 'ids',
     'no_found_rows'  => true,
@@ -3042,7 +3041,7 @@ wp_reset_postdata();
 
             $q_args = [
                 'post_type'      => 'letter',
-                'post_status' => ['pending','rts-quarantine'],
+                'post_status' => ['pending','draft'],
                 'posts_per_page' => $batch,
                 'fields'         => 'ids',
                 'orderby'        => 'date',
@@ -3610,7 +3609,7 @@ if (!class_exists('RTS_Auto_Processor')) {
 			
             if (self::turbo_scope() === 'both') {
 				// Include quarantined letters (draft status with needs_review flag)
-                $pending += (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = %s AND pm.meta_value = %s AND p.post_type = %s AND p.post_status = %s", 'needs_review', '1', 'letter', 'rts-quarantine'));
+                $pending += (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = %s AND pm.meta_value = %s AND p.post_type = %s AND p.post_status = %s", 'needs_review', '1', 'letter', 'draft'));
 			}
 			return $pending;
 		}
@@ -3649,7 +3648,7 @@ if (!class_exists('RTS_Auto_Processor')) {
 			// Only schedule actions; Action Scheduler runner will execute.
 			$q = new \WP_Query([
 				'post_type'      => 'letter',
-				'post_status'    => ['pending', 'rts-quarantine'],
+				'post_status'    => ['pending', 'draft'],
 				'fields'         => 'ids',
 				'posts_per_page' => $limit,
 				'orderby'        => 'date',
@@ -3727,11 +3726,81 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 			RTS_Auto_Processor::init();
 			add_action('init', [__CLASS__, 'schedule_daily_analytics'], 20);
 			add_action('init', [__CLASS__, 'migrate_quarantine_to_draft_status'], 5);
+			add_action('init', [__CLASS__, 'maybe_refresh_aggregated_stats'], 8);
+			add_action('init', [__CLASS__, 'cleanup_failed_jobs'], 12);
 		}
 
 		public static function handle_process_letter($post_id): void { RTS_Moderation_Engine::process_letter((int) $post_id); }
 		public static function handle_import_batch($job_id, $batch): void { RTS_Import_Orchestrator::process_import_batch((string) $job_id, (array) $batch); }
 		public static function handle_aggregate_analytics(): void { RTS_Analytics_Aggregator::aggregate(); }
+
+		public static function maybe_refresh_aggregated_stats(): void {
+			if (!class_exists('RTS_Analytics_Aggregator')) {
+				return;
+			}
+
+			$last_sync = (int) get_option('rts_aggregated_stats_sync_ts', 0);
+			if ($last_sync && (time() - $last_sync) < 300) {
+				return;
+			}
+			update_option('rts_aggregated_stats_sync_ts', time(), false);
+
+			$stats = get_option('rts_aggregated_stats', []);
+			if (!is_array($stats) || empty($stats)) {
+				RTS_Analytics_Aggregator::aggregate();
+				return;
+			}
+
+			global $wpdb;
+			try {
+				$pending = (int) $wpdb->get_var($wpdb->prepare(
+					"SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type = %s AND post_status = %s",
+					'letter',
+					'pending'
+				));
+
+				$quarantine = (int) $wpdb->get_var($wpdb->prepare(
+					"SELECT COUNT(DISTINCT p.ID)
+					 FROM {$wpdb->posts} p
+					 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+					 WHERE p.post_type = %s
+					   AND p.post_status IN ('draft', 'rts-quarantine')
+					   AND pm.meta_key = %s
+					   AND pm.meta_value = %s",
+					'letter',
+					'needs_review',
+					'1'
+				));
+
+				if ((int) ($stats['pending'] ?? -1) !== $pending || (int) ($stats['needs_review'] ?? -1) !== $quarantine) {
+					RTS_Analytics_Aggregator::aggregate();
+				}
+			} catch (\Throwable $e) {
+				// Silent fail: cached stats remain until next sync.
+			}
+		}
+
+		public static function cleanup_failed_jobs(): void {
+			if (!rts_as_available()) {
+				return;
+			}
+
+			$last_cleanup = (int) get_option('rts_failed_jobs_cleanup_last', 0);
+			if ($last_cleanup && (time() - $last_cleanup) < DAY_IN_SECONDS) {
+				return;
+			}
+
+			global $wpdb;
+			$like = $wpdb->esc_like('rts_') . '%';
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE hook LIKE %s AND status = %s",
+					$like,
+					'failed'
+				)
+			);
+			update_option('rts_failed_jobs_cleanup_last', time(), false);
+		}
 
 		public static function on_save_post_letter(int $post_id, \WP_Post $post, bool $update): void {
 			if (!rts_as_available() || wp_is_post_revision($post_id) || wp_is_post_autosave($post_id) || $post->post_type !== 'letter' || $post->post_status === 'publish') return;
@@ -3754,7 +3823,7 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 				update_post_meta($letter_id, 'needs_review', '1');
 				update_post_meta($letter_id, 'rts_feedback_flag', 'user_report');
                 // Set to draft status for quarantine
-                wp_update_post(['ID' => $letter_id, 'post_status' => 'rts-quarantine']);
+                wp_update_post(['ID' => $letter_id, 'post_status' => 'draft']);
             }
 		}
 
@@ -3766,26 +3835,26 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 		}
 
 		/**
-		 * One-time migration: Convert quarantined letters to 'rts-quarantine' status.
-		 * Migrates from both 'pending' and 'draft' with needs_review=1
+		 * One-time migration: Convert quarantined letters to draft status.
+		 * Migrates from pending/draft/rts-quarantine with needs_review=1
 		 * This fixes the overlap between inbox/draft and quarantine.
 		 * Runs once and sets a flag to never run again.
 		 */
 		public static function migrate_quarantine_to_draft_status(): void {
 			// Check if migration already ran
-			if (get_option('rts_quarantine_migration_v3_3_0_done')) {
+			if (get_option('rts_quarantine_migration_v3_2_0_done') || get_option('rts_quarantine_migration_v3_3_0_done')) {
 				return;
 			}
 
 			global $wpdb;
 			
-			// Find all pending OR draft letters with needs_review=1 (these are quarantined)
+			// Find all pending OR draft OR rts-quarantine letters with needs_review=1 (these are quarantined)
 			$quarantined_ids = $wpdb->get_col($wpdb->prepare(
 				"SELECT DISTINCT p.ID 
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 				 WHERE p.post_type = %s
-				   AND p.post_status IN ('pending', 'draft')
+				   AND p.post_status IN ('pending', 'draft', 'rts-quarantine')
 				   AND pm.meta_key = %s
 				   AND pm.meta_value = %s",
 				'letter',
@@ -3793,12 +3862,12 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 				'1'
 			));
 
-			// Update them to rts-quarantine status
+			// Update them to draft status
 			$updated = 0;
 			foreach ($quarantined_ids as $letter_id) {
 				$result = wp_update_post([
 					'ID' => (int) $letter_id,
-					'post_status' => 'rts-quarantine'
+					'post_status' => 'draft'
 				], true);
 				
 				if (!is_wp_error($result)) {
@@ -3807,14 +3876,19 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 			}
 
 			// Set flag so we never run this again
+			update_option('rts_quarantine_migration_v3_2_0_done', true, false);
 			update_option('rts_quarantine_migration_v3_3_0_done', true, false);
 
 			// Log the migration for debugging
 			if ($updated > 0) {
 				error_log(sprintf(
-					'RTS: Migrated %d quarantined letters to rts-quarantine status',
+					'RTS: Migrated %d quarantined letters to draft status',
 					$updated
 				));
+			}
+
+			if (class_exists('RTS_Analytics_Aggregator')) {
+				RTS_Analytics_Aggregator::aggregate();
 			}
 		}
 
