@@ -2,6 +2,16 @@
 /**
  * RTS Moderation Engine (Preservation-First, Fail-Closed, Action Scheduler Only)
  *
+ * Version: 3.2.0 - Quarantine Status Fix
+ * Date: 2026-02-03
+ * 
+ * CRITICAL FIX: Separated quarantine from inbox by using different post statuses:
+ * - Inbox letters: post_status = 'pending' (waiting for first scan)
+ * - Quarantined letters: post_status = 'rts-quarantine' + needs_review=1 (flagged for review)
+ * 
+ * This fixes the overlap where pending and quarantine had the same count.
+ * Migration function runs once on init to convert existing quarantined letters.
+ *
  * Drop-in file for your theme: /inc/rts-moderation-engine.php
  * Include from functions.php.
  *
@@ -145,6 +155,11 @@ if (!class_exists('RTS_Moderation_Engine')) {
 			set_transient($lock_key, time(), self::LOCK_TTL);
 
 			try {
+			// CRITICAL FIX #1: Clear stale queue timestamps before fresh scan
+			// This ensures letters can be re-queued if they get stuck in processing
+			delete_post_meta($post_id, 'rts_scan_queued_ts');
+			delete_post_meta($post_id, 'rts_scan_queued_gmt');
+
 				$results = [
 					'safety'  => ['pass' => false, 'flags' => []],
 					'ip'      => ['pass' => false, 'reason' => ''],
@@ -152,7 +167,13 @@ if (!class_exists('RTS_Moderation_Engine')) {
 					'tags'    => ['applied' => []],
 				];
 
-				$results['safety'] = self::safety_scan($post_id);
+			// Use new context-aware safety scanner if available
+			if (class_exists('RTS_Context_Aware_Safety')) {
+				$results['safety'] = RTS_Context_Aware_Safety::scan($post_id);
+			} else {
+				$results['safety'] = (class_exists('RTS_Context_Aware_Safety') ? RTS_Context_Aware_Safety::scan($post_id) : self::safety_scan($post_id)); // Fallback
+			}
+
 				$results['ip'] = self::ip_history_check($post_id);
 				$results['quality'] = self::quality_scoring($post_id);
 				$results['tags'] = self::auto_tagging($post_id);
@@ -160,62 +181,103 @@ if (!class_exists('RTS_Moderation_Engine')) {
 				update_post_meta($post_id, 'quality_score', (int) $results['quality']['score']);
 				update_post_meta($post_id, 'rts_safety_pass', $results['safety']['pass'] ? '1' : '0');
 				update_post_meta($post_id, 'rts_ip_pass', $results['ip']['pass'] ? '1' : '0');
+			// Save detailed flag reasons for admin review
+			if (!empty($results['safety']['details'])) {
+				update_post_meta($post_id, 'rts_safety_details', $results['safety']['details']);
+			}
 				update_post_meta($post_id, 'rts_flagged_keywords', wp_json_encode($results['safety']['flags']));
 				update_post_meta($post_id, 'rts_processing_last', gmdate('c'));
 				delete_post_meta($post_id, 'rts_system_error');
 
-					$external_flag = (get_post_meta($post_id, 'needs_review', true) === '1');
 					$admin_override = (get_post_meta($post_id, 'rts_admin_override', true) === '1');
 
-					// If an admin has explicitly approved the letter, we allow it to pass
-					// safety/quarantine gates (still respecting IP + quality checks).
+					// IMPORTANT: Do NOT auto-fail a letter just because it was previously quarantined.
+					// We decide based on the NEW scan results so that re-scans can actually release letters.
 					$all_pass = (
 						(($results['safety']['pass'] === true) || $admin_override)
-					&& $results['ip']['pass'] === true
-					&& $results['quality']['pass'] === true
-						&& (!$external_flag || $admin_override)
-				);
+						&& $results['ip']['pass'] === true
+						&& $results['quality']['pass'] === true
+					);
 
-				if ($all_pass) {
-					wp_update_post([
-						'ID'          => $post_id,
-						'post_status' => 'publish',
-					]);
-						update_post_meta($post_id, 'needs_review', '0');
+					if ($all_pass) {
+						wp_update_post([
+							'ID'          => $post_id,
+							'post_status' => 'publish',
+						]);
+
+						// Clear quarantine + flag metadata (the new scan passed).
+						delete_post_meta($post_id, 'needs_review');
+						delete_post_meta($post_id, 'rts_flag_reasons');
+						delete_post_meta($post_id, 'rts_moderation_reasons');
+						delete_post_meta($post_id, 'rts_flagged_keywords');
+
+							// Prevent admin edit screens repeatedly requesting blocked RTS OG images.
+							// If Rank Math meta points at /uploads/rts-og-images/, remove it and let Rank Math handle OG normally.
+							foreach (['rank_math_facebook_image','rank_math_twitter_image'] as $k) {
+								$val = (string) get_post_meta($post_id, $k, true);
+								if ($val && strpos($val, '/rts-og-images/') !== false) {
+									delete_post_meta($post_id, $k);
+								}
+							}
+							foreach (['rank_math_facebook_image_id','rank_math_twitter_image_id'] as $k) {
+								$val = (string) get_post_meta($post_id, $k, true);
+								if ($val) { delete_post_meta($post_id, $k); }
+							}
+
 						// Clear override once it has successfully published (keeps history clean).
 						if ($admin_override) {
 							update_post_meta($post_id, 'rts_admin_override', '0');
 						}
-					update_post_meta($post_id, 'rts_moderation_status', 'published');
-				} else {
-					// Fail-closed: anything that doesn't pass must NOT remain published.
-					if ($post->post_status === 'publish') {
+
+						update_post_meta($post_id, 'rts_moderation_status', 'published');
+					} else {
+						// Fail-closed: anything that doesn't pass must be quarantined (draft status).
+						// CRITICAL: Use 'rts-quarantine' status for quarantine to separate from inbox 'pending'.
 						wp_update_post([
 							'ID'          => $post_id,
-							'post_status' => 'pending',
+							'post_status' => 'rts-quarantine',
+						]);
+
+						update_post_meta($post_id, 'needs_review', '1');
+						update_post_meta($post_id, 'rts_moderation_status', 'pending_review');
+
+						// Build human-usable reasons (shown in the Letters list).
+						$reasons = [];
+
+						if (!$results['safety']['pass']) {
+							$flags = is_array($results['safety']['flags']) ? $results['safety']['flags'] : [];
+							foreach ($flags as $f) {
+								$reasons[] = 'safety:' . sanitize_key((string) $f);
+							}
+							if (!$flags) {
+								$reasons[] = 'safety:flagged';
+							}
+						}
+
+						if (!$results['ip']['pass']) {
+							$reason = isset($results['ip']['reason']) ? (string) $results['ip']['reason'] : 'blocked';
+							$reasons[] = 'ip:' . sanitize_key($reason);
+						}
+
+						if (!$results['quality']['pass']) {
+							$score = isset($results['quality']['score']) ? (int) $results['quality']['score'] : 0;
+							$notes = isset($results['quality']['notes']) && is_array($results['quality']['notes']) ? $results['quality']['notes'] : [];
+							$reasons[] = 'quality:score_' . $score;
+							foreach ($notes as $n) {
+								$reasons[] = 'quality:' . sanitize_key((string) $n);
+							}
+						}
+
+						$reasons = array_values(array_unique(array_filter($reasons)));
+						update_post_meta($post_id, 'rts_flag_reasons', wp_json_encode($reasons));
+						update_post_meta($post_id, 'rts_moderation_reasons', implode(',', $reasons));
+
+						RTS_Scan_Diagnostics::log('letter_flagged', [
+							'post_id'  => $post_id,
+							'status'   => $post->post_status,
+							'reasons'  => $reasons,
 						]);
 					}
-
-					update_post_meta($post_id, 'needs_review', '1');
-					update_post_meta($post_id, 'rts_moderation_status', 'pending_review');
-
-					$reasons = [];
-					if (!$results['safety']['pass'])  $reasons[] = 'safety';
-					if (!$results['ip']['pass'])      $reasons[] = 'ip';
-					if (!$results['quality']['pass']) $reasons[] = 'quality';
-						if ($external_flag)               $reasons[] = 'quarantine_flag';
-
-						// Persist what tripped the system so admins can see why it was flagged.
-						update_post_meta($post_id, 'rts_flag_reasons', wp_json_encode($reasons));
-
-					update_post_meta($post_id, 'rts_moderation_reasons', implode(',', $reasons));
-
-					RTS_Scan_Diagnostics::log('letter_flagged', [
-						'post_id'  => $post_id,
-						'status'   => $post->post_status,
-						'reasons'  => $reasons,
-					]);
-				}
 
 			} catch (\Throwable $e) {
 				update_post_meta($post_id, 'needs_review', '1');
@@ -248,6 +310,52 @@ private static function safe_error_string(\Throwable $e): string {
 			$msg = wp_strip_all_tags($msg);
 			return mb_substr($msg, 0, 300);
 		}
+		
+		/**
+		 * Convert technical flag reasons to human-readable descriptions
+		 */
+		private static function translate_flag_reason(string $reason): string {
+			// Map of technical reasons to human-readable descriptions
+			$translations = [
+				// IP reasons
+				'ip:ip_locked' => 'IP rate limit exceeded',
+				'ip:blocked' => 'IP address blocked',
+				'ip:spam_pattern' => 'Spam pattern detected',
+				
+				// Safety reasons
+				'safety:flagged' => 'Content safety concern',
+				'safety:self_harm' => 'Self-harm content detected',
+				'safety:violence' => 'Violent content detected',
+				'safety:hate_speech' => 'Hate speech detected',
+				'safety:sexual_content' => 'Sexual content detected',
+				'safety:spam' => 'Spam detected',
+				
+				// Quality reasons
+				'quality:score_low' => 'Quality score below threshold',
+				'quality:too_short' => 'Letter too short',
+				'quality:no_substance' => 'Lacks meaningful content',
+				'quality:test_content' => 'Test or placeholder content',
+				'quality:repetitive' => 'Repetitive content',
+				
+				// Other
+				'quarantine_flag' => 'Manually quarantined',
+			];
+			
+			// Check exact match first
+			if (isset($translations[$reason])) {
+				return $translations[$reason];
+			}
+			
+			// Handle pattern matches
+			if (strpos($reason, 'quality:score_') === 0) {
+				$score = (int) str_replace('quality:score_', '', $reason);
+				return "Quality score: {$score}/100";
+			}
+			
+			// Fallback: make it more readable
+			$reason = str_replace(['_', ':'], ' ', $reason);
+			return ucwords($reason);
+		}
 
 	private static function safety_scan(int $post_id): array {
 		$content = (string) get_post_field('post_content', $post_id);
@@ -278,7 +386,7 @@ private static function safe_error_string(\Throwable $e): string {
 		// SPECIFIC METHOD PATTERNS (Medium priority - concerning but context matters)
 		// Only flag if multiple indicators or very specific methods
 		$method_patterns = [
-			'/\b(\d+)\s*(pills?|tablets?|capsules?)\b/i' => 'specific_dosage',
+			'/\b([5-9]|[1-9]\d+)\s*(pills?|tablets?|capsules?)\b/i' => 'specific_dosage',
 			'/\b(rope|noose|hanging|bridge|jump|pills? and alcohol)\b/i' => 'method_mention',
 				// Removed "today/tonight/right now" as they caused excessive false positives.
 				'/\b(going to do it)\b/i' => 'imminent_timing',
@@ -400,7 +508,7 @@ private static function quality_scoring(int $post_id): array {
     $threshold = (int) apply_filters('rts_quality_threshold', $threshold_opt);
 
     // Hard fail only for extremely short or empty content.
-    $pass = ($score >= $threshold) && ($len >= 40);
+    $pass = ($score >= $threshold) && ($len >= 10);
 
     $notes = [];
     if ($len < 80) $notes[] = 'short';
@@ -731,8 +839,8 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 			$letters_published = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'publish'));
 			$letters_pending = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'pending'));
 			
-			// Needs Review Count (deduped): Only pending + flagged.
-			// IMPORTANT: Use DISTINCT because duplicate postmeta rows can inflate COUNT(*) when using a JOIN.
+			// Needs Review Count (Quarantined): Draft status + needs_review flag.
+			// CRITICAL FIX: Quarantined letters use 'rts-quarantine' status, not 'pending'.
 			$needs_review = (int) $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->posts} p
@@ -742,7 +850,7 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 				   AND pm.meta_key = %s
 				   AND pm.meta_value = %s",
 				'letter',
-				'pending',
+				'rts-quarantine',
 				'needs_review',
 				'1'
 			));
@@ -936,7 +1044,11 @@ if (!class_exists('RTS_Engine_Dashboard')) {
             add_action('wp_ajax_rts_start_scan', [__CLASS__, 'ajax_start_scan']);
             add_action('wp_ajax_rts_process_single', [__CLASS__, 'ajax_process_single']);
 	            add_action('wp_ajax_rts_approve_letter', [__CLASS__, 'ajax_approve_letter']);
+		            // Diagnostics used by the dashboard UI.
+		            add_action('wp_ajax_rts_diag_log_tail', [__CLASS__, 'ajax_diag_log_tail']);
+		            add_action('wp_ajax_rts_diag_reset', [__CLASS__, 'ajax_diag_reset']);
 	            add_action('wp_ajax_rts_bulk_approve', [__CLASS__, 'ajax_bulk_approve']);
+            add_action('wp_ajax_rts_cancel_import', [__CLASS__, 'ajax_cancel_import']);
             add_action('wp_ajax_rts_load_settings_tab', 'rts_ajax_load_settings_tab');
 		}
 
@@ -966,8 +1078,8 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 		public static function register_menu(): void {
 			add_submenu_page(
 				'edit.php?post_type=letter',
-				'Moderation Dashboard',
-				'Moderation Dashboard',
+				'Dashboard',
+				'Dashboard',
 				'manage_options',
 				'rts-dashboard',
 				[__CLASS__, 'render_page'],
@@ -988,9 +1100,34 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			register_setting('rts_engine_settings', self::OPTION_TURBO_SCOPE, ['sanitize_callback' => 'sanitize_text_field', 'default' => 'both']);
 			register_setting('rts_engine_settings', self::OPTION_DARK_MODE, ['sanitize_callback' => 'sanitize_text_field', 'default' => '0']);
             
-            // Stat Offsets
+            // Stat Offsets (admin only - legacy)
             register_setting('rts_engine_settings', self::OPTION_OFFSET_LETTERS, ['sanitize_callback' => 'absint', 'default' => 0]);
             register_setting('rts_engine_settings', self::OPTION_OFFSET_SHARES, ['sanitize_callback' => 'absint', 'default' => 0]);
+
+            // Frontend stats overrides (used by [rts_site_stats_row])
+            register_setting('rts_engine_settings', 'rts_stats_override', [
+                'sanitize_callback' => function($value) {
+                    if (!is_array($value)) {
+                        return [];
+                    }
+                    return [
+                        'enabled' => !empty($value['enabled']) ? 1 : 0,
+                        'letters_delivered' => absint($value['letters_delivered'] ?? 0),
+                        'letters_submitted' => absint($value['letters_submitted'] ?? 0),
+                        'helps' => absint($value['helps'] ?? 0),
+                        'feel_better_percent' => isset($value['feel_better_percent']) && $value['feel_better_percent'] !== '' ? max(0, min(100, intval($value['feel_better_percent']))) : '',
+                    ];
+                },
+                'default' => []
+            ]);
+
+            // Email Notification Settings
+            register_setting('rts_engine_settings', 'rts_email_notifications_enabled', ['sanitize_callback' => 'sanitize_text_field', 'default' => '1']);
+            register_setting('rts_engine_settings', 'rts_admin_notification_email', ['sanitize_callback' => 'sanitize_email', 'default' => get_option('admin_email')]);
+            register_setting('rts_engine_settings', 'rts_cc_notification_email', ['sanitize_callback' => 'sanitize_email', 'default' => '']);
+            register_setting('rts_engine_settings', 'rts_notify_on_feedback', ['sanitize_callback' => 'sanitize_text_field', 'default' => '1']);
+            register_setting('rts_engine_settings', 'rts_notify_on_triggered', ['sanitize_callback' => 'sanitize_text_field', 'default' => '1']);
+            register_setting('rts_engine_settings', 'rts_notify_on_negative', ['sanitize_callback' => 'sanitize_text_field', 'default' => '0']);
 		}
 
 		private static function get_tab(): string {
@@ -1012,7 +1149,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 
 		private static function count_needs_review(): int {
 			global $wpdb;
-			// Only count pending letters that have been flagged for review.
+			// Count quarantined letters (draft status + needs_review flag).
 			$needs = $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->postmeta} pm
@@ -1021,7 +1158,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 				   AND pm.meta_value = %s
 				   AND p.post_type = %s
 				   AND p.post_status = %s",
-				'needs_review', '1', 'letter', 'pending'
+				'needs_review', '1', 'letter', 'rts-quarantine'
 			));
 			return (int) $needs;
 		}
@@ -1088,15 +1225,20 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 					<?php endif; ?>
 					
 					<!-- Auto-Processing Active Banner -->
-					<?php if (self::is_auto_enabled() && $stats['pending'] > 0): ?>
+					<?php if (self::is_auto_enabled() && $true_inbox > 0): ?>
 					<div class="notice notice-info" style="margin: 20px 0; padding: 15px; border-left: 4px solid #2271b1; background: #f0f6fc;">
 						<p style="margin: 0; font-size: 14px; line-height: 1.6;">
 							<span class="dashicons dashicons-update" style="color: #2271b1; animation: rotation 2s infinite linear;"></span>
-							<strong>Auto-Processing Active:</strong> The system is automatically working through <strong><?php echo number_format_i18n($stats['pending']); ?> pending letter(s)</strong> in the inbox. 
+								<strong>Auto-Processing Active:</strong> The system is automatically working through <strong><?php echo number_format_i18n($true_inbox); ?> letter(s)</strong> in the inbox. 
 							Each letter is being quality-checked, safety-scanned, and tagged. Letters that pass all checks will be automatically published. 
 							<a href="<?php echo esc_url(self::url_for_tab('system') . '#rts-live-processing-status'); ?>">View progress →</a>
 						</p>
 					</div>
+						<?php if ($needs_review > 0): ?>
+							<p style="margin: 8px 0 0; font-size: 13px; color: #1d2327;">
+								<strong><?php echo number_format_i18n($needs_review); ?></strong> letter(s) are currently quarantined for safety review.
+							</p>
+						<?php endif; ?>
 					<style>
 						@keyframes rotation {
 							from { transform: rotate(0deg); }
@@ -1109,7 +1251,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 				<?php $true_inbox = max(0, (int) $stats['pending'] - (int) $stats['needs_review']); ?>
 				<div class="rts-stats-grid">
 	                    <?php self::stat_card('Live on Site', number_format_i18n($stats['published']), 'published', 'Letters live on the website'); ?>
-	                    <?php self::stat_card('Inbox', number_format_i18n($true_inbox), 'inbox', 'Awaiting your decision'); ?>
+	                    <?php self::stat_card('Inbox', number_format_i18n($true_inbox), 'inbox', 'Awaiting auto-processing'); ?>
 	                    <?php self::stat_card('Quarantined', number_format_i18n($stats['needs_review']), 'quarantined', 'Flagged for safety review'); ?>
 	                    <?php self::stat_card('Feedback', number_format_i18n($stats['feedback_total'] ?? 0), 'feedback', 'Reader feedback received'); ?>
 	                    <?php self::stat_card('Total Letters', number_format_i18n($stats['total']), 'total', 'All-time submissions'); ?>
@@ -1180,10 +1322,17 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                     <div class="rts-progress-card">
                         <div class="rts-progress-header">
                             <h4><span class="dashicons dashicons-upload"></span> Import Progress</h4>
-                            <span class="rts-progress-status"><?php echo esc_html($import['status'] ?? 'idle'); ?></span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span class="rts-progress-status"><?php echo esc_html($import['status'] ?? 'idle'); ?></span>
+                                <?php if (($import['status'] ?? 'idle') !== 'idle'): ?>
+                                    <button type="button" class="button button-small" id="rts-cancel-import-btn" title="Cancel import">
+                                        <span class="dashicons dashicons-no" style="font-size: 14px; width: 14px; height: 14px;"></span>
+                                    </button>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <div class="rts-progress-bar-container">
-                            <div class="rts-progress-bar" id="rts-import-progress-bar">
+                            <div class="rts-progress-bar rts-progress-bar-green" id="rts-import-progress-bar">
                                 <div class="rts-progress-fill" style="width: 0%"></div>
                             </div>
                             <div class="rts-progress-text" id="rts-import-progress-text">
@@ -1198,7 +1347,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                             <span class="rts-progress-status" id="rts-scan-progress-status">Idle</span>
                         </div>
                         <div class="rts-progress-bar-container">
-                            <div class="rts-progress-bar" id="rts-scan-progress-bar">
+                            <div class="rts-progress-bar rts-progress-bar-green" id="rts-scan-progress-bar">
                                 <div class="rts-progress-fill" style="width: 0%"></div>
                             </div>
                             <div class="rts-progress-text" id="rts-scan-progress-text">
@@ -1253,7 +1402,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
             $links = [
                 'published'   => admin_url('edit.php?post_type=letter&post_status=publish'),
                 'inbox'       => admin_url('edit.php?post_type=letter&rts_inbox=1'),
-                'quarantined' => admin_url('edit.php?post_type=letter&post_status=pending&meta_key=needs_review&meta_value=1'),
+                'quarantined' => admin_url('edit.php?post_type=letter&post_status=rts-quarantine'),
                 'total'       => admin_url('edit.php?post_type=letter&all_posts=1'),
                 'feedback'    => admin_url('edit.php?post_type=letter&page=rts_feedback'),
             ];
@@ -1438,7 +1587,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			$args = [
 				'post_type'      => 'letter',
 				'posts_per_page' => $limit,
-				'post_status'    => ($mode === 'pending') ? 'pending' : ['publish','pending','draft'],
+				'post_status'    => ($mode === 'pending') ? 'pending' : (($mode === 'needs_review') ? 'rts-quarantine' : ['publish','pending','rts-quarantine']),
 				'orderby'        => 'date',
 				'order'          => 'DESC',
 				'no_found_rows'  => true,
@@ -1558,11 +1707,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 	                                        }
 	                                        $why = [];
 	                                        foreach ($reasons as $r) {
-	                                            if ($r === 'quarantine_flag') {
-	                                                $why[] = 'Quarantine flag';
-	                                                continue;
-	                                            }
-	                                            $why[] = ucfirst($r);
+	                                            $why[] = self::translate_flag_reason($r);
 	                                        }
 	                                        if (!empty($flags)) {
 	                                            $why[] = 'Matched: ' . implode(', ', array_slice($flags, 0, 5));
@@ -1617,90 +1762,371 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			<?php
 		}
 
-		private static function render_tab_analytics($agg): void {
-			?>
-			<div class="rts-card">
-				<h3 class="rts-section-title">Growth & Velocity</h3>
-                <div class="rts-grid" style="grid-template-columns: repeat(3, 1fr);">
-                    <div>
-                        <div class="rts-stat-label">Last 24 Hours</div>
-                        <div class="rts-stat-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_24h']??0))); ?></div>
-                        <div class="rts-stat-sub">New Letters</div>
-                    </div>
-                    <div>
-                        <div class="rts-stat-label">Last 7 Days</div>
-                        <div class="rts-stat-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_7d']??0))); ?></div>
-                        <div class="rts-stat-sub">New Letters</div>
-                    </div>
-                    <div>
-                        <div class="rts-stat-label">Last 30 Days</div>
-                        <div class="rts-stat-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_30d']??0))); ?></div>
-                        <div class="rts-stat-sub">New Letters</div>
-                    </div>
-                </div>
-            </div>
+	private static function render_tab_analytics($agg): void {
+		global $wpdb;
 
-            <div class="rts-grid">
-                <?php self::render_kv_box('Top Feelings', $agg['taxonomy_breakdown']['letter_feeling'] ?? []); ?>
-                <?php self::render_kv_box('Top Tones', $agg['taxonomy_breakdown']['letter_tone'] ?? []); ?>
-            </div>
-			<?php
-		}
+		// Get additional stats for enhanced dashboard
+		$letters = wp_count_posts('letter');
+		$published_count = (int) $letters->publish;
+		$pending_count = (int) $letters->pending;
+		
+		// Calculate acceptance rate
+		$total_submissions = $published_count + $pending_count;
+		$acceptance_rate = $total_submissions > 0 ? round(($published_count / $total_submissions) * 100, 1) : 0;
 
-		private static function render_kv_box(string $title, $data): void {
-			?>
-			<div class="rts-card">
-				<h3 class="rts-section-title"><?php echo esc_html($title); ?></h3>
+		// Get average quality score
+		$avg_quality = $wpdb->get_var("
+			SELECT AVG(CAST(meta_value AS DECIMAL(5,2))) 
+			FROM {$wpdb->postmeta} 
+			WHERE meta_key = 'quality_score' 
+			AND meta_value != ''
+		");
+		$avg_quality = $avg_quality ? round($avg_quality, 1) : 0;
+		?>
+		
+
+		<!-- Growth Velocity Cards -->
+		<div class="rts-analytics-grid-3">
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(33, 113, 177, 0.1);">
+					<span class="dashicons dashicons-clock" style="color: #2271b1;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">Last 24 Hours</div>
+					<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_24h']??0))); ?></div>
+					<div class="rts-analytics-sub">New Letters Submitted</div>
+				</div>
+			</div>
+
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(45, 127, 249, 0.1);">
+					<span class="dashicons dashicons-chart-line" style="color: #2d7ff9;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">Last 7 Days</div>
+					<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_7d']??0))); ?></div>
+					<div class="rts-analytics-sub">New Letters Submitted</div>
+				</div>
+			</div>
+
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(124, 77, 255, 0.1);">
+					<span class="dashicons dashicons-calendar-alt" style="color: #7c4dff;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">Last 30 Days</div>
+					<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int)($agg['velocity_30d']??0))); ?></div>
+					<div class="rts-analytics-sub">New Letters Submitted</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Quality Metrics -->
+		<h3 class="rts-section-title" style="margin-top: 30px; margin-bottom: 20px;">
+			<span class="dashicons dashicons-awards"></span> Quality Metrics
+		</h3>
+
+		<div class="rts-analytics-grid-3">
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(72, 187, 120, 0.1);">
+					<span class="dashicons dashicons-yes-alt" style="color: #48bb78;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">Acceptance Rate</div>
+					<div class="rts-analytics-value"><?php echo esc_html($acceptance_rate); ?>%</div>
+					<div class="rts-analytics-sub"><?php echo esc_html(number_format_i18n($published_count)); ?> of <?php echo esc_html(number_format_i18n($total_submissions)); ?> published</div>
+				</div>
+			</div>
+
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(252, 163, 17, 0.1);">
+					<span class="dashicons dashicons-star-filled" style="color: #FCA311;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">Average Quality Score</div>
+					<div class="rts-analytics-value"><?php echo esc_html($avg_quality); ?></div>
+					<div class="rts-analytics-sub">Out of 100</div>
+				</div>
+			</div>
+
+			<div class="rts-analytics-card">
+				<div class="rts-analytics-icon" style="background: rgba(214, 54, 56, 0.1);">
+					<span class="dashicons dashicons-shield" style="color: #d63638;"></span>
+				</div>
+				<div class="rts-analytics-content">
+					<div class="rts-analytics-label">In Quarantine</div>
+					<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n($pending_count)); ?></div>
+					<div class="rts-analytics-sub">Pending Review</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Taxonomy Breakdown -->
+		<h3 class="rts-section-title" style="margin-top: 30px; margin-bottom: 20px;">
+			<span class="dashicons dashicons-category"></span> Content Analysis
+		</h3>
+
+		<div class="rts-analytics-grid-2">
+			<?php self::render_analytics_box('Top Feelings', $agg['taxonomy_breakdown']['letter_feeling'] ?? [], 'dashicons-heart', '#e91e63'); ?>
+			<?php self::render_analytics_box('Top Tones', $agg['taxonomy_breakdown']['letter_tone'] ?? [], 'dashicons-admin-appearance', '#9c27b0'); ?>
+		</div>
+		<?php
+	}
+
+	private static function render_analytics_box(string $title, $data, string $icon, string $color): void {
+		?>
+		<div class="rts-analytics-box-card">
+			<div class="rts-analytics-box-header">
+				<span class="dashicons <?php echo esc_attr($icon); ?>" style="color: <?php echo esc_attr($color); ?>;"></span>
+				<h4><?php echo esc_html($title); ?></h4>
+			</div>
+			<div class="rts-analytics-box-content">
 				<?php if (empty($data) || !is_array($data)): ?>
-					<p style="color:#646970;">No data yet.</p>
+					<div class="rts-empty-state-small">
+						<span class="dashicons dashicons-chart-bar"></span>
+						<p>No data yet</p>
+					</div>
 				<?php else: ?>
-					<table class="widefat striped" style="margin:0; box-shadow:none; border:none;">
-						<tbody>
-							<?php foreach (array_slice($data, 0, 8) as $k => $v): ?>
-								<tr><td><?php echo esc_html((string) $k); ?></td><td style="width:60px; text-align:right;"><strong><?php echo esc_html(number_format_i18n((int) $v)); ?></strong></td></tr>
-							<?php endforeach; ?>
-						</tbody>
-					</table>
+					<div class="rts-analytics-list">
+						<?php foreach (array_slice($data, 0, 8) as $k => $v): ?>
+							<div class="rts-analytics-list-item">
+								<span class="rts-analytics-list-label"><?php echo esc_html((string) $k); ?></span>
+								<span class="rts-analytics-list-value"><?php echo esc_html(number_format_i18n((int) $v)); ?></span>
+							</div>
+						<?php endforeach; ?>
+					</div>
 				<?php endif; ?>
 			</div>
-			<?php
+		</div>
+		<?php
+	}
+
+	private static function render_kv_box(string $title, $data): void {
+		// Legacy function - keeping for backward compatibility
+		self::render_analytics_box($title, $data, 'dashicons-chart-bar', '#2271b1');
+	}
+
+	private static function render_tab_shares(): void {
+		global $wpdb;
+
+		// Get platform-specific share counts
+		$platforms = ['facebook', 'x', 'threads', 'whatsapp', 'reddit', 'copy', 'email'];
+		$platform_counts = [];
+		$total_shares = 0;
+
+		foreach ($platforms as $platform) {
+			$meta_key = 'rts_share_' . $platform;
+			$count = $wpdb->get_var($wpdb->prepare(
+				"SELECT SUM(CAST(meta_value AS UNSIGNED)) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+				$meta_key
+			));
+			$platform_counts[$platform] = intval($count);
+			$total_shares += intval($count);
 		}
 
-		private static function render_tab_shares(): void {
-			$daily = get_option('rts_daily_stats', []);
-            $total_shares = 0;
-            if (is_array($daily)) {
-                foreach($daily as $d) $total_shares += (int)($d['shares_total']??0);
-            }
-            
-            $offset_shares = (int) get_option(self::OPTION_OFFSET_SHARES, 0);
-            $display_total = $total_shares + $offset_shares;
-			?>
+		$offset_shares = (int) get_option(self::OPTION_OFFSET_SHARES, 0);
+		$display_total = $total_shares + $offset_shares;
+
+		// Platform display config
+		$platform_config = [
+			'facebook' => ['label' => 'Facebook', 'icon' => 'dashicons-facebook', 'color' => '#1877F2'],
+			'x' => ['label' => 'X (Twitter)', 'icon' => 'dashicons-twitter', 'color' => '#000000'],
+			'threads' => ['label' => 'Threads', 'icon' => 'dashicons-groups', 'color' => '#000000'],
+			'whatsapp' => ['label' => 'WhatsApp', 'icon' => 'dashicons-whatsapp', 'color' => '#25D366'],
+			'reddit' => ['label' => 'Reddit', 'icon' => 'dashicons-reddit', 'color' => '#FF4500'],
+			'copy' => ['label' => 'Copy Link', 'icon' => 'dashicons-admin-links', 'color' => '#6C757D'],
+			'email' => ['label' => 'Email', 'icon' => 'dashicons-email', 'color' => '#EA4335'],
+		];
+		?>
+		<div class="rts-share-engagement-wrapper">
+			<!-- Total Summary Card -->
 			<div class="rts-card">
-				<h3 class="rts-section-title">Share Engagement</h3>
-                <div class="rts-grid" style="grid-template-columns: 1fr 1fr;">
-                    <div>
-                        <div class="rts-stat-label">Total Shares (All Time)</div>
-                        <div class="rts-stat-value color-info"><?php echo esc_html(number_format_i18n($display_total)); ?></div>
-                        <div class="rts-stat-sub">
-                            Live: <?php echo $total_shares; ?> + Offset: <?php echo $offset_shares; ?>
-                        </div>
-                    </div>
-                    <div>
-                        <p style="color:#646970;">
-                            Shares are tracked when users click share buttons in the <code>[rts_letter_viewer]</code>.
-                            Data is aggregated daily.
-                        </p>
-                    </div>
-                </div>
-            </div>
-			<?php
-		}
+				<h3 class="rts-section-title">Share Engagement Overview</h3>
+				<div class="rts-share-total-stat">
+					<div class="rts-stat-label">Total Shares (All Platforms)</div>
+					<div class="rts-stat-value color-info"><?php echo esc_html(number_format_i18n($display_total)); ?></div>
+					<?php if ($offset_shares > 0): ?>
+					<div class="rts-stat-sub">
+						Live: <?php echo number_format_i18n($total_shares); ?> + Offset: <?php echo number_format_i18n($offset_shares); ?>
+					</div>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<!-- Platform Breakdown Cards -->
+			<h3 class="rts-section-title" style="margin-top: 30px; margin-bottom: 20px;">Platform Breakdown</h3>
+			<div class="rts-share-platform-grid">
+				<?php foreach ($platforms as $platform):
+					$config = $platform_config[$platform];
+					$count = $platform_counts[$platform];
+					$percentage = $total_shares > 0 ? round(($count / $total_shares) * 100, 1) : 0;
+				?>
+				<div class="rts-share-platform-card" data-platform="<?php echo esc_attr($platform); ?>">
+					<div class="rts-platform-header">
+						<span class="dashicons <?php echo esc_attr($config['icon']); ?>" style="color: <?php echo esc_attr($config['color']); ?>; font-size: 24px;"></span>
+						<h4 class="rts-platform-name"><?php echo esc_html($config['label']); ?></h4>
+					</div>
+					<div class="rts-platform-stats">
+						<div class="rts-platform-count"><?php echo number_format_i18n($count); ?></div>
+						<div class="rts-platform-percentage"><?php echo esc_html($percentage); ?>% of total</div>
+					</div>
+				</div>
+				<?php endforeach; ?>
+			</div>
+
+			<style>
+			.rts-share-engagement-wrapper {
+				max-width: 1200px;
+			}
+
+			.rts-share-total-stat {
+				text-align: center;
+				padding: 20px;
+			}
+
+			.rts-share-total-stat .rts-stat-label {
+				font-size: 1.1rem;
+				color: #646970;
+				margin-bottom: 10px;
+			}
+
+			.rts-share-total-stat .rts-stat-value {
+				font-size: 3rem;
+				font-weight: 700;
+				margin-bottom: 8px;
+			}
+
+			.rts-share-total-stat .rts-stat-sub {
+				font-size: 0.9rem;
+				color: #787C82;
+			}
+
+			.rts-share-platform-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+				gap: 20px;
+				margin-bottom: 30px;
+			}
+
+			.rts-share-platform-card {
+				background: #182437;
+				border: 2px solid #2A3B52;
+				border-radius: 12px;
+				padding: 24px;
+				transition: all 0.3s ease;
+				color: #F1E3D3;
+			}
+
+			.rts-share-platform-card:hover {
+				border-color: #FCA311;
+				transform: translateY(-4px);
+				box-shadow: 0 8px 16px rgba(252, 163, 17, 0.2);
+			}
+
+			.rts-platform-header {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				margin-bottom: 16px;
+				padding-bottom: 12px;
+				border-bottom: 2px solid rgba(252, 163, 17, 0.2);
+			}
+
+			.rts-platform-name {
+				margin: 0;
+				font-size: 1.1rem;
+				font-weight: 600;
+				color: #FCA311;
+			}
+
+			.rts-platform-stats {
+				text-align: center;
+			}
+
+			.rts-platform-count {
+				font-size: 2.4rem;
+				font-weight: 700;
+				color: #F1E3D3;
+				margin-bottom: 6px;
+			}
+
+			.rts-platform-percentage {
+				font-size: 0.95rem;
+				color: #A0A5AA;
+			}
+
+			/* Light mode adjustments */
+			body:not(.rts-dark-mode) .rts-share-platform-card {
+				background: #F9F9F9;
+				border-color: #DEDEDE;
+				color: #2A2A2A;
+			}
+
+			body:not(.rts-dark-mode) .rts-share-platform-card:hover {
+				border-color: #FCA311;
+				background: #FFFFFF;
+			}
+
+			body:not(.rts-dark-mode) .rts-platform-name {
+				color: #2A2A2A;
+			}
+
+			body:not(.rts-dark-mode) .rts-platform-count {
+				color: #2A2A2A;
+			}
+
+			body:not(.rts-dark-mode) .rts-platform-percentage {
+				color: #646970;
+			}
+
+			body:not(.rts-dark-mode) .rts-platform-header {
+				border-bottom-color: rgba(0, 0, 0, 0.1);
+			}
+
+			@media (max-width: 768px) {
+				.rts-share-platform-grid {
+					grid-template-columns: 1fr;
+				}
+
+				.rts-platform-count {
+					font-size: 2rem;
+				}
+			}
+			</style>
+		</div>
+		<?php
+	}
 
 
 private static function render_tab_feedback(): void {
+	global $wpdb;
+	
 	$count = wp_count_posts('rts_feedback');
 	$total = (int) ($count->publish ?? 0);
+
+	// Get feedback stats
+	$mood_stats = $wpdb->get_results("
+		SELECT meta_value as mood_change, COUNT(*) as count
+		FROM {$wpdb->postmeta}
+		WHERE meta_key = 'mood_change'
+		AND meta_value != ''
+		GROUP BY meta_value
+		ORDER BY count DESC
+	", ARRAY_A);
+
+	$triggered_count = $wpdb->get_var("
+		SELECT COUNT(*)
+		FROM {$wpdb->postmeta}
+		WHERE meta_key = 'triggered'
+		AND meta_value = '1'
+	");
+
+	$positive_count = $wpdb->get_var("
+		SELECT COUNT(*)
+		FROM {$wpdb->postmeta}
+		WHERE meta_key = 'rating'
+		AND meta_value IN ('up', 'neutral')
+	");
 
 	$items = get_posts([
 		'post_type'      => 'rts_feedback',
@@ -1710,23 +2136,111 @@ private static function render_tab_feedback(): void {
 		'order'          => 'DESC',
 		'no_found_rows'  => true,
 	]);
+
+	// Calculate mood improvement rate
+	$much_better = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'mood_change' AND meta_value = 'much_better'");
+	$little_better = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'mood_change' AND meta_value = 'little_better'");
+	$mood_total = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'mood_change' AND meta_value != ''");
+	$improvement_rate = $mood_total > 0 ? round((($much_better + $little_better) / $mood_total) * 100, 1) : 0;
 	?>
-	<div class="rts-card">
-		<h3 class="rts-section-title">Feedback Overview</h3>
-		<div class="rts-stat-value"><?php echo esc_html(number_format_i18n($total)); ?></div>
-		<div class="rts-stat-sub">Total Feedback Entries</div>
-		<br>
-		<a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_feedback')); ?>">View All Feedback</a>
+	
+	<!-- Feedback Overview Cards -->
+	<div class="rts-analytics-grid-4">
+		<div class="rts-analytics-card">
+			<div class="rts-analytics-icon" style="background: rgba(45, 127, 249, 0.1);">
+				<span class="dashicons dashicons-testimonial" style="color: #2d7ff9;"></span>
+			</div>
+			<div class="rts-analytics-content">
+				<div class="rts-analytics-label">Total Feedback</div>
+				<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n($total)); ?></div>
+				<div class="rts-analytics-sub">All time responses</div>
+			</div>
+		</div>
+
+		<div class="rts-analytics-card">
+			<div class="rts-analytics-icon" style="background: rgba(72, 187, 120, 0.1);">
+				<span class="dashicons dashicons-smiley" style="color: #48bb78;"></span>
+			</div>
+			<div class="rts-analytics-content">
+				<div class="rts-analytics-label">Mood Improvement</div>
+				<div class="rts-analytics-value"><?php echo esc_html($improvement_rate); ?>%</div>
+				<div class="rts-analytics-sub">Feel better after reading</div>
+			</div>
+		</div>
+
+		<div class="rts-analytics-card">
+			<div class="rts-analytics-icon" style="background: rgba(252, 163, 17, 0.1);">
+				<span class="dashicons dashicons-thumbs-up" style="color: #FCA311;"></span>
+			</div>
+			<div class="rts-analytics-content">
+				<div class="rts-analytics-label">Positive Ratings</div>
+				<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int)$positive_count)); ?></div>
+				<div class="rts-analytics-sub">Helpful responses</div>
+			</div>
+		</div>
+
+		<div class="rts-analytics-card">
+			<div class="rts-analytics-icon" style="background: rgba(214, 54, 56, 0.1);">
+				<span class="dashicons dashicons-warning" style="color: #d63638;"></span>
+			</div>
+			<div class="rts-analytics-content">
+				<div class="rts-analytics-label">Triggered Reports</div>
+				<div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int)$triggered_count)); ?></div>
+				<div class="rts-analytics-sub">Letters flagged unsafe</div>
+			</div>
+		</div>
 	</div>
 
-	<div class="rts-card">
-		<h3 class="rts-section-title">Latest Feedback (25)</h3>
-		<p class="description" style="margin-top:-6px;">Includes the “How did reading the letter make you feel?” mood-change metric.</p>
-		<table class="widefat striped" style="margin-top:10px;">
+	<!-- Mood Change Breakdown -->
+	<?php if (!empty($mood_stats)): ?>
+	<h3 class="rts-section-title" style="margin-top: 30px; margin-bottom: 20px;">
+		<span class="dashicons dashicons-heart"></span> Mood Change Distribution
+	</h3>
+	
+	<div class="rts-analytics-box-card" style="max-width: 600px;">
+		<div class="rts-analytics-box-content">
+			<div class="rts-mood-chart">
+				<?php 
+				$mood_labels = [
+					'much_better' => ['label' => '😊 Much Better', 'color' => '#48bb78'],
+					'little_better' => ['label' => '🙂 A Little Better', 'color' => '#90cdf4'],
+					'no_change' => ['label' => '😐 No Change', 'color' => '#a0aec0'],
+					'little_worse' => ['label' => '😟 A Little Worse', 'color' => '#fc8181'],
+					'much_worse' => ['label' => '😢 Much Worse', 'color' => '#f56565'],
+				];
+				
+				foreach ($mood_stats as $stat): 
+					$mood = $stat['mood_change'];
+					$count = (int) $stat['count'];
+					$percentage = $mood_total > 0 ? round(($count / $mood_total) * 100, 1) : 0;
+					$config = $mood_labels[$mood] ?? ['label' => ucfirst($mood), 'color' => '#64748b'];
+				?>
+					<div class="rts-mood-bar-item">
+						<div class="rts-mood-bar-label">
+							<span><?php echo esc_html($config['label']); ?></span>
+							<span class="rts-mood-bar-count"><?php echo esc_html(number_format_i18n($count)); ?> (<?php echo esc_html($percentage); ?>%)</span>
+						</div>
+						<div class="rts-mood-bar-track">
+							<div class="rts-mood-bar-fill" style="width: <?php echo esc_attr($percentage); ?>%; background: <?php echo esc_attr($config['color']); ?>;"></div>
+						</div>
+					</div>
+				<?php endforeach; ?>
+			</div>
+		</div>
+	</div>
+	<?php endif; ?>
+
+	<!-- Latest Feedback Table -->
+	<h3 class="rts-section-title" style="margin-top: 30px; margin-bottom: 20px;">
+		<span class="dashicons dashicons-list-view"></span> Latest Feedback (25)
+	</h3>
+
+	<div class="rts-feedback-table-card">
+		<table class="rts-feedback-table">
 			<thead>
 				<tr>
 					<th>Date</th>
-					<th>Letter ID</th>
+					<th>Letter</th>
 					<th>Rating</th>
 					<th>Mood Change</th>
 					<th>Triggered</th>
@@ -1735,7 +2249,14 @@ private static function render_tab_feedback(): void {
 			</thead>
 			<tbody>
 				<?php if (!$items): ?>
-					<tr><td colspan="6">No feedback yet.</td></tr>
+					<tr>
+						<td colspan="6">
+							<div class="rts-empty-state-small">
+								<span class="dashicons dashicons-testimonial"></span>
+								<p>No feedback yet</p>
+							</div>
+						</td>
+					</tr>
 				<?php else: foreach ($items as $p):
 					$letter_id    = (int) get_post_meta($p->ID, 'letter_id', true);
 					$rating       = (string) get_post_meta($p->ID, 'rating', true);
@@ -1743,24 +2264,66 @@ private static function render_tab_feedback(): void {
 					$triggered    = (string) get_post_meta($p->ID, 'triggered', true);
 					$comment      = (string) get_post_meta($p->ID, 'comment', true);
 					$letter_link  = $letter_id ? admin_url('post.php?post=' . $letter_id . '&action=edit') : '';
+					
+					$rating_icon = [
+						'up' => '👍',
+						'down' => '👎',
+						'neutral' => '🤷'
+					];
+					
+					$mood_emoji = [
+						'much_better' => '😊',
+						'little_better' => '🙂',
+						'no_change' => '😐',
+						'little_worse' => '😟',
+						'much_worse' => '😢'
+					];
 					?>
 					<tr>
-						<td><?php echo esc_html(get_date_from_gmt($p->post_date_gmt, 'Y-m-d H:i')); ?></td>
+						<td><span class="rts-date-badge"><?php echo esc_html(get_date_from_gmt($p->post_date_gmt, 'M j, Y')); ?></span></td>
 						<td>
 							<?php if ($letter_id && $letter_link): ?>
-								<a href="<?php echo esc_url($letter_link); ?>"><?php echo esc_html((string) $letter_id); ?></a>
+								<a href="<?php echo esc_url($letter_link); ?>" class="rts-letter-link">#<?php echo esc_html((string) $letter_id); ?></a>
 							<?php else: ?>
-								<?php echo $letter_id ? esc_html((string) $letter_id) : '<span class="description">(unknown)</span>'; ?>
+								<span style="color: #a0aec0;">—</span>
 							<?php endif; ?>
 						</td>
-						<td><?php echo esc_html($rating ?: ''); ?></td>
-						<td><?php echo esc_html($mood_change ?: ''); ?></td>
-						<td><?php echo esc_html($triggered ?: ''); ?></td>
-						<td><?php echo esc_html(mb_strimwidth($comment, 0, 120, '…')); ?></td>
+						<td>
+							<span class="rts-rating-badge rts-rating-<?php echo esc_attr($rating); ?>">
+								<?php echo $rating_icon[$rating] ?? '—'; ?> <?php echo esc_html(ucfirst($rating)); ?>
+							</span>
+						</td>
+						<td>
+							<span class="rts-mood-badge">
+								<?php echo $mood_emoji[$mood_change] ?? ''; ?> <?php echo esc_html(str_replace('_', ' ', ucfirst($mood_change))); ?>
+							</span>
+						</td>
+						<td>
+							<?php if ($triggered === '1'): ?>
+								<span class="rts-triggered-badge">⚠️ Yes</span>
+							<?php else: ?>
+								<span style="color: #a0aec0;">No</span>
+							<?php endif; ?>
+						</td>
+						<td>
+							<?php if ($comment): ?>
+								<div class="rts-comment-preview" title="<?php echo esc_attr($comment); ?>">
+									<?php echo esc_html(wp_trim_words($comment, 8)); ?>
+								</div>
+							<?php else: ?>
+								<span style="color: #a0aec0;">—</span>
+							<?php endif; ?>
+						</td>
 					</tr>
 				<?php endforeach; endif; ?>
 			</tbody>
 		</table>
+	</div>
+
+	<div style="margin-top: 20px;">
+		<a class="button button-primary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_feedback')); ?>">
+			<span class="dashicons dashicons-external" style="margin-top: 3px;"></span> View All Feedback
+		</a>
 	</div>
 	<?php
 }
@@ -1774,6 +2337,19 @@ private static function render_tab_settings(): void {
             
             $off_letters  = (int) get_option(self::OPTION_OFFSET_LETTERS, 0);
             $off_shares   = (int) get_option(self::OPTION_OFFSET_SHARES, 0);
+
+            // Frontend stats overrides (used by [rts_site_stats_row])
+            $frontend_overrides = get_option('rts_stats_override', []);
+            if (!is_array($frontend_overrides)) {
+                $frontend_overrides = [];
+            }
+            $frontend_overrides = wp_parse_args($frontend_overrides, [
+                'enabled' => 0,
+                'letters_delivered' => 0,
+                'letters_submitted' => 0,
+                'helps' => 0,
+                'feel_better_percent' => '',
+            ]);
 			?>
 			<div class="rts-card" style="max-width:800px;">
 				<h3 class="rts-section-title">Engine Configuration</h3>
@@ -1843,20 +2419,82 @@ private static function render_tab_settings(): void {
 							<td><input type="number" name="<?php echo esc_attr(self::OPTION_MIN_QUALITY); ?>" value="<?php echo esc_attr((string) $min_quality); ?>" class="small-text"> <p class="description">Letters below this score are quarantined.</p></td>
 						</tr>
                         
-                        <tr><td colspan="2"><hr><strong>Live Stats Overrides (Offsets)</strong></td></tr>
+                        <tr><td colspan="2"><hr><strong>Frontend Stats Overrides (for [rts_site_stats_row])</strong></td></tr>
                         <tr>
-                            <th scope="row">Letter Count Offset</th>
+                            <th scope="row">Enable Offsets</th>
                             <td>
-                                <input type="number" name="<?php echo esc_attr(self::OPTION_OFFSET_LETTERS); ?>" value="<?php echo esc_attr((string) $off_letters); ?>" class="regular-text">
-                                <p class="description">Added to the "Live" total. Use this to include legacy counts not in DB.</p>
+                                <label><input type="checkbox" name="rts_stats_override[enabled]" value="1" <?php checked(!empty($frontend_overrides['enabled'])); ?>> Enable migration offsets for frontend stats</label>
+                                <p class="description">When enabled, the offsets below are added to live stats shown to site visitors.</p>
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row">Share Count Offset</th>
+                            <th scope="row">Letters Delivered Offset</th>
                             <td>
-                                <input type="number" name="<?php echo esc_attr(self::OPTION_OFFSET_SHARES); ?>" value="<?php echo esc_attr((string) $off_shares); ?>" class="regular-text">
-                                <p class="description">Added to the "Total Shares" count.</p>
+                                <input type="number" name="rts_stats_override[letters_delivered]" value="<?php echo esc_attr((string) intval($frontend_overrides['letters_delivered'])); ?>" class="regular-text">
+                                <p class="description">Added to total letters delivered count (view_count sum).</p>
                             </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">Letters Submitted Offset</th>
+                            <td>
+                                <input type="number" name="rts_stats_override[letters_submitted]" value="<?php echo esc_attr((string) intval($frontend_overrides['letters_submitted'])); ?>" class="regular-text">
+                                <p class="description">Added to total submitted letters count (published + pending).</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Helped" Count Offset</th>
+                            <td>
+                                <input type="number" name="rts_stats_override[helps]" value="<?php echo esc_attr((string) intval($frontend_overrides['helps'])); ?>" class="regular-text">
+                                <p class="description">Added to total "helpful" responses (affects feel better percentage).</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">Override Feel Better %</th>
+                            <td>
+                                <input type="number" name="rts_stats_override[feel_better_percent]" value="<?php echo esc_attr($frontend_overrides['feel_better_percent']); ?>" class="small-text" min="0" max="100" step="1"> %
+                                <p class="description">If set (0-100), this overrides the calculated percentage. Leave blank to use calculated value.</p>
+                            </td>
+                        </tr>
+
+                        <tr><td colspan="2"><hr><strong>Email Notifications</strong></td></tr>
+                        <tr>
+                            <th scope="row">Enable Notifications</th>
+                            <td>
+                                <label><input type="checkbox" name="rts_email_notifications_enabled" value="1" <?php checked(get_option('rts_email_notifications_enabled', '1')); ?>> Send email alerts for feedback and reports</label>
+                                <p class="description">When enabled, admins receive emails when users submit feedback or report triggering letters.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">Admin Email</th>
+                            <td>
+                                <input type="email" name="rts_admin_notification_email" value="<?php echo esc_attr(get_option('rts_admin_notification_email', get_option('admin_email'))); ?>" class="regular-text">
+                                <p class="description">Primary email address for moderation notifications. Defaults to WordPress admin email.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">CC Email (Optional)</th>
+                            <td>
+                                <input type="email" name="rts_cc_notification_email" value="<?php echo esc_attr(get_option('rts_cc_notification_email', '')); ?>" class="regular-text">
+                                <p class="description">Additional email address to CC on notifications. Leave blank if not needed.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">Notification Types</th>
+                            <td>
+                                <label style="display: block; margin-bottom: 8px;">
+                                    <input type="checkbox" name="rts_notify_on_feedback" value="1" <?php checked(get_option('rts_notify_on_feedback', '1')); ?>>
+                                    Notify on all feedback submissions
+                                </label>
+                                <label style="display: block; margin-bottom: 8px;">
+                                    <input type="checkbox" name="rts_notify_on_triggered" value="1" <?php checked(get_option('rts_notify_on_triggered', '1')); ?>>
+                                    Notify when letter is reported as triggering (urgent)
+                                </label>
+                                <label style="display: block;">
+                                    <input type="checkbox" name="rts_notify_on_negative" value="1" <?php checked(get_option('rts_notify_on_negative', '0')); ?>>
+                                    Notify on negative feedback (👎 "Didn't help")
+                                </label>
+                            </td>
+                        </tr>
                         </tr>
 					</table>
 					<?php submit_button('Save Settings'); ?>
@@ -1968,7 +2606,20 @@ private static function render_tab_settings(): void {
 				wp_safe_redirect(add_query_arg('rts_msg', 'import_move_failed', self::url_for_tab('system'))); exit;
 			}
 
-			$res = RTS_Import_Orchestrator::start_import($dest);
+			// Use streaming importer for large files (>10MB)
+			$filesize = (int) @filesize($dest);
+			if ($filesize > 10 * 1024 * 1024 && class_exists('RTS_Streaming_Importer')) {
+				$res = RTS_Streaming_Importer::start_import($dest);
+			} else {
+				// Use streaming importer for large files (>10MB)
+			$filesize = (int) @filesize($dest);
+			if ($filesize > 10 * 1024 * 1024 && class_exists('RTS_Streaming_Importer')) {
+				$res = RTS_Streaming_Importer::start_import($dest);
+			} else {
+				$res = RTS_Import_Orchestrator::start_import($dest);
+			}
+			}
+
 
 			if (empty($res['ok'])) {
 				wp_safe_redirect(add_query_arg('rts_msg', 'import_failed', self::url_for_tab('system'))); exit;
@@ -1977,25 +2628,74 @@ private static function render_tab_settings(): void {
 			wp_safe_redirect(add_query_arg('rts_msg', 'import_started', self::url_for_tab('system'))); exit;
 		}
 
-		public static function handle_export_download(): void {
-			if (!current_user_can('manage_options')) { wp_die('Access denied'); }
-			check_admin_referer('rts_export_letters');
+	public static function handle_export_download(): void {
+		if (!current_user_can('manage_options')) { wp_die('Access denied'); }
+		check_admin_referer('rts_export_letters');
 
-			$status = isset($_POST['status']) ? sanitize_key((string) $_POST['status']) : 'publish';
-			$allowed = ['publish','pending','any'];
-			if (!in_array($status, $allowed, true)) $status = 'publish';
+		// Increase limits for large exports
+		@ini_set('memory_limit', '512M');
+		@set_time_limit(300); // 5 minutes
 
-			$args = [
-				'post_type' => 'letter',
-				'post_status' => ($status === 'any') ? ['publish','pending','draft','private','future'] : [$status],
-				'posts_per_page' => -1,
-				'orderby' => 'date',
-				'order' => 'ASC',
-				'fields' => 'ids',
-				'no_found_rows' => true,
-			];
+		// Clean all output buffers to prevent stuck exports
+		while (ob_get_level()) {
+			ob_end_clean();
+		}
 
-			$ids = get_posts($args);
+		$status = isset($_POST['status']) ? sanitize_key((string) $_POST['status']) : 'publish';
+		$allowed = ['publish','pending','any'];
+		if (!in_array($status, $allowed, true)) $status = 'publish';
+
+		$args = [
+			'post_type' => 'letter',
+			'post_status' => ($status === 'any') ? ['publish','pending','rts-quarantine','private','future'] : [$status],
+			'posts_per_page' => -1,
+			'orderby' => 'date',
+			'order' => 'ASC',
+			'fields' => 'ids',
+			'no_found_rows' => true,
+		];
+
+		$ids = get_posts($args);
+		$filename = 'rts_letters_' . $status . '_' . gmdate('Ymd_His') . '.json';
+
+		// Send headers early
+		nocache_headers();
+		header('Content-Type: application/json; charset=' . get_option('blog_charset'));
+		header('Content-Disposition: attachment; filename=' . $filename);
+		header('X-Accel-Buffering: no'); // Disable proxy buffering
+
+		// For large exports, stream the JSON instead of building in memory
+		$total = count($ids);
+		if ($total > 1000) {
+			// Stream large exports
+			echo "[\n";
+			$count = 0;
+			foreach ($ids as $id) {
+				$id = (int) $id;
+				$item = [
+					'id' => $id,
+					'title' => get_the_title($id),
+					'content' => (string) get_post_field('post_content', $id),
+					'status' => get_post_status($id),
+					'date_gmt' => get_post_field('post_date_gmt', $id),
+					'submission_ip' => (string) get_post_meta($id, 'rts_submission_ip', true),
+				];
+
+				if ($count > 0) echo ",\n";
+				echo wp_json_encode($item, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+				$count++;
+
+				// Flush every 100 items to prevent buffer overflow
+				if ($count % 100 === 0) {
+					flush();
+					if (function_exists('wp_ob_end_flush_all')) {
+						wp_ob_end_flush_all();
+					}
+				}
+			}
+			echo "\n]";
+		} else {
+			// Small exports - build array and encode normally
 			$out = [];
 			foreach ($ids as $id) {
 				$id = (int) $id;
@@ -2008,15 +2708,12 @@ private static function render_tab_settings(): void {
 					'submission_ip' => (string) get_post_meta($id, 'rts_submission_ip', true),
 				];
 			}
-
-			$filename = 'rts_letters_' . $status . '_' . gmdate('Ymd_His') . '.json';
-
-			nocache_headers();
-			header('Content-Type: application/json; charset=' . get_option('blog_charset'));
-			header('Content-Disposition: attachment; filename=' . $filename);
 			echo wp_json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-			exit;
 		}
+
+		flush();
+		exit;
+	}
 		public static function handle_post_action(): void {
 			if (!current_user_can('manage_options')) wp_die('Access denied');
 			check_admin_referer('rts_dashboard_action');
@@ -2052,30 +2749,80 @@ private static function render_tab_settings(): void {
 		}
         
         // AJAX Handler: Start Scan
-        public static function ajax_start_scan(): void {
-            check_ajax_referer('rts_dashboard_nonce', 'nonce');
-            
+
+        public static function ajax_start_scan() {
+            // Security checks
             if (!current_user_can('manage_options')) {
-                wp_die('Unauthorized', 403);
+                wp_send_json_error(['message' => 'Permission denied']);
             }
-            
-            $scan_type = sanitize_key($_POST['scan_type'] ?? 'inbox');
-            
-            // Start the scan
+		// NOTE: Keep this nonce action aligned with the dashboard JS payload.
+		// Other dashboard actions already use 'rts_dashboard_nonce'.
+		check_ajax_referer('rts_dashboard_nonce', 'nonce');
+
+            $scan_type = isset($_POST['scan_type']) ? sanitize_text_field($_POST['scan_type']) : 'inbox';
+            if (!in_array($scan_type, ['inbox', 'quarantine'], true)) {
+                $scan_type = 'inbox';
+            }
+
+            // Mark scan state
+            update_option('rts_active_scan', [
+                'type'       => $scan_type,
+                'started_at' => time(),
+                'status'     => 'running'
+            ]);
+
+            // Clear diagnostic log for a fresh run
+            delete_option('rts_diag_log');
+
+            // Always reset throttling so the pump starts immediately
+            update_option('rts_scan_queued_ts', time());
+
+            $queued = 0;
+
+            // Queue items based on requested scan type.
             if ($scan_type === 'inbox') {
-                self::queue_rescan_pending_and_review();
-                $message = 'Inbox scan started';
+                // Pending + needs_review (inbox + quarantine)
+                $queued = (int) self::queue_rescan_pending_and_review();
             } else {
-                // Queue quarantine rescan
-                $batch = (int) get_option(self::OPTION_AUTO_BATCH, 50);
-                $batch = max(1, min(200, $batch));
-                
-                // Use the new pump logic instead of older loops
-                self::schedule_scan_pump();
-                $message = 'Scan pump started';
+                // Quarantine-only rescan: needs_review = 1 (pending + draft), seed one batch now.
+$batch = (int) get_option(self::OPTION_AUTO_BATCH, 100);
+
+$q = new \WP_Query([
+    'post_type'      => 'letter',
+    'post_status'    => ['pending', 'rts-quarantine'],
+    'posts_per_page' => $batch,
+    'fields'         => 'ids',
+    'no_found_rows'  => true,
+    'orderby'        => 'date',
+    'order'          => 'ASC',
+    'meta_query'     => [
+        [
+            'key'     => 'needs_review',
+            'value'   => '1',
+            'compare' => '='
+        ]
+    ],
+]);
+
+if (!empty($q->posts)) {
+    foreach ($q->posts as $pid) {
+        self::queue_letter_scan((int) $pid);
+        $queued++;
+    }
+}
+wp_reset_postdata();
             }
-            
-            wp_send_json_success($message);
+
+            // Kick the pump (Action Scheduler)
+            self::schedule_scan_pump(true);
+
+            wp_send_json_success([
+                'message'   => ($scan_type === 'quarantine')
+                    ? 'Quarantine rescan queued and started.'
+                    : 'Inbox scan queued and started.',
+                'scan_type' => $scan_type,
+                'queued'    => $queued
+            ]);
         }
 
         // AJAX Handler: Process Single Letter
@@ -2155,18 +2902,87 @@ private static function render_tab_settings(): void {
 	            wp_send_json_success(['approved' => $approved]);
 	        }
 
+	        /**
+	         * Cancel/clear stuck import
+	         */
+	        public static function ajax_cancel_import(): void {
+	            check_ajax_referer('rts_dashboard_nonce', 'nonce');
+	            if (!current_user_can('manage_options')) {
+	                wp_die('Unauthorized', 403);
+	            }
+
+	            // Clear import job status
+	            delete_option('rts_import_job_status');
+
+	            // Cancel all pending import batch jobs (try multiple hook names)
+	            if (function_exists('as_unschedule_all_actions')) {
+	                as_unschedule_all_actions('rts_import_batch', [], 'rts');
+	                as_unschedule_all_actions('rts_batch_import', [], 'rts');
+	                as_unschedule_all_actions('rts_process_letter_batch', [], 'rts');
+	            }
+
+	            // Clear transients
+	            delete_transient('rts_import_in_progress');
+	            delete_transient('rts_import_offset');
+	            delete_transient('rts_import_total');
+
+	            // Clear uploaded file path if exists
+	            delete_option('rts_import_file_path');
+
+	            // Clear any stuck Action Scheduler claims and reset stuck actions
+	            global $wpdb;
+	            $wpdb->query("DELETE FROM {$wpdb->prefix}actionscheduler_claims WHERE action_id IN (SELECT action_id FROM {$wpdb->prefix}actionscheduler_actions WHERE hook LIKE 'rts_%' AND status IN ('in-progress', 'pending'))");
+	            $wpdb->query("UPDATE {$wpdb->prefix}actionscheduler_actions SET status = 'failed' WHERE hook LIKE 'rts_%' AND status = 'in-progress'");
+
+	            RTS_Scan_Diagnostics::log('import_canceled', ['user' => wp_get_current_user()->user_login]);
+	            wp_send_json_success('Import canceled and queue cleared. You can now start a fresh import.');
+	        }
+
+		        /**
+		         * Return the diagnostics log tail for the admin dashboard.
+		         * JS polls this endpoint; keep the response JSON and stable.
+		         */
+		        public static function ajax_diag_log_tail(): void {
+		            check_ajax_referer('rts_dashboard_nonce', 'nonce');
+		            if (!current_user_can('manage_options')) {
+		                wp_die('Unauthorized', 403);
+		            }
+
+		            $tail = RTS_Scan_Diagnostics::get_log();
+		            if (!is_array($tail)) {
+		                $tail = [];
+		            }
+
+		            wp_send_json_success(['tail' => array_values($tail)]);
+		        }
+
+		        /**
+		         * Clear the diagnostics log.
+		         */
+		        public static function ajax_diag_reset(): void {
+		            check_ajax_referer('rts_dashboard_nonce', 'nonce');
+		            if (!current_user_can('manage_options')) {
+		                wp_die('Unauthorized', 403);
+		            }
+		
+		            RTS_Scan_Diagnostics::reset();
+		            wp_send_json_success(['reset' => true]);
+		        }
+
 		
         public static function queue_letter_scan(int $post_id): void {
             if (get_post_type($post_id) !== 'letter') return;
-
-            update_post_meta($post_id, 'rts_scan_queued_gmt', gmdate('c'));
-            update_post_meta($post_id, 'rts_scan_queued_ts', (string) time());
-
+            // Mark this letter as recently queued so the pump doesn't re-enqueue it immediately
+            update_post_meta($post_id, 'rts_scan_queued_ts', time());
+                // CRITICAL FIX #2: Removed duplicate queue check to prevent zombie queue
+                // Old code prevented re-queueing letters that were already scheduled
+                // but stuck/failed, causing the "zombie queue" where letters showed
+                // as "processing" but never actually processed. Now we allow re-queueing.
+                // DISABLED: if (function_exists('as_has_scheduled_action') && as_has_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
+                //     RTS_Scan_Diagnostics::log('enqueue_skip_already_scheduled', ['post_id' => $post_id]);
+                //     return;
+                // }
             if (rts_as_available()) {
-                if (function_exists('as_has_scheduled_action') && as_has_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
-                    RTS_Scan_Diagnostics::log('enqueue_skip_already_scheduled', ['post_id' => $post_id]);
-                    return;
-                }
                 as_schedule_single_action(time() + 2, 'rts_process_letter', [$post_id], 'rts');
                 RTS_Scan_Diagnostics::log('enqueue_letter', ['post_id' => $post_id, 'via' => 'action_scheduler']);
                 return;
@@ -2178,12 +2994,12 @@ private static function render_tab_settings(): void {
             }
         }
 
-		private static function queue_rescan_pending_and_review(): void {
+		private static function queue_rescan_pending_and_review(): int {
             $batch = (int) get_option(self::OPTION_AUTO_BATCH, 100);
 
             $q_args = [
                 'post_type'      => 'letter',
-                'post_status'    => 'pending',
+                'post_status' => ['pending','rts-quarantine'],
                 'posts_per_page' => $batch,
                 'fields'         => 'ids',
                 'orderby'        => 'date',
@@ -2210,9 +3026,9 @@ private static function render_tab_settings(): void {
             self::schedule_scan_pump();
         }
         
-        private static function schedule_scan_pump(): void {
+        private static function schedule_scan_pump(bool $force = false): void {
             if (!rts_as_available()) return;
-            if (function_exists('as_has_scheduled_action') && as_has_scheduled_action('rts_scan_pump', [], 'rts')) return;
+            if (function_exists('as_has_scheduled_action') && as_has_scheduled_action('rts_scan_pump', [], 'rts') && !$force) return;
 
             as_schedule_single_action(time() + 15, 'rts_scan_pump', [], 'rts');
             RTS_Scan_Diagnostics::log('pump_scheduled', ['run_in_sec' => 15]);
@@ -2750,8 +3566,8 @@ if (!class_exists('RTS_Auto_Processor')) {
             $pending = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type=%s AND post_status=%s", 'letter', 'pending'));
 			
             if (self::turbo_scope() === 'both') {
-				// Re-using the needs review count method
-                $pending += (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = %s AND pm.meta_value = %s AND p.post_type = %s", 'needs_review', '1', 'letter'));
+				// Include quarantined letters (draft status with needs_review flag)
+                $pending += (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = %s AND pm.meta_value = %s AND p.post_type = %s AND p.post_status = %s", 'needs_review', '1', 'letter', 'rts-quarantine'));
 			}
 			return $pending;
 		}
@@ -2790,7 +3606,7 @@ if (!class_exists('RTS_Auto_Processor')) {
 			// Only schedule actions; Action Scheduler runner will execute.
 			$q = new \WP_Query([
 				'post_type'      => 'letter',
-				'post_status'    => ['pending', 'draft'],
+				'post_status'    => ['pending', 'rts-quarantine'],
 				'fields'         => 'ids',
 				'posts_per_page' => $limit,
 				'orderby'        => 'date',
@@ -2867,6 +3683,7 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 			RTS_Engine_Dashboard::init();
 			RTS_Auto_Processor::init();
 			add_action('init', [__CLASS__, 'schedule_daily_analytics'], 20);
+			add_action('init', [__CLASS__, 'migrate_quarantine_to_draft_status'], 5);
 		}
 
 		public static function handle_process_letter($post_id): void { RTS_Moderation_Engine::process_letter((int) $post_id); }
@@ -2893,7 +3710,8 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
             if ($is_triggering === '1' || $is_triggering === 'yes') {
 				update_post_meta($letter_id, 'needs_review', '1');
 				update_post_meta($letter_id, 'rts_feedback_flag', 'user_report');
-                wp_update_post(['ID' => $letter_id, 'post_status' => 'pending']);
+                // Set to draft status for quarantine
+                wp_update_post(['ID' => $letter_id, 'post_status' => 'rts-quarantine']);
             }
 		}
 
@@ -2902,6 +3720,59 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 			if (as_next_scheduled_action('rts_aggregate_analytics', [], self::GROUP)) return;
 			if (function_exists('as_schedule_recurring_action')) as_schedule_recurring_action(strtotime('tomorrow 02:00'), DAY_IN_SECONDS, 'rts_aggregate_analytics', [], self::GROUP);
             else as_schedule_single_action(strtotime('tomorrow 02:00'), 'rts_aggregate_analytics', [], self::GROUP);
+		}
+
+		/**
+		 * One-time migration: Convert quarantined letters to 'rts-quarantine' status.
+		 * Migrates from both 'pending' and 'draft' with needs_review=1
+		 * This fixes the overlap between inbox/draft and quarantine.
+		 * Runs once and sets a flag to never run again.
+		 */
+		public static function migrate_quarantine_to_draft_status(): void {
+			// Check if migration already ran
+			if (get_option('rts_quarantine_migration_v3_3_0_done')) {
+				return;
+			}
+
+			global $wpdb;
+			
+			// Find all pending OR draft letters with needs_review=1 (these are quarantined)
+			$quarantined_ids = $wpdb->get_col($wpdb->prepare(
+				"SELECT DISTINCT p.ID 
+				 FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+				 WHERE p.post_type = %s
+				   AND p.post_status IN ('pending', 'draft')
+				   AND pm.meta_key = %s
+				   AND pm.meta_value = %s",
+				'letter',
+				'needs_review',
+				'1'
+			));
+
+			// Update them to rts-quarantine status
+			$updated = 0;
+			foreach ($quarantined_ids as $letter_id) {
+				$result = wp_update_post([
+					'ID' => (int) $letter_id,
+					'post_status' => 'rts-quarantine'
+				], true);
+				
+				if (!is_wp_error($result)) {
+					$updated++;
+				}
+			}
+
+			// Set flag so we never run this again
+			update_option('rts_quarantine_migration_v3_3_0_done', true, false);
+
+			// Log the migration for debugging
+			if ($updated > 0) {
+				error_log(sprintf(
+					'RTS: Migrated %d quarantined letters to rts-quarantine status',
+					$updated
+				));
+			}
 		}
 
         public static function cron_schedules(array $schedules): array {

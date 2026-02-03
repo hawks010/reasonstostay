@@ -56,6 +56,8 @@ class RTS_CPT_Letters_System {
         add_action('admin_post_rts_rescan_letters', [$this, 'handle_rescan_letters']);
         // Back-compat: analytics header button (Scan Pending & Quarantine)
         add_action('admin_post_rts_rescan_pending_letters', [$this, 'handle_rescan_pending_letters']);
+        // Quick unflag from edit screen
+        add_action('admin_post_rts_quick_unflag', [$this, 'handle_quick_unflag']);
         
         // Smart filters
         add_action('restrict_manage_posts', [$this, 'add_smart_filters']);
@@ -88,7 +90,14 @@ class RTS_CPT_Letters_System {
             'labels' => [
                 'name' => 'Letters',
                 'singular_name' => 'Letter',
-                'add_new' => 'Add New',
+                'add_new' => 'Add Letter',
+                'add_new_item' => 'Add New Letter',
+                'edit_item' => 'Edit Letter',
+                'new_item' => 'New Letter',
+                'view_item' => 'View Letter',
+                'search_items' => 'Search Letters',
+                'not_found' => 'No letters found',
+                'not_found_in_trash' => 'No letters found in Trash',
                 'menu_name' => 'Letters'
             ],
             'public' => true,
@@ -100,6 +109,21 @@ class RTS_CPT_Letters_System {
             // CRITICAL FIX: map_meta_cap is required for capability_type='post' to work correctly
             // This ensures 'delete_post' maps to 'delete_posts' so admins can actually Trash items.
             'map_meta_cap' => true,
+        ]);
+        
+        // Register custom post status for quarantine (completely separate from WP's draft)
+        register_post_status('rts-quarantine', [
+            'label'                     => _x('Quarantined', 'post status', 'rts'),
+            'public'                    => false,
+            'internal'                  => true,
+            'exclude_from_search'       => true,
+            'show_in_admin_all_list'    => true,
+            'show_in_admin_status_list' => true,
+            'label_count'               => _n_noop(
+                'Quarantined <span class="count">(%s)</span>',
+                'Quarantined <span class="count">(%s)</span>',
+                'rts'
+            ),
         ]);
     }
     
@@ -148,6 +172,16 @@ class RTS_CPT_Letters_System {
             'letter',
             'side',
             'default'
+        );
+        
+        // Quick approve/unflag meta box (only shows for quarantined letters)
+        add_meta_box(
+            'rts_quick_approve',
+            'Quarantine Status',
+            [$this, 'render_quick_approve_box'],
+            'letter',
+            'side',
+            'high'
         );
     }
 
@@ -234,6 +268,58 @@ class RTS_CPT_Letters_System {
     }
 
     /**
+     * Render Quick Approve Box for Quarantined Letters
+     */
+    public function render_quick_approve_box($post) {
+        $needs_review = get_post_meta($post->ID, 'needs_review', true);
+        $is_quarantined = ($needs_review === '1' && $post->post_status === 'draft');
+        
+        if (!$is_quarantined) {
+            echo '<p style="color:#155724;background:#d4edda;padding:10px;border-radius:4px;margin:0;">✓ This letter is not quarantined.</p>';
+            return;
+        }
+        
+        $flag_reasons = get_post_meta($post->ID, 'rts_flag_reasons', true);
+        $reasons = $flag_reasons ? json_decode($flag_reasons, true) : [];
+        
+        echo '<div style="background:#fff3cd;padding:10px;border-left:3px solid #856404;margin-bottom:10px;">';
+        echo '<p style="margin:0 0 5px 0;font-weight:600;color:#856404;">⚠ Quarantined</p>';
+        
+        if (!empty($reasons)) {
+            echo '<p style="margin:0;font-size:12px;color:#666;">Flagged for:</p>';
+            echo '<ul style="margin:5px 0 0 0;padding-left:20px;font-size:11px;color:#666;">';
+            foreach (array_slice($reasons, 0, 5) as $reason) {
+                echo '<li>' . esc_html($reason) . '</li>';
+            }
+            if (count($reasons) > 5) {
+                echo '<li><em>+' . (count($reasons) - 5) . ' more...</em></li>';
+            }
+            echo '</ul>';
+        }
+        echo '</div>';
+        
+        // Quick approve button
+        $approve_url = wp_nonce_url(
+            admin_url('admin-post.php?action=rts_quick_unflag&post=' . $post->ID),
+            'unflag_' . $post->ID
+        );
+        
+        echo '<a href="' . esc_url($approve_url) . '" class="button button-primary" style="width:100%;text-align:center;margin-bottom:8px;">';
+        echo '✓ Clear Quarantine & Re-scan';
+        echo '</a>';
+        
+        echo '<p style="font-size:11px;color:#666;margin:8px 0 0 0;line-height:1.4;">';
+        echo 'This will clear the quarantine flag, set status to pending, and queue the letter for a fresh scan.';
+        echo '</p>';
+        
+        echo '<hr style="margin:12px 0;border:0;border-top:1px solid #ddd;">';
+        
+        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=draft&meta_key=needs_review&meta_value=1')) . '" class="button" style="width:100%;text-align:center;">';
+        echo 'View All Quarantined';
+        echo '</a>';
+    }
+
+    /**
      * Helper: Generate consistent cache key
      */
     private function get_cache_key($type) {
@@ -266,12 +352,12 @@ class RTS_CPT_Letters_System {
                          LEFT JOIN {$wpdb->postmeta} q ON p.ID = q.post_id AND q.meta_key = %s
                          LEFT JOIN {$wpdb->postmeta} n ON p.ID = n.post_id AND n.meta_key = %s
                          WHERE p.post_type = %s
-                         AND p.post_status = %s -- Count quarantine only (pending + flagged)
+                         AND p.post_status = %s -- Quarantine uses draft status
                          AND (
                             (n.meta_value = %s)
                             OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
                          )",
-                        'quality_score', 'needs_review', 'letter', 'pending', '1', $min_score
+                        'quality_score', 'needs_review', 'letter', 'rts-quarantine', '1', $min_score
                     );
                     break;
                 case 'flagged':
@@ -308,17 +394,18 @@ class RTS_CPT_Letters_System {
         if (!is_admin()) return;
         if (!current_user_can('manage_options')) return;
         if (!$this->is_letters_screen()) return;
-
-        // Prefer cached stats from the moderation engine (daily), fall back to quick live counts.
-        $stats = get_option('rts_aggregated_stats', []);
-        if (!is_array($stats)) $stats = [];
-
-        $letters_total     = isset($stats['letters_total']) ? (int) $stats['letters_total'] : (int) wp_count_posts('letter')->publish + (int) wp_count_posts('letter')->pending;
-        $letters_published = isset($stats['letters_published']) ? (int) $stats['letters_published'] : (int) wp_count_posts('letter')->publish;
-        $letters_pending   = isset($stats['letters_pending']) ? (int) $stats['letters_pending'] : (int) wp_count_posts('letter')->pending;
-        $needs_review      = isset($stats['letters_needs_review']) ? (int) $stats['letters_needs_review'] : $this->count_needs_review_live();
-        $feedback_total    = isset($stats['feedback_total']) ? (int) $stats['feedback_total'] : (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
-        $generated_gmt     = isset($stats['generated_gmt']) ? (string) $stats['generated_gmt'] : '';
+		// Source of truth: live counts (avoid cache drift between screens)
+		$counts            = wp_count_posts('letter');
+		$letters_published = (int) ($counts->publish ?? 0);
+		$letters_pending   = (int) ($counts->pending ?? 0);
+		$letters_draft     = (int) ($counts->draft ?? 0);
+		$letters_future    = (int) ($counts->future ?? 0);
+		$letters_private   = (int) ($counts->private ?? 0);
+        $needs_review      = (int) $this->count_needs_review_live();
+		// Match RTS Moderation Engine "Total" across admin screens.
+		$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_future + $letters_private;
+        $feedback_total    = (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
+        $generated_gmt     = '';
 
         $true_inbox        = max(0, $letters_pending - $needs_review);
 
@@ -553,7 +640,7 @@ class RTS_CPT_Letters_System {
     private function count_needs_review_live(): int {
         global $wpdb;
         try {
-            // Count unique letters only (guards against duplicate meta rows).
+            // Count quarantined letters (draft status with needs_review flag).
             return (int) $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(DISTINCT p.ID)
                  FROM {$wpdb->posts} p
@@ -563,7 +650,7 @@ class RTS_CPT_Letters_System {
                    AND pm.meta_key = %s
                    AND pm.meta_value = %s",
                 'letter',
-                'pending',
+                'rts-quarantine',
                 'needs_review',
                 '1'
             ));
@@ -641,7 +728,7 @@ class RTS_CPT_Letters_System {
         }
 
         $needs = new \WP_Query(array_merge($q_args, [
-            'post_status' => ['publish', 'pending', 'draft'],
+            'post_status' => ['publish', 'pending', 'rts-quarantine'],
             'meta_query'  => [
                 [
                     'key'   => 'needs_review',
@@ -1126,14 +1213,17 @@ class RTS_CPT_Letters_System {
     public function register_bulk_actions($bulk_actions) {
         $bulk_actions['mark_safe'] = 'Mark as Safe';
         $bulk_actions['mark_review'] = 'Mark for Review';
+        $bulk_actions['clear_quarantine_rescan'] = 'Clear Quarantine & Re-scan';
         return $bulk_actions;
     }
 
     public function handle_bulk_actions($redirect_to, $doaction, $post_ids) {
-        if ($doaction !== 'mark_safe' && $doaction !== 'mark_review') {
+        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan'], true)) {
             return $redirect_to;
         }
 
+        $processed = 0;
+        
         // Fix #10: Check post type
         foreach ($post_ids as $post_id) {
             $post = get_post($post_id);
@@ -1142,13 +1232,33 @@ class RTS_CPT_Letters_System {
             if ($doaction === 'mark_safe') {
                 delete_post_meta($post_id, 'needs_review');
                 delete_post_meta($post_id, 'rts_flagged');
+                $processed++;
             } elseif ($doaction === 'mark_review') {
                 update_post_meta($post_id, 'needs_review', 1);
                 update_post_meta($post_id, 'rts_flagged', 1);
+                // Set to draft for quarantine
+                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
+                $processed++;
+            } elseif ($doaction === 'clear_quarantine_rescan') {
+                // Clear all quarantine flags
+                delete_post_meta($post_id, 'needs_review');
+                delete_post_meta($post_id, 'rts_flagged');
+                delete_post_meta($post_id, 'rts_flag_reasons');
+                delete_post_meta($post_id, 'rts_moderation_reasons');
+                delete_post_meta($post_id, 'rts_flagged_keywords');
+                
+                // Set to pending (inbox)
+                wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
+                
+                // Queue for fresh scan
+                if (function_exists('as_schedule_single_action') && !as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
+                    as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
+                }
+                $processed++;
             }
         }
 
-        return add_query_arg('bulk_processed', count($post_ids), $redirect_to);
+        return add_query_arg('bulk_processed', $processed, $redirect_to);
     }
     
     public function admin_css() {
@@ -1260,6 +1370,54 @@ class RTS_CPT_Letters_System {
         delete_post_meta($post_id, 'rts_flagged');
         
         wp_redirect(esc_url_raw(admin_url('edit.php?post_type=letter')));
+        exit;
+    }
+    
+    /**
+     * Handle quick unflag from edit screen meta box
+     * Clears quarantine flag, sets to pending, and queues for re-scan
+     */
+    public function handle_quick_unflag() {
+        if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'unflag_' . $_GET['post'])) {
+            wp_die('Invalid request');
+        }
+        
+        $post_id = intval($_GET['post']);
+
+        // Security check: ensure this is actually a letter post type
+        if (get_post_type($post_id) !== 'letter') {
+            wp_die('Invalid post type.');
+        }
+
+        // Security check: ensure user can edit this specific post
+        if (!current_user_can('edit_post', $post_id)) {
+            wp_die('Permission denied.');
+        }
+        
+        // Clear quarantine flags
+        delete_post_meta($post_id, 'needs_review');
+        delete_post_meta($post_id, 'rts_flagged');
+        delete_post_meta($post_id, 'rts_flag_reasons');
+        delete_post_meta($post_id, 'rts_moderation_reasons');
+        delete_post_meta($post_id, 'rts_flagged_keywords');
+        
+        // Set to pending so it goes to inbox
+        $result = wp_update_post([
+            'ID' => $post_id,
+            'post_status' => 'pending'
+        ], true);
+
+        if (is_wp_error($result)) {
+            wp_die('Error updating post: ' . $result->get_error_message());
+        }
+        
+        // Queue for fresh scan if Action Scheduler is available
+        if (function_exists('as_schedule_single_action') && !as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
+            as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
+        }
+        
+        // Redirect back to the edit screen with success message
+        wp_redirect(esc_url_raw(add_query_arg('message', 'unflagger', admin_url('post.php?post=' . $post_id . '&action=edit'))));
         exit;
     }
 }

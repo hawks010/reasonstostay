@@ -335,7 +335,7 @@ class RTS_Accessibility_Toolkit {
             .rts-a11y-pill {
                 position: fixed;
                 right: 10px;
-                top: 50%;
+                top: 75%;
                 transform: translateY(-50%);
                 display: flex;
                 flex-direction: column;
@@ -647,8 +647,8 @@ class RTS_Accessibility_Toolkit {
             @media (max-width: 768px) {
                 .rts-a11y-pill {
                     top: auto;
-                    bottom: 20px;
-                    right: 20px;
+                    bottom: 10px;
+                    right: 10px;
                     transform: none;
                     flex-direction: row;
                     height: auto;

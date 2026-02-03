@@ -141,7 +141,123 @@ class RTS_Feedback_System {
             $this->recalc_helpful_pct($letter_id);
         }
 
+        // Send email notification
+        $this->send_feedback_notification($feedback_id, $letter_id, $rating, $mood_change, $triggered, $comment);
+
         return new WP_REST_Response(['success' => true, 'feedback_id' => (int) $feedback_id]);
+    }
+
+    /**
+     * Send email notification for feedback submission
+     */
+    private function send_feedback_notification($feedback_id, $letter_id, $rating, $mood_change, $triggered, $comment) {
+        // Check if notifications are enabled
+        if (get_option('rts_email_notifications_enabled', '1') !== '1') {
+            return;
+        }
+
+        // Determine if we should send based on notification settings
+        $should_send = false;
+        $is_urgent = false;
+
+        if ($triggered === '1' && get_option('rts_notify_on_triggered', '1') === '1') {
+            $should_send = true;
+            $is_urgent = true;
+        } elseif ($rating === 'down' && get_option('rts_notify_on_negative', '0') === '1') {
+            $should_send = true;
+        } elseif (get_option('rts_notify_on_feedback', '1') === '1') {
+            $should_send = true;
+        }
+
+        if (!$should_send) {
+            return;
+        }
+
+        // Get email addresses
+        $to = get_option('rts_admin_notification_email', get_option('admin_email'));
+        if (!is_email($to)) {
+            $to = get_option('admin_email');
+        }
+
+        $cc = get_option('rts_cc_notification_email', '');
+        $headers = ['Content-Type: text/html; charset=UTF-8'];
+
+        if ($cc && is_email($cc)) {
+            $headers[] = 'Cc: ' . $cc;
+        }
+
+        // Build email subject
+        if ($is_urgent) {
+            $subject = '🚨 URGENT: Letter Reported as Triggering - Letter #' . $letter_id;
+        } elseif ($rating === 'down') {
+            $subject = '👎 Negative Feedback Received - Letter #' . $letter_id;
+        } else {
+            $subject = '💬 New Feedback - Letter #' . $letter_id;
+        }
+
+        // Build email body
+        $letter_title = get_the_title($letter_id);
+        $letter_edit_url = admin_url('post.php?post=' . $letter_id . '&action=edit');
+        $feedback_url = admin_url('edit.php?post_type=rts_feedback');
+        $dashboard_url = admin_url('admin.php?page=rts_moderation_dashboard&tab=feedback');
+
+        $rating_emoji = [
+            'up' => '👍 Helpful',
+            'down' => '👎 Didn\'t help',
+            'neutral' => '🤷 Neutral'
+        ];
+
+        $mood_emoji = [
+            'much_better' => '😊 Much better',
+            'little_better' => '🙂 A little better',
+            'no_change' => '😐 No change',
+            'little_worse' => '😟 A little worse',
+            'much_worse' => '😢 Much worse'
+        ];
+
+        $message = '<html><body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; line-height: 1.6; color: #333;">';
+
+        if ($is_urgent) {
+            $message .= '<div style="background: #fee; border-left: 4px solid #d63638; padding: 16px; margin-bottom: 20px;">';
+            $message .= '<h2 style="margin: 0 0 8px 0; color: #d63638;">⚠️ Urgent: Letter Flagged as Triggering</h2>';
+            $message .= '<p style="margin: 0;">A user has reported this letter as triggering or unsafe. Please review immediately.</p>';
+            $message .= '</div>';
+        }
+
+        $message .= '<h3 style="margin: 20px 0 12px 0;">Feedback Details</h3>';
+        $message .= '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+        $message .= '<tr><td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: 600; width: 150px;">Letter:</td><td style="padding: 8px; border-bottom: 1px solid #ddd;"><a href="' . esc_url($letter_edit_url) . '">Letter #' . $letter_id . ': ' . esc_html($letter_title) . '</a></td></tr>';
+        $message .= '<tr><td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: 600;">Rating:</td><td style="padding: 8px; border-bottom: 1px solid #ddd;">' . ($rating_emoji[$rating] ?? esc_html($rating)) . '</td></tr>';
+
+        if ($mood_change) {
+            $message .= '<tr><td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: 600;">Mood Change:</td><td style="padding: 8px; border-bottom: 1px solid #ddd;">' . ($mood_emoji[$mood_change] ?? esc_html($mood_change)) . '</td></tr>';
+        }
+
+        $message .= '<tr><td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: 600;">Triggered:</td><td style="padding: 8px; border-bottom: 1px solid #ddd;">' . ($triggered === '1' ? '<strong style="color: #d63638;">⚠️ YES</strong>' : 'No') . '</td></tr>';
+
+        if ($comment) {
+            $message .= '<tr><td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: 600; vertical-align: top;">Comment:</td><td style="padding: 8px; border-bottom: 1px solid #ddd;">' . nl2br(esc_html($comment)) . '</td></tr>';
+        }
+
+        $message .= '<tr><td style="padding: 8px; font-weight: 600;">Submitted:</td><td style="padding: 8px;">' . current_time('F j, Y g:i a') . '</td></tr>';
+        $message .= '</table>';
+
+        $message .= '<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">';
+        $message .= '<p style="margin: 0 0 12px 0;"><strong>Quick Actions:</strong></p>';
+        $message .= '<a href="' . esc_url($letter_edit_url) . '" style="display: inline-block; padding: 10px 20px; background: #2271b1; color: #fff; text-decoration: none; border-radius: 4px; margin-right: 10px;">Edit Letter</a>';
+        $message .= '<a href="' . esc_url($dashboard_url) . '" style="display: inline-block; padding: 10px 20px; background: #50575e; color: #fff; text-decoration: none; border-radius: 4px; margin-right: 10px;">View Dashboard</a>';
+        $message .= '<a href="' . esc_url($feedback_url) . '" style="display: inline-block; padding: 10px 20px; background: #646970; color: #fff; text-decoration: none; border-radius: 4px;">All Feedback</a>';
+        $message .= '</div>';
+
+        $message .= '<div style="margin-top: 30px; padding: 16px; background: #f9f9f9; border-radius: 4px; font-size: 12px; color: #646970;">';
+        $message .= '<p style="margin: 0;">This email was sent from the RTS (Reasons to Stay) moderation system.</p>';
+        $message .= '<p style="margin: 8px 0 0 0;">To manage notification settings, go to: <a href="' . admin_url('admin.php?page=rts_moderation_dashboard&tab=settings') . '">RTS Settings</a></p>';
+        $message .= '</div>';
+
+        $message .= '</body></html>';
+
+        // Send email
+        wp_mail($to, $subject, $message, $headers);
     }
 
     /**

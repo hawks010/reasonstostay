@@ -1,9 +1,19 @@
 /**
  * RTS Dashboard Real-time Updates
- * version: 2.40
+ * version: 2.41
  */
 (function($) {
     'use strict';
+// If this file gets enqueued twice (even with a different ?ver=), don't start two pollers.
+    if (window.__RTS_DASHBOARD_RT_LOADED) { return; }
+    window.__RTS_DASHBOARD_RT_LOADED = true;
+
+    // Adaptive polling state (prevents 429s from host/WAF rate limits)
+    const BASE_POLL_MS = 15000;      // normal cadence
+    const MAX_POLL_MS  = 120000;     // backoff ceiling (2 min)
+    let currentPollMs  = BASE_POLL_MS;
+    let inFlight       = false;
+
     
     // Polling state
     let pollingInterval = null;
@@ -20,47 +30,104 @@
         }
     }
     
-    // Start polling for updates (every 5 seconds)
-    function startPolling() {
-        ensureDiagnosticsPanel();
-        if (isPolling) return;
-        isPolling = true;
-        pollingInterval = setInterval(updateStatus, 5000);
-        $('#rts-scan-status').addClass('polling-active');
-    }
     
-    // Stop polling
-    function stopPolling() {
-        if (!isPolling) return;
-        isPolling = false;
-        clearInterval(pollingInterval);
-        $('#rts-scan-status').removeClass('polling-active');
+// Start polling for updates (adaptive interval with backoff)
+function startPolling() {
+    ensureDiagnosticsPanel();
+    if (isPolling) return;
+    isPolling = true;
+    currentPollMs = BASE_POLL_MS;
+    scheduleNextPoll(true);
+    $('#rts-scan-status').addClass('polling-active');
+}
+
+// Stop polling
+function stopPolling() {
+    if (!isPolling) return;
+    isPolling = false;
+    if (pollingInterval) {
+        clearTimeout(pollingInterval);
+        pollingInterval = null;
     }
-    
-    // Update all status indicators via REST API
-    function updateStatus() {
-        $.ajax({
-            url: rtsDashboard.resturl + 'processing-status',
-            method: 'GET',
-            beforeSend: function(xhr) {
-                xhr.setRequestHeader('X-WP-Nonce', rtsDashboard.nonce);
-            },
-            success: function(data) {
-                if (data && data.queue) {
-                    updateQueueStatus(data.queue);
-                    updateImportStatus(data.import);
-                    updateScanStatus(data.queue);
-                }
-                if (data && data.diag) { 
-                    updateDiagnostics(data.diag); 
-                }
-            },
-            error: function() {
-                showErrorStatus();
+    $('#rts-scan-status').removeClass('polling-active');
+}
+
+// Schedule the next poll tick
+function scheduleNextPoll(immediate) {
+    if (!isPolling) return;
+    if (pollingInterval) {
+        clearTimeout(pollingInterval);
+        pollingInterval = null;
+    }
+    const wait = immediate ? 0 : currentPollMs;
+    pollingInterval = setTimeout(function() {
+        updateStatus();
+    }, wait);
+}
+
+// Update all status indicators via REST API
+function updateStatus() {
+    if (!isPolling) return;
+
+    // Pause polling when tab is hidden to reduce load and avoid 429s
+    if (document.hidden) {
+        scheduleNextPoll(false);
+        return;
+    }
+
+    // Avoid overlapping requests
+    if (inFlight) {
+        scheduleNextPoll(false);
+        return;
+    }
+    inFlight = true;
+
+    $.ajax({
+        url: rtsDashboard.resturl + 'processing-status',
+        method: 'GET',
+        cache: false,
+        beforeSend: function(xhr) {
+            xhr.setRequestHeader('X-WP-Nonce', rtsDashboard.nonce);
+        },
+        success: function(data) {
+            inFlight = false;
+
+            // Successful response: reset backoff
+            currentPollMs = BASE_POLL_MS;
+
+            if (data && data.queue) {
+                updateQueueStatus(data.queue);
+                updateImportStatus(data.import);
+                updateScanStatus(data.queue);
             }
-        });
-    }
-    
+            if (data && data.diag) {
+                updateDiagnostics(data.diag);
+            }
+
+            scheduleNextPoll(false);
+        },
+        error: function(xhr) {
+            inFlight = false;
+
+            // 429 from host/WAF = we're polling too fast or multiple scripts are running
+            if (xhr && xhr.status === 429) {
+                const retryAfter = parseInt(xhr.getResponseHeader('Retry-After') || '0', 10);
+                if (retryAfter && retryAfter > 0) {
+                    currentPollMs = Math.min(MAX_POLL_MS, retryAfter * 1000);
+                } else {
+                    currentPollMs = Math.min(MAX_POLL_MS, Math.max(BASE_POLL_MS, currentPollMs * 2));
+                }
+            } else {
+                // Other errors: gentle backoff
+                currentPollMs = Math.min(MAX_POLL_MS, Math.max(BASE_POLL_MS, Math.round(currentPollMs * 1.5)));
+            }
+
+            showErrorStatus();
+            scheduleNextPoll(false);
+        }
+    });
+}
+
     // Update queue status DOM elements
     function updateQueueStatus(queue) {
         const queuedLetters = queue.pending_letter_jobs || 0;
@@ -208,10 +275,48 @@
         });
 
 
+        // Cancel Import
+        $(document).on('click', '#rts-cancel-import-btn', function(e) {
+            e.preventDefault();
+            if (!confirm('Are you sure you want to cancel the current import? This cannot be undone.')) {
+                return;
+            }
+            cancelImport($(this));
+        });
+
         // Close Toast
         $(document).on('click', '.rts-toast-close', function() {
             $(this).closest('.rts-toast').addClass('fade-out');
             setTimeout(() => $(this).closest('.rts-toast').remove(), 300);
+        });
+    }
+
+    // Cancel Import
+    function cancelImport($btn) {
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: rtsDashboard.ajaxurl,
+            method: 'POST',
+        dataType: 'json',
+            data: {
+                action: 'rts_cancel_import',
+                nonce: rtsDashboard.dashboard_nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    showToast('success', 'Import Canceled', response.data || 'Import has been canceled.');
+                    $btn.remove();
+                    updateStatus();
+                } else {
+                    showToast('error', 'Error', response.data || 'Could not cancel import.');
+                    $btn.prop('disabled', false);
+                }
+            },
+            error: function() {
+                showToast('error', 'Error', 'Failed to cancel import.');
+                $btn.prop('disabled', false);
+            }
         });
     }
     
@@ -235,14 +340,19 @@
             },
             success: function(response) {
                 if (response.success) {
-                    showToast('success', 'Scan Started', response.data);
+                    showToast('success', 'Scan Started', (response && response.data) ? (response.data.message || response.data.queued || response.data) : 'Scan started');
                     setTimeout(updateStatus, 1000); // Force update
                 } else {
                     showToast('error', 'Error', response.data || 'Could not start scan');
                 }
             },
-            error: function() {
-                showToast('error', 'Error', 'Network request failed.');
+            error: function(xhr, status, err) {
+                var detail = '';
+                try {
+                    var t = (xhr && xhr.responseText) ? String(xhr.responseText) : '';
+                    if (t) detail = ' (' + t.substring(0, 160).replace(/\s+/g,' ').trim() + ')';
+                } catch(e) {}
+                showToast('error', 'Error', 'Network request failed.' + detail);
             },
             complete: function() {
                 // Reset button after short delay
@@ -354,6 +464,13 @@
     
     // Toast Notification Helper
     function showToast(type, title, message) {
+        // Normalize message so we don't end up with [object Object]
+        if (message === undefined || message === null) message = '';
+        if (typeof message === 'object') {
+            message = message.message || message.status || message.error || JSON.stringify(message);
+        }
+        message = String(message);
+
         const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
         const $container = $('#rts-toast-container');
         
@@ -445,10 +562,7 @@
         var meta = document.getElementById('rts-diag-meta');
         var pre  = document.getElementById('rts-diag-log');
 
-        try {
-            if (diag && diag.state) console.debug('[RTS diag state]', diag.state);
-            if (diag && diag.log) console.debug('[RTS diag log tail]', diag.log);
-        } catch(e) {}
+        // Debug logging removed for production
 
         if (meta && diag && diag.state) {
             var s = diag.state;

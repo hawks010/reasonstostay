@@ -94,13 +94,14 @@ class RTS_Security {
     }
 
     /**
-     * Check if Object Cache is persistent
+     * Check if an external persistent object cache is active (Redis/Memcached).
+     *
+     * When enabled, values can live in cache while direct DB writes are not
+     * immediately reflected. For counters/limits we should prefer transients
+     * and cache-aware increment logic.
      */
     private function is_persistent_cache_available() {
-        global $wp_object_cache;
-        return wp_using_ext_object_cache() && 
-               isset($wp_object_cache->cache) && 
-               !($wp_object_cache instanceof WP_Object_Cache);
+        return wp_using_ext_object_cache();
     }
 
     /**
@@ -231,7 +232,18 @@ class RTS_Security {
         }
 
         // 2. Verify Nonce (Fixed Timing Attack & Type Check)
-        $nonce = isset($data['nonce']) ? $data['nonce'] : (isset($_REQUEST['nonce']) ? $_REQUEST['nonce'] : '');
+        // 1. Verify Nonce (CRITICAL FIX)
+        // The submit form generates a token field named "rts_token" via:
+        // wp_create_nonce('rts_submit_letter')
+        // We also accept legacy keys for cached forms.
+        $nonce = '';
+        if (isset($data['rts_token'])) {
+            $nonce = $data['rts_token'];
+        } elseif (isset($data['nonce'])) {
+            $nonce = $data['nonce'];
+        } elseif (isset($_REQUEST['nonce'])) {
+            $nonce = $_REQUEST['nonce'];
+        }
         
         if (!is_string($nonce) || empty($nonce)) {
             $error = new WP_Error('missing_nonce', __('Security token is missing or invalid.', 'rts'), ['status' => 403]);
@@ -239,14 +251,16 @@ class RTS_Security {
             return $error;
         }
 
-        $nonce_status = wp_verify_nonce($nonce, 'rts_frontend_nonce');
-        
-        if ($nonce_status === 1 || $nonce_status === 2) {
-            // Valid
-        } else {
-            $error = new WP_Error('invalid_nonce', __('Security token invalid or expired. Please refresh.', 'rts'), ['status' => 403]);
-            $this->log_security_event('Validation failed', ['error' => 'invalid_nonce', 'ip' => $ip]);
-            return $error;
+        // Must match the action used in shortcodes.php: wp_create_nonce('rts_submit_letter')
+        $nonce_status = wp_verify_nonce($nonce, 'rts_submit_letter');
+        if ($nonce_status !== 1 && $nonce_status !== 2) {
+            // Fallback for legacy cached forms
+            $fallback = wp_verify_nonce($nonce, 'rts_frontend_nonce');
+            if ($fallback !== 1 && $fallback !== 2) {
+                $error = new WP_Error('invalid_nonce', __('Security token invalid or expired. Please refresh.', 'rts'), ['status' => 403]);
+                $this->log_security_event('Validation failed', ['error' => 'invalid_nonce', 'ip' => $ip]);
+                return $error;
+            }
         }
 
         // 3. Check rate limits (Exponential Backoff Check)
@@ -375,37 +389,16 @@ class RTS_Security {
      * Prevents race conditions on timeout setting
      */
     private function track_submission($ip) {
-        global $wpdb;
+        $hourly_key = 'rts_sub_hr_' . md5($ip);
+        $daily_key  = 'rts_sub_day_' . md5($ip);
 
-        $hourly_key = '_transient_rts_sub_hr_' . md5($ip);
-        $daily_key  = '_transient_rts_sub_day_' . md5($ip);
-        
-        // 1. Hourly (3600s)
-        $timeout_key = '_transient_timeout_' . substr($hourly_key, 11);
-        $now = time();
-        $expiry = $now + 3600;
+        // Use transients so it behaves correctly with external object caches
+        // (Redis/Memcached). Using direct SQL writes can desync cached values.
+        $hourly = (int) get_transient($hourly_key);
+        set_transient($hourly_key, $hourly + 1, HOUR_IN_SECONDS);
 
-        // Atomic Increment
-        $wpdb->query($wpdb->prepare(
-            "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') 
-            ON DUPLICATE KEY UPDATE option_value = option_value + 1",
-            $hourly_key, '1'
-        ));
-
-        // Atomic Timeout Set (Ensure update even if exists)
-        update_option($timeout_key, $expiry, false);
-
-        // 2. Daily (86400s)
-        $daily_timeout_key = '_transient_timeout_' . substr($daily_key, 11);
-        $daily_expiry = $now + 86400;
-
-        $wpdb->query($wpdb->prepare(
-            "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no') 
-            ON DUPLICATE KEY UPDATE option_value = option_value + 1",
-            $daily_key, '1'
-        ));
-        
-        update_option($daily_timeout_key, $daily_expiry, false);
+        $daily = (int) get_transient($daily_key);
+        set_transient($daily_key, $daily + 1, DAY_IN_SECONDS);
     }
 
     /**
@@ -431,8 +424,9 @@ class RTS_Security {
     private function detect_spam_patterns($data) {
         $text = strtolower($data['letter_text'] ?? '');
 
-        // 1. Honeypot check
-        if (!empty($data['website_url'])) { // Hidden honeypot field
+        // 1. Honeypot check (fields are visually hidden in the form)
+        // If bots fill these, fail closed.
+        if (!empty($data['website']) || !empty($data['company']) || !empty($data['confirm_email'])) {
             $this->log_security_event('Bot detected: honeypot triggered', ['ip' => $this->get_client_ip()]);
             return new WP_Error('bot_detected', __('Submission failed.', 'rts'), ['status' => 400]);
         }
@@ -624,7 +618,5 @@ class RTS_Security {
 // Initialize
 RTS_Security::get_instance();
 
-// Register cleanup on deactivation
-register_deactivation_hook(__FILE__, function() {
-    wp_clear_scheduled_hook('rts_daily_security_cleanup');
-});
+// Note: This file runs from a theme context. If you migrate this to a plugin,
+// you can clear the scheduled hook on plugin deactivation.

@@ -67,9 +67,9 @@
     padding: 100px 100px 50px;
     position: relative;
     box-shadow: 
-        0 1px 3px rgba(0,0,0,0.06),
-        0 4px 8px rgba(0,0,0,0.04),
-        0 0 0 1px rgba(0,0,0,0.02);
+        0 1px 3px rgba(0,0,0,0.26),
+        0 4px 8px rgba(0,0,0,0.24),
+        0 0 0 1px rgba(0,0,0,0.22);
     border-radius: 2px;
     margin-bottom: 0px;
 }
@@ -190,27 +190,20 @@
     border-radius: 2px;
 }
 
-/* Stacked paper layers effect */
-.rts-letter-card::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 8px;
-    right: 8px;
-    height: 8px;
-    background: linear-gradient(to bottom, #E8E8E8, #F0F0F0);
-    z-index: -1;
-    border-radius: 0 0 2px 2px;
-    box-shadow: 0 2px 4px var(--rts-shadow);
-}
+/* Removed: stacked paper layer pseudo-element.
+   It was rendering as a stray "container" at the bottom of the letter card. */
 
-/* Letter content */
-.rts-letter-content {
-    font-size: 1rem;
-    line-height: 1.5rem;
-    color: var(--rts-black);
-    position: relative;
-    z-index: 1;
+
+.rts-letter-footer {  
+  z-index: 1;
+  display:flex;
+  flex-direction:row;
+  min-height:100%;
+  margin-top: 50px;
+  position: relative;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  color: var(--rts-black);
 }
 
 .rts-letter-content p {
@@ -708,8 +701,8 @@
     background: var(--rts-white);
     padding: 40px;
     box-shadow: 
-        0 1px 3px rgba(0,0,0,0.06),
-        0 4px 8px rgba(0,0,0,0.04);
+        0 1px 3px rgba(0,0,0,0.26),
+        0 4px 8px rgba(0,0,0,0.24);
     border-radius: 2px;
 }
 
@@ -839,8 +832,8 @@
     background: var(--rts-white);
     border-radius: 2px;
     box-shadow: 
-        0 1px 3px rgba(0,0,0,0.06),
-        0 4px 8px rgba(0,0,0,0.04);
+        0 1px 3px rgba(0,0,0,0.26),
+        0 4px 8px rgba(0,0,0,0.24);
 }
 
 .rts-success-icon {
@@ -1167,21 +1160,10 @@ body.rts-modal-open{overflow:hidden;}
   position: relative;
 }
 
-.rts-letter-content{
-  display:flex;
-  flex-direction:column;
-  min-height: 100%;
-}
-
 .rts-letter-body{
   width:100%;
 }
 
-.rts-letter-footer{
-  margin-top: 50px;
-  display:block;
-  width:100%;
-}
 
 @media (max-width: 767px){
   .rts-letter-footer .rts-btn-next{
@@ -1197,27 +1179,12 @@ body.rts-modal-open{overflow:hidden;}
    Letter viewer refinements - tabs, padding, footer
    ========================================================= */
 
-/* Bigger "real letter" padding */
-.rts-letter-content{
-  display:flex;
-  flex-direction:column;
-  min-height:100%;
-  padding: 0px;
-  position: relative;
-}
-
 @media (max-width: 768px){
   .rts-letter-content{
     padding: 28px 18px 22px;
   }
 }
 
-/* Footer spacing + Next button alignment */
-.rts-letter-footer{
-  margin-top: 50px;
-  display: flex;
-  justify-content: flex-end;
-}
 
 @media (max-width: 768px){
   .rts-letter-footer{
@@ -1248,15 +1215,6 @@ body.rts-modal-open{overflow:hidden;}
 .rts-letter-content,
 .rts-letter-body{
   font-family: 'Special Elite', sans-serif;
-}
-
-/* Footer layout: Report + Read Another Letter aligned to the right */
-.rts-letter-footer{
-  display:flex;
-  width:100%;
-  align-items:center;
-  justify-content:flex-end;
-  gap:10px;
 }
 
 /* Report text link (no button styling) */
@@ -1337,4 +1295,22 @@ body.rts-modal-open{overflow:hidden;}
     padding: 8px 10px;
     font-size: 0.85rem;
   }
+}
+/* =========================================================
+   Feedback tab rendering fixes
+   - Keep the tab visible as a "tag" that protrudes from the card
+   - Avoid z-index conflicts introduced by earlier experiments
+   ========================================================= */
+
+.rts-letter-card{ overflow: visible; }
+.rts-letter-tabs{ z-index: 10; }
+.rts-feedback-tab{ z-index: 11; }
+
+/* =========================================================
+   Hotfix: remove stray pseudo-element artifact under letter card
+   (Seen as .rts-letter-card::after with empty 8px height)
+   ========================================================= */
+.rts-letter-card::after{
+  content: none !important;
+  display: none !important;
 }

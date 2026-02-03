@@ -12,9 +12,7 @@
 (function() {
     // PREVENT DOUBLE LOADING (Rocket Loader Safe)
     if (window.RTSLetterSystem && window.RTSLetterSystem.loaded) {
-        if (window.location.hostname === 'localhost') {
-            console.warn('[RTS] System already loaded. Skipping duplicate execution.');
-        }
+        // System already loaded, skip duplicate execution
         return;
     }
 
@@ -177,7 +175,6 @@
 
       init() {
         if (window.location.hostname === 'localhost') {
-            console.log('RTSLetterSystem initializing...');
         }
 
         try {
@@ -1386,7 +1383,6 @@
       },
 
       completeOnboarding() {
-        console.log('RTS: completeOnboarding called');
         
         // Scope selection to the active onboarding modal
         const onboardingModal = document.querySelector('.rts-onboarding-modal');
@@ -1410,7 +1406,6 @@
         // Ensure skipOnboarding is explicitly FALSE when completing normally
         this.preferences.skipOnboarding = false;
 
-        console.log('RTS: Preferences set:', this.preferences); // Debug
         
         // Save to sessionStorage
         this.saveState();
@@ -1448,14 +1443,12 @@
           el.style.setProperty('visibility', 'hidden', 'important');
           el.style.setProperty('pointer-events', 'none', 'important');
         });
-        console.log(`RTS: Onboarding hidden (${overlays.length} instances processed)`);
         
         // Load first personalized letter
         this.loadFirstLetter();
       },
 
       skipOnboarding() {
-        console.log('RTS: skipOnboarding called'); // Debug
         
         this.preferences.skipOnboarding = true;
         sessionStorage.setItem('rts_onboarded', 'true');
@@ -1670,14 +1663,7 @@ cleanup(
             
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
-            // Debug logging requested by user
-            if (window.location.hostname === 'localhost') {
-                console.log('Next button clicked:', {
-                    currentLetter: this.currentLetter,
-                    hasRated: this.currentLetter ? this.currentLetter._rtsRated : 'no letter',
-                    ratePrompt: !!ratePrompt
-                });
-            }
+
 
             if (this.currentLetter && !this.currentLetter._rtsRated && ratePrompt) {
               this.pendingNextAfterRate = true;
@@ -1720,7 +1706,6 @@ cleanup(
           if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('RTS: Skip onboarding clicked'); // Debug
             this.skipOnboarding();
             return;
           }
@@ -1730,7 +1715,6 @@ cleanup(
           if (nextStepBtn) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('RTS: Next step clicked'); // Debug
             
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
             const stepEl = nextStepBtn.closest('.rts-onboarding-step');
@@ -1747,7 +1731,6 @@ cleanup(
               const nextEl = modalEl.querySelector(`.rts-onboarding-step[data-step="${nextStep}"]`);
               if (nextEl) {
                   nextEl.style.display = 'block';
-                  console.log('RTS: Moved to step', nextStep); // Debug
               }
             }
             return;
@@ -1757,7 +1740,6 @@ cleanup(
           if (e.target.closest('.rts-btn-complete')) { 
               e.preventDefault(); 
               e.stopPropagation(); 
-              console.log('RTS: Find My Letter clicked'); // Debug
               this.completeOnboarding(); 
               return; 
           }
@@ -1796,7 +1778,6 @@ cleanup(
             if (!isHidden && display !== 'none') {
               e.preventDefault();
               e.stopPropagation();
-              console.log('RTS: Escape pressed - closing onboarding');
               this.skipOnboarding();
               return;
             }

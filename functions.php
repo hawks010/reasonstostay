@@ -20,6 +20,16 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+// Theme version constant (used for cache-busting enqueued assets)
+if ( ! defined( 'RTS_THEME_VERSION' ) ) {
+    $theme_obj = wp_get_theme();
+    $ver = is_object( $theme_obj ) ? $theme_obj->get( 'Version' ) : '';
+    if ( ! is_string( $ver ) || $ver === '' ) {
+        $ver = (string) time();
+    }
+    define( 'RTS_THEME_VERSION', $ver );
+}
+
 // =============================================================================
 // 2. CORS & FONTS
 // Handles cross-origin loading for fonts when sites are cloned/migrated.
@@ -435,10 +445,41 @@ $rts_engine_path = get_stylesheet_directory() . '/inc/rts-moderation-engine.php'
 if (file_exists($rts_engine_path)) {
     require_once $rts_engine_path;
 }
+// Include zombie queue hard reset utilities (fixes for stuck queue)
+$rts_hard_reset_path = get_stylesheet_directory() . '/inc/rts-zombie-queue-hard-reset.php';
+if (file_exists($rts_hard_reset_path)) {
+    require_once $rts_hard_reset_path;
 
+// === THREE CRITICAL FIXES: Context-Aware Safety, Streaming Import, Multilingual ===
+
+// Context-aware safety scanner (differentiates "I want to die" from "you should die")
+$safety_path = get_stylesheet_directory() . '/inc/rts-context-aware-safety.php';
+if (file_exists($safety_path)) {
+    require_once $safety_path;
+}
+
+// Streaming importer for massive files (300MB+, 20-50k letters)
+$importer_path = get_stylesheet_directory() . '/inc/rts-streaming-importer.php';
+if (file_exists($importer_path)) {
+    require_once $importer_path;
+}
+
+// Multilingual support (11 languages with auto-detection)
+$multilingual_path = get_stylesheet_directory() . '/inc/rts-multilingual.php';
+if (file_exists($multilingual_path)) {
+    require_once $multilingual_path;
+}
+
+}
+
+
+require_once get_stylesheet_directory() . '/inc/security.php';            // Security utilities and helper functions
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
 require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
+require_once get_stylesheet_directory() . '/inc/rts-multilingual.php';   // Multilingual support & language switcher
+require_once get_stylesheet_directory() . '/inc/rts-google-translate.php'; // Google Translate automatic translation
+require_once get_stylesheet_directory() . '/inc/rts-quick-exit.php';      // Quick Exit button (front-end safety)
 
 
 /**
@@ -500,50 +541,6 @@ add_shortcode('rts_stat', function($atts) {
 /**
  * Export letters to CSV
  */
-add_action('admin_post_rts_export_letters', function() {
-    if (!current_user_can('edit_posts') || !wp_verify_nonce($_GET['_wpnonce'], 'rts_export')) {
-        wp_die('Unauthorized');
-    }
-    
-    $letters = get_posts([
-        'post_type' => 'letter',
-        'post_status' => 'any',
-        'posts_per_page' => -1,
-        'orderby' => 'date',
-        'order' => 'DESC'
-    ]);
-    
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="rts-letters-' . date('Y-m-d') . '.csv"');
-    
-    $output = fopen('php://output', 'w');
-    
-    // Header row
-    fputcsv($output, ['ID', 'Title', 'Content', 'Status', 'Quality Score', 'Safety', 'Feelings', 'Tones', 'Date']);
-    
-    foreach ($letters as $letter) {
-        $quality = get_post_meta($letter->ID, 'quality_score', true);
-        $needs_review = get_post_meta($letter->ID, 'needs_review', true);
-        $feelings = wp_get_post_terms($letter->ID, 'letter_feeling', ['fields' => 'names']);
-        $tones = wp_get_post_terms($letter->ID, 'letter_tone', ['fields' => 'names']);
-        
-        fputcsv($output, [
-            $letter->ID,
-            $letter->post_title,
-            strip_tags($letter->post_content),
-            $letter->post_status,
-            $quality ?: 'N/A',
-            $needs_review ? 'Flagged' : 'Safe',
-            implode(', ', $feelings),
-            implode(', ', $tones),
-            $letter->post_date
-        ]);
-    }
-    
-    fclose($output);
-    exit;
-});
-
 // NOTE: Manual processing admin-post handlers are registered inside inc/cron-processing.php
 // (RTS_Cron_Processing::init). Keeping them in one place prevents double-execution.
 
@@ -751,45 +748,25 @@ add_action('manage_letter_posts_custom_column', function($column, $post_id){
     }
 }, 0, 2);
 
-function rts_enqueue_admin_scripts($hook) {
-    // IMPORTANT: Keep the heavy RTS dashboard styling scoped to RTS pages only.
-    // Loading rts-admin.css on the Letters CPT list causes "dark mode" styles to bleed
-    // into the default WP list tables.
-    $should_load = (isset($_GET['page']) && strpos((string) $_GET['page'], 'rts-') !== false);
-
-    if ($should_load) {
-        
-        // CSS
-        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
-        $css_ver  = file_exists($css_path) ? (string) filemtime($css_path) : null;
-
-        wp_enqueue_style(
-            'rts-admin-css',
-            get_stylesheet_directory_uri() . '/assets/css/rts-admin.css',
-            [],
-            $css_ver
-        );
-
-        // JS
-        $js_file = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
-        
-        if (file_exists($js_file)) {
-            $js_ver = (string) filemtime($js_file);
-            wp_enqueue_script(
-                'rts-dashboard-js',
-                get_stylesheet_directory_uri() . '/assets/js/rts-dashboard.js',
-                ['jquery'],
-                $js_ver,
-                true
-            );
-
-            wp_localize_script('rts-dashboard-js', 'rtsDashboard', [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'resturl' => rest_url('rts/v1/'),
-                'nonce'   => wp_create_nonce('wp_rest'), // General REST nonce
-                'dashboard_nonce' => wp_create_nonce('rts_dashboard_nonce') // Specific action nonce
-            ]);
-        }
+/**
+ * AJAX: Clear import progress
+ */
+add_action('wp_ajax_rts_clear_import_progress', 'rts_ajax_clear_import_progress');
+function rts_ajax_clear_import_progress() {
+    if (!check_ajax_referer('rts_dashboard_nonce', 'nonce', false)) {
+        wp_send_json_error(['message' => 'Security check failed']);
     }
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Insufficient permissions']);
+    }
+
+    delete_option('rts_import_progress');
+    delete_option('rts_import_total');
+    delete_option('rts_import_processed');
+    delete_option('rts_import_status');
+    delete_transient('rts_import_running');
+
+    wp_send_json_success(['message' => 'Import progress cleared']);
 }
-add_action('admin_enqueue_scripts', 'rts_enqueue_admin_scripts');
+
