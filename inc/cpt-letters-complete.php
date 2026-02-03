@@ -318,7 +318,7 @@ class RTS_CPT_Letters_System {
         
         echo '<hr style="margin:12px 0;border:0;border-top:1px solid #ddd;">';
         
-        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=draft&meta_key=needs_review&meta_value=1')) . '" class="button" style="width:100%;text-align:center;">';
+        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&rts_quarantine=1')) . '" class="button" style="width:100%;text-align:center;">';
         echo 'View All Quarantined';
         echo '</a>';
     }
@@ -356,8 +356,8 @@ class RTS_CPT_Letters_System {
                          LEFT JOIN {$wpdb->postmeta} q ON p.ID = q.post_id AND q.meta_key = %s
                          LEFT JOIN {$wpdb->postmeta} n ON p.ID = n.post_id AND n.meta_key = %s
                          WHERE p.post_type = %s
-                         AND p.post_status = %s -- Quarantine uses draft status
-                         AND (
+                        AND p.post_status IN ('draft', 'rts-quarantine')
+                        AND (
                             (n.meta_value = %s)
                             OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
                          )",
@@ -405,6 +405,7 @@ class RTS_CPT_Letters_System {
 		$letters_draft     = (int) ($counts->draft ?? 0);
 		$letters_future    = (int) ($counts->future ?? 0);
 		$letters_private   = (int) ($counts->private ?? 0);
+		$letters_quarantine_status = (int) ($counts->{'rts-quarantine'} ?? 0);
         $needs_review      = (int) $this->count_needs_review_live();
 		$letters_quarantine = $needs_review;
 		// Match RTS Moderation Engine "Total" across admin screens.
@@ -568,7 +569,7 @@ class RTS_CPT_Letters_System {
                     <?php $this->render_stat_box('Total', $letters_total, admin_url('edit.php?post_type=letter'), '#1d2327', '#f0f0f1', '#dcdcde'); ?>
                     <?php $this->render_stat_box('Published', $letters_published, admin_url('edit.php?post_type=letter&post_status=publish'), '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
                     <?php $this->render_stat_box('Inbox', $true_inbox, admin_url('edit.php?post_type=letter&rts_inbox=1'), '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
-                    <?php $this->render_stat_box('Needs Review', $needs_review, admin_url('edit.php?post_type=letter&rts_quarantine=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
+                    <?php $this->render_stat_box('Quarantined', $needs_review, admin_url('edit.php?post_type=letter&rts_quarantine=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
                     <?php $this->render_stat_box('Feedback', $feedback_total, admin_url('edit.php?post_type=rts_feedback'), '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
                 </div>
             </div>
@@ -645,13 +646,13 @@ class RTS_CPT_Letters_System {
     private function count_needs_review_live(): int {
         global $wpdb;
         try {
-            // Count quarantined letters (draft status with needs_review flag).
+            // Count quarantined letters (draft or rts-quarantine status with needs_review flag).
             return (int) $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(DISTINCT p.ID)
                  FROM {$wpdb->posts} p
                  INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
                  WHERE p.post_type = %s
-                   AND p.post_status = %s
+                   AND p.post_status IN ('draft', 'rts-quarantine')
                    AND pm.meta_key = %s
                    AND pm.meta_value = %s",
                 'letter',
@@ -1050,7 +1051,7 @@ class RTS_CPT_Letters_System {
         if ($needs_review_count > 0) {
             $current = (isset($_GET['review_status']) && $_GET['review_status'] === 'needs_review') ? 'class="current"' : '';
             $views['needs_review'] = sprintf(
-                '<a href="%s" %s>Needs Review <span class="count">(%d)</span></a>',
+                '<a href="%s" %s>Quarantined <span class="count">(%d)</span></a>',
                 esc_url(admin_url('edit.php?post_type=letter&review_status=needs_review')),
                 $current,
                 $needs_review_count

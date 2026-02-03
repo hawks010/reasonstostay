@@ -856,7 +856,7 @@ if (!class_exists('RTS_Analytics_Aggregator')) {
 				 FROM {$wpdb->posts} p
 				 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 				 WHERE p.post_type = %s
-				   AND p.post_status = %s
+				   AND p.post_status IN ('draft', 'rts-quarantine')
 				   AND pm.meta_key = %s
 				   AND pm.meta_value = %s",
 				'letter',
@@ -1159,7 +1159,7 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 
 		private static function count_needs_review(): int {
 			global $wpdb;
-			// Count quarantined letters (draft status + needs_review flag).
+			// Count quarantined letters (draft or rts-quarantine status + needs_review flag).
 			$needs = $wpdb->get_var($wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID)
 				 FROM {$wpdb->postmeta} pm
@@ -1181,9 +1181,10 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			$off_letters = (int) get_option(self::OPTION_OFFSET_LETTERS, 0);
 			$feedback_obj = wp_count_posts('rts_feedback');
 			$feedback_total = $feedback_obj ? (int) ($feedback_obj->publish + $feedback_obj->pending + $feedback_obj->draft + $feedback_obj->private + $feedback_obj->future) : 0;
+			$quarantine_status = isset($letters->{'rts-quarantine'}) ? (int) $letters->{'rts-quarantine'} : 0;
 
 			return [
-				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $letters->future + $letters->private),
+				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $quarantine_status + $letters->future + $letters->private),
 				'published'     => (int) max(0, ((int) $letters->publish) + $off_letters),
 				'pending'       => (int) $letters->pending,
 				'needs_review'  => self::count_needs_review(),
