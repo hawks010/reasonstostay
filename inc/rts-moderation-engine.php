@@ -147,6 +147,7 @@ if (!class_exists('RTS_Moderation_Engine')) {
 
 			$post = get_post($post_id);
 			if (!$post || $post->post_type !== 'letter') return;
+			if (in_array($post->post_status, ['trash', 'auto-draft'], true)) return;
 
 			$lock_key = self::LOCK_PREFIX . $post_id;
 			if (get_transient($lock_key)) {
@@ -199,11 +200,14 @@ if (!class_exists('RTS_Moderation_Engine')) {
 						&& $results['quality']['pass'] === true
 					);
 
-					if ($all_pass) {
-						wp_update_post([
+				if ($all_pass) {
+						$updated = wp_update_post([
 							'ID'          => $post_id,
 							'post_status' => 'publish',
-						]);
+						], true);
+						if (is_wp_error($updated)) {
+							throw new \RuntimeException($updated->get_error_message());
+						}
 
 						// Clear quarantine + flag metadata (the new scan passed).
 						delete_post_meta($post_id, 'needs_review');
@@ -233,10 +237,13 @@ if (!class_exists('RTS_Moderation_Engine')) {
 					} else {
 						// Fail-closed: anything that doesn't pass must be quarantined (draft status).
 						// CRITICAL: Use 'rts-quarantine' status for quarantine to separate from inbox 'pending'.
-						wp_update_post([
+						$updated = wp_update_post([
 							'ID'          => $post_id,
 							'post_status' => 'rts-quarantine',
-						]);
+						], true);
+						if (is_wp_error($updated)) {
+							throw new \RuntimeException($updated->get_error_message());
+						}
 
 						update_post_meta($post_id, 'needs_review', '1');
 						update_post_meta($post_id, 'rts_moderation_status', 'pending_review');
@@ -283,6 +290,10 @@ if (!class_exists('RTS_Moderation_Engine')) {
 				update_post_meta($post_id, 'needs_review', '1');
 				update_post_meta($post_id, 'rts_moderation_status', 'system_error');
 				update_post_meta($post_id, 'rts_system_error', self::safe_error_string($e));
+				RTS_Scan_Diagnostics::log('scan_error', [
+					'post_id' => $post_id,
+					'error' => self::safe_error_string($e),
+				]);
 			} finally {
 				delete_transient($lock_key);
 				self::purge_counts_cache();
@@ -1706,9 +1717,9 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 	                                            }
 	                                        }
 	                                        $why = [];
-	                                        foreach ($reasons as $r) {
-	                                            $why[] = self::translate_flag_reason($r);
-	                                        }
+		                                        foreach ($reasons as $r) {
+		                                            $why[] = self::translate_flag_reason($r);
+		                                        }
 	                                        if (!empty($flags)) {
 	                                            $why[] = 'Matched: ' . implode(', ', array_slice($flags, 0, 5));
 	                                        }
@@ -1760,6 +1771,38 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 				<button type="submit" class="button button-small" style="<?php echo esc_attr($style); ?>"><?php echo esc_html($label); ?></button>
 			</form>
 			<?php
+		}
+
+		private static function translate_flag_reason(string $reason): string {
+			$translations = [
+				'ip:ip_locked' => 'IP rate limit exceeded',
+				'ip:blocked' => 'IP address blocked',
+				'ip:spam_pattern' => 'Spam pattern detected',
+				'safety:flagged' => 'Content safety concern',
+				'safety:self_harm' => 'Self-harm content detected',
+				'safety:violence' => 'Violent content detected',
+				'safety:hate_speech' => 'Hate speech detected',
+				'safety:sexual_content' => 'Sexual content detected',
+				'safety:spam' => 'Spam detected',
+				'quality:score_low' => 'Quality score below threshold',
+				'quality:too_short' => 'Letter too short',
+				'quality:no_substance' => 'Lacks meaningful content',
+				'quality:test_content' => 'Test or placeholder content',
+				'quality:repetitive' => 'Repetitive content',
+				'quarantine_flag' => 'Manually quarantined',
+			];
+
+			if (isset($translations[$reason])) {
+				return $translations[$reason];
+			}
+
+			if (strpos($reason, 'quality:score_') === 0) {
+				$score = (int) str_replace('quality:score_', '', $reason);
+				return "Quality score: {$score}/100";
+			}
+
+			$reason = str_replace(['_', ':'], ' ', $reason);
+			return ucwords($reason);
 		}
 
 	private static function render_tab_analytics($agg): void {
