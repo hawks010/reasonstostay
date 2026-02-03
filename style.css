@@ -4,10 +4,10 @@ Theme URI: https://reasonstostay.co.uk
 Template: hello-elementor
 Author: Inkfire
 Author URI: https://inkfire.co.uk
-Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools.
+Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools. Includes diagnostic-tools folder with automated testing, fixing, and database cleanup tools.
 Tags: mental-health,accessibility-ready,flexible-header,custom-colors,custom-menu,custom-logo,featured-images,rtl-language-support,threaded-comments,translation-ready
-Version: 3.2.1
-Updated: 2026-02-03 UI-Polish + Quick-Unflag-Box + Bulk-Clear-Quarantine + Better-Labels
+Version: 3.5.2
+Updated: 2026-02-03 FIXED: Async bulk actions + quarantine loop handler + expanded self-audit
 */
 
 /* =====================================================

@@ -1,0 +1,181 @@
+==========================================================================
+HOW TO USE THE AUTOMATED TEST FILE
+==========================================================================
+
+NO TECHNICAL KNOWLEDGE REQUIRED!
+
+This test file will check everything automatically and show you results
+in plain English with green checkmarks (good) or red X marks (problems).
+
+==========================================================================
+STEP 1: UPLOAD THE TEST FILE
+==========================================================================
+
+1. Download the file: rts-system-test.php
+2. Go to your hosting file manager (or use FTP)
+3. Navigate to: /wp-content/themes/hello-elementor-child-rts-v3/
+4. Upload rts-system-test.php into that folder
+
+That's it for uploading!
+
+==========================================================================
+STEP 2: RUN THE TEST
+==========================================================================
+
+1. Make sure you're logged into WordPress as an admin
+2. Visit this URL in your browser:
+   
+   https://reasonstostay.inkfire.co.uk/wp-content/themes/hello-elementor-child-rts-v3/rts-system-test.php
+
+3. Wait 5-10 seconds for all tests to run
+4. View the results!
+
+==========================================================================
+STEP 3: UNDERSTAND THE RESULTS
+==========================================================================
+
+The page will show you:
+
+✅ GREEN = Everything is working perfectly
+❌ RED = Something is broken and needs fixing
+⚠️ YELLOW = Working but could be better
+ℹ️ BLUE = Just information, nothing wrong
+
+AT THE TOP you'll see a summary:
+- Passed: How many tests succeeded
+- Failed: How many tests found problems
+- Warnings: How many found minor issues
+- Total Tests: How many tests were run
+
+==========================================================================
+WHAT EACH SECTION TESTS
+==========================================================================
+
+📊 Database Structure Tests
+- Checks if letter post type exists
+- Checks post status counts
+- Checks for the old bug (overlap)
+- Checks if new quarantine system works
+
+⚙️ Moderation Engine Tests
+- Checks if the moderation system is loaded
+- Checks if background processing works
+- Checks if stats are being calculated
+- Checks if migration ran
+
+🔢 Counting Accuracy Tests
+- Verifies inbox count is correct
+- Verifies quarantine count is correct
+- Checks for database errors
+
+🎨 User Interface Tests
+- Checks if menu says "Add Letter"
+- Checks if menu says "Dashboard"
+- Checks if bulk action exists
+
+🧪 Sample Letter Processing Tests
+- Looks at actual letters in the system
+- Checks if they're in the right status
+- Checks if flags are working
+
+🎛️ Admin Action Tests
+- Checks if quick unflag button works
+- Checks if API endpoints exist
+
+🔒 Security Tests
+- Checks if security measures are in place
+- Verifies admin-only access
+
+⚡ Performance Tests
+- Checks if caching is working
+- Checks processing queue health
+- Checks for failed background jobs
+
+==========================================================================
+COMMON RESULTS AND WHAT TO DO
+==========================================================================
+
+SCENARIO 1: Everything Green
+✅ Perfect! Your system is working correctly.
+   → No action needed!
+
+SCENARIO 2: "Old quarantine system check" is RED
+❌ The migration hasn't completed yet.
+   → ACTION: Visit your homepage once, then run the test again
+
+SCENARIO 3: "Migration status" is RED
+❌ The migration hasn't run.
+   → ACTION: Visit your Dashboard page, then run the test again
+
+SCENARIO 4: "Action Scheduler available" is RED
+❌ Background processing won't work.
+   → ACTION: Install the "Action Scheduler" plugin from WordPress.org
+
+SCENARIO 5: "Counting Accuracy" tests are RED
+❌ Dashboard numbers are out of date.
+   → ACTION: Visit your Dashboard page to refresh stats
+
+SCENARIO 6: Some YELLOW warnings
+⚠️ System works but could be better.
+   → ACTION: Read the specific warning messages
+
+==========================================================================
+AFTER FIXING ISSUES
+==========================================================================
+
+1. Make the fixes suggested in the test results
+2. Click the "Re-run Tests" button at the bottom of the page
+3. Verify the RED tests are now GREEN
+
+==========================================================================
+WHAT IF EVERYTHING IS RED?
+==========================================================================
+
+This means the theme file hasn't been uploaded or activated yet:
+
+1. Go to WordPress admin → Appearance → Themes
+2. Make sure "Hello Elementor Child RTS v3" is activated
+3. Check the version number says 3.2.1 or higher
+4. Run the test again
+
+==========================================================================
+GETTING HELP
+==========================================================================
+
+If you have RED tests that won't turn GREEN:
+
+1. Scroll to the bottom of the test page
+2. Find "Diagnostic Data Export" section
+3. Copy the JSON data
+4. Send it to your developer with:
+   - A screenshot of the test results
+   - Which tests are failing
+   - What you've tried so far
+
+==========================================================================
+SECURITY NOTE
+==========================================================================
+
+This test file requires admin access. If someone who is not an admin
+tries to run it, they'll get an error message. This is for security.
+
+After you're done testing, you can delete the test file if you want:
+- Delete: /wp-content/themes/hello-elementor-child-rts-v3/rts-system-test.php
+
+Or keep it for future testing - it's harmless and can only be accessed
+by administrators.
+
+==========================================================================
+RUNNING THE TEST REGULARLY
+==========================================================================
+
+You can run this test:
+- After updating the theme
+- After importing new letters
+- If you notice dashboard numbers seem wrong
+- If quarantined letters aren't processing
+- Monthly as a health check
+
+Just bookmark the URL and visit it whenever you want!
+
+==========================================================================

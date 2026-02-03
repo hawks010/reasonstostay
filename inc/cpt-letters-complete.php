@@ -58,8 +58,6 @@ class RTS_CPT_Letters_System {
         add_action('admin_post_rts_rescan_pending_letters', [$this, 'handle_rescan_pending_letters']);
         // Quick unflag from edit screen
         add_action('admin_post_rts_quick_unflag', [$this, 'handle_quick_unflag']);
-        // Quick approve from list table
-        add_action('admin_post_rts_quick_approve', [$this, 'handle_quick_approve']);
         
         // Smart filters
         add_action('restrict_manage_posts', [$this, 'add_smart_filters']);
@@ -75,8 +73,6 @@ class RTS_CPT_Letters_System {
         add_filter('bulk_actions-edit-letter', [$this, 'register_bulk_actions']);
         add_filter('handle_bulk_actions-edit-letter', [$this, 'handle_bulk_actions'], 10, 3);
         // Legacy AJAX processing removed (handled by RTS Moderation Engine via Action Scheduler).
-        // Background bulk processing handler (Action Scheduler / WP-Cron).
-        add_action('rts_bulk_process_letters', [$this, 'process_bulk_action_batch'], 10, 3);
         
         // Custom CSS
         add_action('admin_head', [$this, 'admin_css']);
@@ -115,8 +111,10 @@ class RTS_CPT_Letters_System {
             'map_meta_cap' => true,
         ]);
         
-        // Register custom post status for quarantine (completely separate from WP's draft)
-        register_post_status('rts-quarantine', [
+        // NOTE: We now use WordPress's built-in 'draft' status for quarantine
+        // No need to register a custom status
+        /*
+        register_post_status('draft', [
             'label'                     => _x('Quarantined', 'post status', 'rts'),
             'public'                    => false,
             'internal'                  => true,
@@ -129,6 +127,7 @@ class RTS_CPT_Letters_System {
                 'rts'
             ),
         ]);
+        */
     }
     
     public function register_taxonomies() {
@@ -318,7 +317,7 @@ class RTS_CPT_Letters_System {
         
         echo '<hr style="margin:12px 0;border:0;border-top:1px solid #ddd;">';
         
-        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&rts_quarantine=1')) . '" class="button" style="width:100%;text-align:center;">';
+        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=rts-quarantine')) . '" class="button" style="width:100%;text-align:center;">';
         echo 'View All Quarantined';
         echo '</a>';
     }
@@ -356,8 +355,8 @@ class RTS_CPT_Letters_System {
                          LEFT JOIN {$wpdb->postmeta} q ON p.ID = q.post_id AND q.meta_key = %s
                          LEFT JOIN {$wpdb->postmeta} n ON p.ID = n.post_id AND n.meta_key = %s
                          WHERE p.post_type = %s
-                        AND p.post_status IN ('draft', 'rts-quarantine')
-                        AND (
+                         AND p.post_status = %s -- Quarantine uses draft status
+                         AND (
                             (n.meta_value = %s)
                             OR (q.meta_id IS NOT NULL AND CAST(q.meta_value AS UNSIGNED) < %d)
                          )",
@@ -405,9 +404,7 @@ class RTS_CPT_Letters_System {
 		$letters_draft     = (int) ($counts->draft ?? 0);
 		$letters_future    = (int) ($counts->future ?? 0);
 		$letters_private   = (int) ($counts->private ?? 0);
-		$letters_quarantine_status = (int) ($counts->{'rts-quarantine'} ?? 0);
         $needs_review      = (int) $this->count_needs_review_live();
-		$letters_quarantine = $needs_review;
 		// Match RTS Moderation Engine "Total" across admin screens.
 		$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_future + $letters_private;
         $feedback_total    = (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
@@ -546,7 +543,7 @@ class RTS_CPT_Letters_System {
                             <span class="dashicons dashicons-email" aria-hidden="true"></span>
                             Review Inbox
                         </a>
-                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_quarantine=1')); ?>">
+                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_draft=1')); ?>">
                             <span class="dashicons dashicons-shield" aria-hidden="true"></span>
                             View Quarantine
                         </a>
@@ -569,7 +566,7 @@ class RTS_CPT_Letters_System {
                     <?php $this->render_stat_box('Total', $letters_total, admin_url('edit.php?post_type=letter'), '#1d2327', '#f0f0f1', '#dcdcde'); ?>
                     <?php $this->render_stat_box('Published', $letters_published, admin_url('edit.php?post_type=letter&post_status=publish'), '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
                     <?php $this->render_stat_box('Inbox', $true_inbox, admin_url('edit.php?post_type=letter&rts_inbox=1'), '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
-                    <?php $this->render_stat_box('Quarantined', $needs_review, admin_url('edit.php?post_type=letter&rts_quarantine=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
+                    <?php $this->render_stat_box('Needs Review', $needs_review, admin_url('edit.php?post_type=letter&rts_draft=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
                     <?php $this->render_stat_box('Feedback', $feedback_total, admin_url('edit.php?post_type=rts_feedback'), '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
                 </div>
             </div>
@@ -646,13 +643,13 @@ class RTS_CPT_Letters_System {
     private function count_needs_review_live(): int {
         global $wpdb;
         try {
-            // Count quarantined letters (draft or rts-quarantine status with needs_review flag).
+            // Count quarantined letters (draft status with needs_review flag).
             return (int) $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(DISTINCT p.ID)
                  FROM {$wpdb->posts} p
                  INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
                  WHERE p.post_type = %s
-                   AND p.post_status IN ('draft', 'rts-quarantine')
+                   AND p.post_status = %s
                    AND pm.meta_key = %s
                    AND pm.meta_value = %s",
                 'letter',
@@ -711,7 +708,7 @@ class RTS_CPT_Letters_System {
 
         // Use the engine batch size when present, otherwise sane default.
         $batch = 50;
-        if (class_exists('RTS_Engine_Dashboard')) {
+        if (defined('RTS_Engine_Dashboard::OPTION_AUTO_BATCH')) {
             $batch = (int) get_option(RTS_Engine_Dashboard::OPTION_AUTO_BATCH, 50);
         }
         $batch = max(1, min(250, $batch));
@@ -769,8 +766,8 @@ class RTS_CPT_Letters_System {
         }
 
         // Prefer Action Scheduler when available.
-        if ($this->as_available()) {
-            if (!$this->has_scheduled_action('rts_process_letter', [$post_id])) {
+        if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
+            if (!as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
                 as_schedule_single_action(time() + 2, 'rts_process_letter', [$post_id], 'rts');
             }
             return;
@@ -788,8 +785,8 @@ class RTS_CPT_Letters_System {
     private function kick_quarantine_loop(int $batch): void {
         $batch = max(1, min(250, $batch));
 
-        if ($this->as_available()) {
-            if (!$this->has_scheduled_action('rts_rescan_quarantine_loop', [0, $batch])) {
+        if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
+            if (!as_next_scheduled_action('rts_rescan_quarantine_loop', [0, $batch], 'rts')) {
                 as_schedule_single_action(time() + 5, 'rts_rescan_quarantine_loop', [0, $batch], 'rts');
             }
             return;
@@ -936,21 +933,15 @@ class RTS_CPT_Letters_System {
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
 
-        if (!empty($_GET['rts_quarantine'])) {
+        if (!empty($_GET['rts_draft'])) {
             $query->set('post_status', 'draft');
-            $query->set('meta_query', [
-                [ 'key' => 'needs_review', 'value' => '1' ],
-            ]);
+            // No need for meta_query - rts-quarantine status IS the quarantine
             return;
         }
 
         if (!empty($_GET['rts_inbox'])) {
             $query->set('post_status', 'pending');
-            $query->set('meta_query', [
-                'relation' => 'OR',
-                [ 'key' => 'needs_review', 'compare' => 'NOT EXISTS' ],
-                [ 'key' => 'needs_review', 'value' => '1', 'compare' => '!=' ],
-            ]);
+            // No need for meta_query - pending without needs_review IS the inbox
             return;
         }
     }
@@ -1046,18 +1037,8 @@ class RTS_CPT_Letters_System {
     }
     
     public function add_custom_views($views) {
-        $needs_review_count = $this->get_count('needs_review');
-
-        if ($needs_review_count > 0) {
-            $current = (isset($_GET['review_status']) && $_GET['review_status'] === 'needs_review') ? 'class="current"' : '';
-            $views['needs_review'] = sprintf(
-                '<a href="%s" %s>Quarantined <span class="count">(%d)</span></a>',
-                esc_url(admin_url('edit.php?post_type=letter&review_status=needs_review')),
-                $current,
-                $needs_review_count
-            );
-        }
-
+        // Removed duplicate "Needs Review" view
+        // "Quarantined" status view already shows this (using rts-quarantine status)
         return $views;
     }
     
@@ -1228,23 +1209,44 @@ class RTS_CPT_Letters_System {
             return $redirect_to;
         }
 
+        // Capability check (fail-closed).
         if (!current_user_can('edit_others_posts')) {
-            return $redirect_to;
+            return add_query_arg('bulk_processed', 0, $redirect_to);
         }
 
-        check_admin_referer('bulk-posts');
-
-        $post_ids = array_values(array_filter(array_map('absint', (array) $post_ids)));
-        if (empty($post_ids)) {
-            return $redirect_to;
+        // Explicit nonce verification (belt + braces).
+        // WP core provides this nonce on bulk actions screens.
+        if (!isset($_REQUEST['_wpnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_REQUEST['_wpnonce'])), 'bulk-posts')) {
+            return add_query_arg('bulk_processed', 0, $redirect_to);
         }
 
-        $scheduled = $this->schedule_bulk_action($doaction, $post_ids);
+        // Always run bulk actions asynchronously to avoid timeouts on large selections.
+        if (!function_exists('as_schedule_single_action')) {
+            return add_query_arg('bulk_processed', 0, $redirect_to);
+        }
 
-        return add_query_arg('bulk_scheduled', $scheduled, $redirect_to);
+        $ids = array_values(array_filter(array_map('absint', (array) $post_ids)));
+        if (empty($ids)) {
+            return add_query_arg('bulk_processed', 0, $redirect_to);
+        }
+
+        // Store job payload in a transient to keep Action Scheduler args small.
+        $token = 'rts_bulk_admin_' . wp_generate_uuid4();
+        set_transient($token, [
+            'action' => $doaction,
+            'ids'    => $ids,
+        ], DAY_IN_SECONDS);
+
+        if (!as_next_scheduled_action('rts_bulk_admin_action', [$token, 0], 'rts')) {
+            as_schedule_single_action(time() + 5, 'rts_bulk_admin_action', [$token, 0], 'rts');
+        }
+
+        // Provide UI feedback via query args.
+        $redirect_to = add_query_arg('bulk_scheduled', count($ids), $redirect_to);
+        return add_query_arg('bulk_processed', 0, $redirect_to);
     }
-    
-    public function admin_css() {
+
+public function admin_css() {
         $screen = get_current_screen();
         // Fix #7: Screen restriction
         if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
@@ -1324,11 +1326,11 @@ class RTS_CPT_Letters_System {
     }
 
     public function handle_quick_approve() {
-        $post_id = isset($_GET['post']) ? absint($_GET['post']) : 0;
-        if (!$post_id) {
+        if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'approve_' . $_GET['post'])) {
             wp_die('Invalid request');
         }
-        check_admin_referer('approve_' . $post_id);
+        
+        $post_id = intval($_GET['post']);
 
         // Security check: ensure this is actually a letter post type
         if (get_post_type($post_id) !== 'letter') {
@@ -1361,11 +1363,11 @@ class RTS_CPT_Letters_System {
      * Clears quarantine flag, sets to pending, and queues for re-scan
      */
     public function handle_quick_unflag() {
-        $post_id = isset($_GET['post']) ? absint($_GET['post']) : 0;
-        if (!$post_id) {
+        if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'unflag_' . $_GET['post'])) {
             wp_die('Invalid request');
         }
-        check_admin_referer('unflag_' . $post_id);
+        
+        $post_id = intval($_GET['post']);
 
         // Security check: ensure this is actually a letter post type
         if (get_post_type($post_id) !== 'letter') {
@@ -1395,108 +1397,13 @@ class RTS_CPT_Letters_System {
         }
         
         // Queue for fresh scan if Action Scheduler is available
-        if ($this->as_available() && !$this->has_scheduled_action('rts_process_letter', [$post_id])) {
+        if (function_exists('as_schedule_single_action') && !as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
             as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
         }
         
         // Redirect back to the edit screen with success message
         wp_redirect(esc_url_raw(add_query_arg('message', 'unflagger', admin_url('post.php?post=' . $post_id . '&action=edit'))));
         exit;
-    }
-
-    private function as_available(): bool {
-        return function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action');
-    }
-
-    private function has_scheduled_action(string $hook, array $args = []): bool {
-        if (function_exists('as_has_scheduled_action')) {
-            return (bool) as_has_scheduled_action($hook, $args, 'rts');
-        }
-
-        if (function_exists('as_next_scheduled_action')) {
-            return (bool) as_next_scheduled_action($hook, $args, 'rts');
-        }
-
-        return false;
-    }
-
-    private function schedule_bulk_action(string $doaction, array $post_ids): int {
-        $chunks = array_chunk($post_ids, 50);
-        $scheduled = 0;
-
-        foreach ($chunks as $chunk) {
-            if ($this->as_available()) {
-                as_schedule_single_action(time() + 3, 'rts_bulk_process_letters', [$doaction, $chunk, get_current_user_id()], 'rts');
-                $scheduled++;
-                continue;
-            }
-
-            if (!wp_next_scheduled('rts_bulk_process_letters', [$doaction, $chunk, get_current_user_id()])) {
-                wp_schedule_single_event(time() + 15, 'rts_bulk_process_letters', [$doaction, $chunk, get_current_user_id()]);
-                $scheduled++;
-            }
-        }
-
-        return $scheduled;
-    }
-
-    public function process_bulk_action_batch(string $doaction, array $post_ids, int $user_id = 0): void {
-        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan'], true)) {
-            return;
-        }
-
-        $post_ids = array_values(array_filter(array_map('absint', (array) $post_ids)));
-        if (empty($post_ids)) {
-            return;
-        }
-
-        foreach ($post_ids as $post_id) {
-            $post = get_post($post_id);
-            if (!$post || $post->post_type !== 'letter') {
-                continue;
-            }
-
-            if ($this->is_locked($post_id)) {
-                continue;
-            }
-
-            $this->lock_letter($post_id);
-
-            if ($doaction === 'mark_safe') {
-                delete_post_meta($post_id, 'needs_review');
-                delete_post_meta($post_id, 'rts_flagged');
-            } elseif ($doaction === 'mark_review') {
-                update_post_meta($post_id, 'needs_review', '1');
-                update_post_meta($post_id, 'rts_flagged', '1');
-                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
-            } elseif ($doaction === 'clear_quarantine_rescan') {
-                delete_post_meta($post_id, 'needs_review');
-                delete_post_meta($post_id, 'rts_flagged');
-                delete_post_meta($post_id, 'rts_flag_reasons');
-                delete_post_meta($post_id, 'rts_moderation_reasons');
-                delete_post_meta($post_id, 'rts_flagged_keywords');
-
-                wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
-
-                if ($this->as_available() && !$this->has_scheduled_action('rts_process_letter', [$post_id])) {
-                    as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
-                }
-            }
-
-            $this->unlock_letter($post_id);
-        }
-    }
-
-    private function lock_letter(int $post_id): void {
-        set_transient('rts_lock_' . $post_id, time(), 300);
-    }
-
-    private function is_locked(int $post_id): bool {
-        return (bool) get_transient('rts_lock_' . $post_id);
-    }
-
-    private function unlock_letter(int $post_id): void {
-        delete_transient('rts_lock_' . $post_id);
     }
 }
 

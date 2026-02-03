@@ -475,6 +475,7 @@ if (file_exists($multilingual_path)) {
 
 require_once get_stylesheet_directory() . '/inc/security.php';            // Security utilities and helper functions
 require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
+require_once get_stylesheet_directory() . '/inc/rts-bulk-jobs.php';       // Bulk async jobs (Action Scheduler)
 require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
 require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
 require_once get_stylesheet_directory() . '/inc/rts-multilingual.php';   // Multilingual support & language switcher

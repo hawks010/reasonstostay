@@ -1,0 +1,287 @@
+==========================================================================
+DATABASE CLEANUP & RESET TOOL - SIMPLE INSTRUCTIONS
+==========================================================================
+
+This tool helps you clean up your letter database, remove duplicates,
+and optionally start fresh with a clean slate.
+
+⚠️ WARNING: This tool can DELETE letters. Always backup first!
+
+==========================================================================
+WHAT IT DOES
+==========================================================================
+
+1. EXPORT BACKUP
+   → Downloads all letters to a CSV file (your safety net!)
+
+2. DETECT DUPLICATES
+   → Finds letters with same title or same content
+   → Safe - only scans, doesn't delete
+
+3. DELETE DUPLICATES
+   → Removes duplicate letters
+   → Keeps the newest version of each
+   → Deletes the older copies
+
+4. FIX CORRUPTION
+   → Fixes common database problems:
+     • Removes empty letters
+     • Fixes invalid statuses
+     • Cleans orphaned data
+
+5. NUCLEAR RESET
+   → DANGER: Deletes EVERYTHING
+   → Use only if you want to start 100% fresh
+   → Cannot be undone!
+
+==========================================================================
+HOW TO USE IT
+==========================================================================
+
+STEP 1: UPLOAD THE FILE
+------------------------
+1. Download: rts-database-cleanup.php
+2. Upload to: /wp-content/themes/hello-elementor-child-rts-v3/
+3. That's it!
+
+STEP 2: ACCESS THE TOOL
+------------------------
+Visit in your browser:
+https://reasonstostay.inkfire.co.uk/wp-content/themes/hello-elementor-child-rts-v3/rts-database-cleanup.php
+
+You must be logged in as admin!
+
+STEP 3: FOLLOW THE WORKFLOW
+----------------------------
+The tool shows you 5 steps on screen. Follow them in order:
+
+1. Click "Export Database to CSV"
+   → Wait for download
+   → Save the file somewhere safe!
+
+2. Click "Scan for Duplicates"
+   → Wait 5-10 seconds
+   → View results (shows how many duplicates found)
+
+3. If duplicates found, click "Delete Duplicates"
+   → Confirms before deleting
+   → Shows how many were removed
+
+4. Click "Fix Corruption"
+   → Automatically fixes database issues
+   → Shows what was fixed
+
+5. ONLY IF NEEDED: Nuclear Reset
+   → Type "DELETE EVERYTHING" (exactly)
+   → Click the red button
+   → Confirms AGAIN before deleting
+   → Wipes entire database clean
+
+==========================================================================
+WHEN TO USE EACH FEATURE
+==========================================================================
+
+USE "DETECT DUPLICATES" WHEN:
+✓ Dashboard shows weird numbers
+✓ You think letters are duplicated
+✓ After importing from Wix
+✓ Monthly health check
+
+USE "DELETE DUPLICATES" WHEN:
+✓ Scan found duplicates
+✓ You want to clean them up
+✓ You exported backup first!
+
+USE "FIX CORRUPTION" WHEN:
+✓ Letters have empty titles
+✓ Letters have empty content
+✓ Test tool shows corruption
+✓ Database feels "broken"
+
+USE "NUCLEAR RESET" WHEN:
+✓ Database is severely corrupted
+✓ You want to start 100% fresh
+✓ You have a clean import ready
+✓ Duplicates are everywhere
+✓ Nothing else works
+
+DO NOT USE NUCLEAR RESET IF:
+✗ You haven't exported backup
+✗ You're not sure
+✗ You just want to delete a few letters
+✗ You can fix it another way
+
+==========================================================================
+WHAT EACH BUTTON DOES (PLAIN ENGLISH)
+==========================================================================
+
+[Export Database to CSV]
+→ Downloads all your letters to a file
+→ Safe: doesn't delete anything
+→ Creates: rts-letters-backup-2026-02-03-143022.csv
+→ File contains: ID, Title, Content, Status, Date, Meta
+
+[Scan for Duplicates]
+→ Looks for letters with same title
+→ Looks for letters with same content
+→ Shows you a list of what it found
+→ Safe: only looks, doesn't delete
+
+[Delete Duplicates]
+→ Keeps newest version of each letter
+→ Deletes older duplicate copies
+→ Shows "Deleted X duplicates"
+→ Permanent: cannot be undone!
+
+[Fix Corruption]
+→ Removes letters with no title
+→ Removes letters with no content
+→ Fixes broken post statuses
+→ Cleans orphaned metadata
+→ Shows what it fixed
+
+[NUCLEAR RESET]
+→ Deletes ALL <?php echo number_format($stats['total']); ?> letters
+→ Removes ALL metadata
+→ Cleans ALL related data
+→ Resets statistics
+→ Shows "Deleted X letters"
+→ PERMANENT: CANNOT BE UNDONE!
+
+==========================================================================
+SAFETY FEATURES
+==========================================================================
+
+MULTIPLE CONFIRMATIONS:
+• Delete Duplicates asks: "Are you sure?"
+• Nuclear Reset requires typing: "DELETE EVERYTHING"
+• Nuclear Reset asks: "Are you absolutely sure?"
+• Red warning boxes everywhere
+
+ADMIN-ONLY ACCESS:
+• Must be logged in as WordPress admin
+• Regular users cannot access this tool
+
+BACKUP REMINDER:
+• Big warning box at top
+• Export button is first thing you see
+• Recommended workflow starts with backup
+
+==========================================================================
+WHAT HAPPENS AFTER NUCLEAR RESET
+==========================================================================
+
+Your database will be completely empty:
+• Total Letters: 0
+• Published: 0
+• Inbox: 0
+• Quarantine: 0
+• Trash: 0
+
+Everything is clean and ready for:
+• Fresh import from CSV
+• Fresh import from Wix
+• Starting with new letters only
+
+The system still works perfectly, just with no data.
+
+==========================================================================
+HOW TO RECOVER IF YOU MAKE A MISTAKE
+==========================================================================
+
+IF YOU DELETED DUPLICATES BY ACCIDENT:
+→ Use your CSV backup to re-import
+
+IF YOU HIT NUCLEAR RESET BY ACCIDENT:
+→ Use your CSV backup to re-import
+→ Or restore from hosting backup
+→ Or contact hosting support for database restore
+
+IF YOU DIDN'T EXPORT BACKUP:
+→ Contact your hosting provider immediately
+→ Ask for latest database backup
+→ They usually keep automatic backups
+
+==========================================================================
+TYPICAL WORKFLOW EXAMPLE
+==========================================================================
+
+SCENARIO: "I think I have duplicate letters and database corruption"
+
+1. Visit the cleanup tool URL
+2. Click "Export Database to CSV"
+   → Downloads: rts-letters-backup-2026-02-03.csv
+   → Save it to Desktop
+
+3. Click "Scan for Duplicates"
+   → Shows: "Found 50 duplicate titles affecting 100 letters"
+
+4. Click "Delete Duplicates"
+   → Popup: "Are you sure?"
+   → Click OK
+   → Shows: "Deleted 50 duplicate letters"
+
+5. Click "Fix Corruption"
+   → Shows: "Fixed 10 letters with empty titles,
+            Cleaned 25 orphaned metadata entries"
+
+6. Click "Run System Test"
+   → All green checkmarks!
+
+7. Go to Dashboard
+   → Numbers look correct now
+   → Everything working perfectly
+
+DONE! Database is clean.
+
+==========================================================================
+ADVANCED: RE-IMPORTING FROM CSV
+==========================================================================
+
+If you need to re-import letters from the CSV backup:
+
+1. Install plugin: "WP All Import" (free)
+2. Go to: All Import → New Import
+3. Upload your CSV file
+4. Map columns:
+   • ID → Post ID
+   • Title → Post Title
+   • Content → Post Content
+   • Status → Post Status
+   • Date → Post Date
+5. Import as: Letters (post type)
+6. Run import
+
+This restores all your letters from the backup.
+
+==========================================================================
+WHEN TO DELETE THE TOOL
+==========================================================================
+
+After you're done cleaning:
+• You can delete rts-database-cleanup.php
+• Or keep it for future use
+• It's safe to keep (admin-only access)
+• Takes up minimal space
+
+If you keep it, you can run it:
+• Monthly as maintenance
+• After bulk imports
+• When numbers look wrong
+• Anytime you suspect issues
+
+==========================================================================
+SUPPORT
+==========================================================================
+
+If something goes wrong:
+
+1. Check your CSV backup (do you have it?)
+2. Check hosting automatic backups
+3. Contact hosting provider
+4. Share the error message with developer
+5. Do NOT run nuclear reset if unsure!
+
+Most common issues are fixable without nuclear reset.
+
+==========================================================================
