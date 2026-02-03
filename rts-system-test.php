@@ -446,6 +446,12 @@ display_test(
 
 // Test 4.2: Check submenu pages
 global $submenu;
+// Ensure admin menus are registered for this front-end test context.
+if (class_exists('RTS_Engine_Dashboard')) {
+    RTS_Engine_Dashboard::register_menu();
+} else {
+    do_action('admin_menu');
+}
 $letter_submenu = $submenu['edit.php?post_type=letter'] ?? [];
 $dashboard_label = 'Not found';
 

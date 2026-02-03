@@ -30,7 +30,7 @@ class RTS_Zombie_Queue_Hard_Reset {
 			  AND p.post_status = %s
 			  AND pm.meta_key = %s
 			  AND pm.meta_value = %s
-		", 'letter', 'pending', 'needs_review', '1'));
+		", 'letter', 'draft', 'needs_review', '1'));
 
 		$cleared_ts = 0;
 		$cleared_gmt = 0;
