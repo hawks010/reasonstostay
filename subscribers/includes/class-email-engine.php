@@ -6,7 +6,7 @@
  *
  * @package    RTS_Subscriber_System
  * @subpackage Engine
- * @version    1.0.4
+ * @version    1.0.5
  */
 
 if (!defined('ABSPATH')) {
@@ -41,6 +41,95 @@ class RTS_Email_Engine {
     }
 
     /**
+     * Handle incoming tracking requests (Opens and Clicks).
+     * This was the missing method causing the fatal error.
+     */
+    public function handle_tracking_request() {
+        if (!isset($_GET['rts_track']) || !isset($_GET['id'])) {
+            return;
+        }
+
+        $type = sanitize_key($_GET['rts_track']); // 'open' or 'click'
+        $id   = sanitize_text_field($_GET['id']);
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_email_tracking';
+
+        // 1. Verify existence in DB (The ID is an HMAC, so existence implies validity)
+        // Using prepare to prevent SQL injection
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE track_id = %s LIMIT 1", 
+            $id
+        ));
+
+        if (!$row) {
+            // Invalid tracking ID - fail silently or redirect home
+            if ($type === 'click') {
+                wp_redirect(home_url());
+                exit;
+            }
+            return;
+        }
+
+        // 2. Handle 'Open' -> Serve 1x1 Pixel
+        if ($type === 'open') {
+            // Record open if not already recorded (or unique opens logic)
+            // Ideally we update the 'opened' column here if using the new schema
+            if (isset($row->opened) && $row->opened == 0) {
+                $wpdb->update(
+                    $table,
+                    array('opened' => 1, 'opened_at' => current_time('mysql')),
+                    array('id' => $row->id),
+                    array('%d', '%s'),
+                    array('%d')
+                );
+            }
+
+            // Send headers to prevent caching
+            if (!headers_sent()) {
+                header('Content-Type: image/gif');
+                header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+                header('Pragma: no-cache');
+            }
+            
+            // Output 1x1 transparent GIF
+            echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+            exit;
+        }
+
+        // 3. Handle 'Click' -> Redirect
+        if ($type === 'click') {
+            // Record click
+            if (isset($row->clicked) && $row->clicked == 0) {
+                $wpdb->update(
+                    $table,
+                    array('clicked' => 1, 'clicked_at' => current_time('mysql')),
+                    array('id' => $row->id),
+                    array('%d', '%s'),
+                    array('%d')
+                );
+            }
+
+            // Prefer URL from DB (Security: Prevents open redirects)
+            $url = !empty($row->url) ? $row->url : '';
+
+            // Fallback to GET param if DB is empty (legacy support), but sanitizing heavily
+            if (empty($url) && isset($_GET['url'])) {
+                $url = esc_url_raw(urldecode($_GET['url']));
+            }
+
+            // Validation: Ensure valid URL structure
+            if ($url && wp_http_validate_url($url)) {
+                wp_redirect($url);
+                exit;
+            } else {
+                wp_redirect(home_url());
+                exit;
+            }
+        }
+    }
+
+    /**
      * Ensure required database tables exist.
      */
     public function maybe_create_tables() {
@@ -58,7 +147,7 @@ class RTS_Email_Engine {
         }
     }
 
-    // ... (keep create_tables method as fallback for now, though it won't run if centralized is present) ...
+    // Fallback table creation (only runs if centralized installer is missing)
     private function create_tables() {
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
@@ -83,7 +172,145 @@ class RTS_Email_Engine {
         dbDelta($sql_tracking);
     }
 
-    // ... (Rest of the class methods) ...
+    /**
+     * Send queued email item.
+     *
+     * @param object $queue_item Database row object from queue table.
+     * @return bool|void
+     */
+    public function send_queued_email($queue_item) {
+        if (empty($queue_item) || empty($queue_item->id) || empty($queue_item->subscriber_id)) {
+            return;
+        }
+
+        if (!$this->load_dependencies()) return;
+
+        $queue = new RTS_Email_Queue();
+
+        // Global kill switch
+        if (!get_option('rts_email_sending_enabled')) {
+            $queue->mark_cancelled(intval($queue_item->id), 'Email sending disabled via settings');
+            return false;
+        }
+
+        $subscriber_id = intval($queue_item->subscriber_id);
+
+        // Validation: Require verified + active
+        if (!isset($this->subscriber_status_cache[$subscriber_id])) {
+            $verified = (bool) get_post_meta($subscriber_id, '_rts_subscriber_verified', true);
+            $status   = get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+            $this->subscriber_status_cache[$subscriber_id] = ($verified && $status === 'active');
+        }
+
+        if (!$this->subscriber_status_cache[$subscriber_id]) {
+            $queue->mark_failed(intval($queue_item->id), 'Subscriber not active or not verified');
+            return;
+        }
+
+        // Get email safely
+        $email_meta = get_post_meta($subscriber_id, '_rts_subscriber_email', true);
+        if ($email_meta && is_email($email_meta)) {
+            $to = $email_meta;
+        } else {
+            $title = get_the_title($subscriber_id);
+            $to = is_email($title) ? $title : '';
+        }
+
+        if (!$to) {
+            $queue->mark_failed(intval($queue_item->id), 'Invalid or missing subscriber email address');
+            return;
+        }
+
+        $subject = $queue_item->subject;
+        $body    = $queue_item->body;
+
+        // Apply Tracking
+        $body = $this->apply_tracking($body, $queue_item);
+
+        $headers = array('Content-Type: text/html; charset=UTF-8');
+
+        // Demo mode
+        if (get_option('rts_email_demo_mode')) {
+            $queue->mark_cancelled(intval($queue_item->id), 'Demo mode enabled - email not sent');
+            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'cancelled', 'Demo mode enabled');
+            return true;
+        }
+
+        // Send
+        $sent = wp_mail($to, $subject, $body, $headers);
+
+        if ($sent) {
+            $queue->mark_sent(intval($queue_item->id));
+            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'sent', null, array('queue_id' => intval($queue_item->id)));
+            do_action('rts_email_sent', intval($queue_item->id), 'sent');
+            return true;
+        } else {
+            $queue->mark_failed(intval($queue_item->id), 'wp_mail failed');
+            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'failed', 'wp_mail returned false', array('queue_id' => intval($queue_item->id)));
+            do_action('rts_email_sent', intval($queue_item->id), 'failed');
+            return false;
+        }
+    }
+
+    /**
+     * Inject open pixel and wrap links for click tracking.
+     */
+    private function apply_tracking($body, $queue_item) {
+        if (!get_option('rts_email_tracking_enabled', true)) {
+            return $body;
+        }
+
+        $queue_id      = intval($queue_item->id);
+        $subscriber_id = intval($queue_item->subscriber_id);
+        $template      = sanitize_key($queue_item->template);
+
+        // Open Tracking
+        $open_id = hash_hmac('sha256', 'open|' . $queue_id . '|' . $subscriber_id, wp_salt('auth'));
+        
+        $track_url = add_query_arg(array(
+            'rts_track' => 'open',
+            'id'        => $open_id
+        ), home_url('/'));
+
+        $pixel = '<img src="' . esc_url($track_url) . '" width="1" height="1" style="display:none;" alt="" />';
+
+        if (stripos($body, '</body>') !== false) {
+            $body = str_ireplace('</body>', $pixel . '</body>', $body);
+        } else {
+            $body .= $pixel;
+        }
+
+        // Store Open Row
+        $this->store_tracking_row($queue_id, $subscriber_id, $template, $open_id, 'open', null);
+
+        // Click Tracking
+        if (get_option('rts_click_tracking_enabled', true)) {
+            $body = preg_replace_callback(
+                '/href=("|\')(.*?)\1/i',
+                function($matches) use ($queue_id, $subscriber_id, $template) {
+                    $quote = $matches[1];
+                    $url   = $matches[2];
+
+                    if (preg_match('/^(mailto:|#|tel:|sms:)/i', $url)) return $matches[0];
+                    if (stripos($url, 'unsubscribe') !== false || stripos($url, 'manage') !== false) return $matches[0];
+
+                    $click_id = hash_hmac('sha256', 'click|' . $queue_id . '|' . $subscriber_id . '|' . $url, wp_salt('auth'));
+                    
+                    $track_url = add_query_arg(array(
+                        'rts_track' => 'click',
+                        'id'        => $click_id
+                    ), home_url('/'));
+
+                    $this->store_tracking_row($queue_id, $subscriber_id, $template, $click_id, 'click', $url);
+
+                    return 'href=' . $quote . esc_url($track_url) . $quote;
+                },
+                $body
+            );
+        }
+
+        return $body;
+    }
 
     /**
      * Store tracking row.
@@ -92,13 +319,11 @@ class RTS_Email_Engine {
         global $wpdb;
         $table = $wpdb->prefix . 'rts_email_tracking';
 
-        // Check existence to prevent unique constraint errors
         $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE track_id = %s", $track_id));
         if ($exists) {
             return;
         }
 
-        // Limit URL length for DB safety
         if ($url && strlen($url) > 2000) {
             $url = substr($url, 0, 2000);
         }
@@ -122,8 +347,198 @@ class RTS_Email_Engine {
         $wpdb->insert($table, $data);
     }
 
-    // ... (Keep existing methods: send_queued_email, handle_tracking_request, etc.) ...
-    
-    // (Note: For brevity, I am not repeating the entire file content here, but you should ensure
-    // the store_tracking_row and maybe_create_tables methods are updated as above in your full file.)
+    private function log_email($subscriber_id, $email, $template, $subject, $status = 'sent', $error = null, $metadata = array()) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_email_logs';
+
+        $wpdb->insert(
+            $table,
+            array(
+                'subscriber_id' => intval($subscriber_id),
+                'email'         => sanitize_email($email),
+                'template'      => sanitize_key($template),
+                'subject'       => sanitize_text_field($subject),
+                'status'        => $status,
+                'sent_at'       => current_time('mysql'),
+                'error'         => $error ? sanitize_textarea_field($error) : null,
+                'metadata'      => !empty($metadata) ? wp_json_encode($metadata) : null,
+            ),
+            array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+        );
+
+        if ($status === 'sent') {
+            $total_sent = intval(get_post_meta($subscriber_id, '_rts_subscriber_total_sent', true));
+            update_post_meta($subscriber_id, '_rts_subscriber_total_sent', $total_sent + 1);
+            update_post_meta($subscriber_id, '_rts_subscriber_last_sent', current_time('mysql'));
+        }
+    }
+
+    public function handle_wp_mail_failed($wp_error) {
+        if (!($wp_error instanceof WP_Error)) return;
+
+        $data = $wp_error->get_error_data();
+        if (empty($data) || (empty($data['to']) && empty($data['headers']))) return;
+
+        $recipients = array();
+        if (!empty($data['to'])) {
+            $recipients = is_array($data['to']) ? $data['to'] : array($data['to']);
+        }
+
+        $error_msg = $wp_error->get_error_message();
+
+        foreach ($recipients as $email) {
+            $email = sanitize_email($email);
+            if ($email) {
+                $this->handle_bounce($email, $error_msg);
+            }
+        }
+    }
+
+    public function handle_bounce($email, $error) {
+        if (!$this->load_dependencies()) return false;
+
+        $subscriber_cpt = new RTS_Subscriber_CPT();
+        $subscriber_id = $subscriber_cpt->get_subscriber_by_email($email);
+
+        if (!$subscriber_id) return false;
+
+        $bounce_count = intval(get_post_meta($subscriber_id, '_rts_subscriber_bounce_count', true));
+        $bounce_count++;
+        update_post_meta($subscriber_id, '_rts_subscriber_bounce_count', $bounce_count);
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_email_bounces';
+
+        $wpdb->insert(
+            $table,
+            array(
+                'subscriber_id' => intval($subscriber_id),
+                'email'         => sanitize_email($email),
+                'error'         => wp_strip_all_tags($error),
+                'bounced_at'    => current_time('mysql'),
+            ),
+            array('%d', '%s', '%s', '%s')
+        );
+
+        $max_bounces = intval(get_option('rts_max_bounce_count', 3));
+        if ($bounce_count >= $max_bounces) {
+            update_post_meta($subscriber_id, '_rts_subscriber_status', 'bounced');
+            update_post_meta($subscriber_id, '_rts_subscriber_bounced_at', current_time('mysql'));
+            return true;
+        }
+
+        return false;
+    }
+
+    public function run_daily_digest() {
+        $this->queue_digest('daily');
+    }
+
+    public function run_weekly_digest() {
+        $this->queue_digest('weekly');
+    }
+
+    public function run_monthly_digest() {
+        $this->queue_digest('monthly');
+    }
+
+    /**
+     * Queue digest emails efficiently.
+     */
+    private function queue_digest($frequency) {
+        if (!$this->load_dependencies()) return;
+
+        $frequency = sanitize_key($frequency);
+        $template_slug = $frequency . '_digest';
+
+        $require_consent = (bool) get_option('rts_email_reconsent_required', true);
+
+        $meta_query = array(
+            array('key' => '_rts_pref_letters', 'value' => '1'),
+            array('key' => '_rts_subscriber_status', 'value' => 'active'),
+            array('key' => '_rts_subscriber_verified', 'value' => 1),
+            array('key' => '_rts_subscriber_frequency', 'value' => $frequency),
+        );
+        if ($require_consent) {
+            $meta_query[] = array(
+                'key'     => '_rts_subscriber_consent_confirmed',
+                'compare' => 'EXISTS',
+            );
+        }
+
+        $letters = $this->get_letters_for_digest($frequency);
+        if (empty($letters)) return; // Don't send empty digests
+
+        $templates = new RTS_Email_Templates();
+        $queue     = new RTS_Email_Queue();
+
+        $paged = 1;
+        do {
+            $subscriber_query = new WP_Query(array(
+                'post_type'      => 'rts_subscriber',
+                'posts_per_page' => 500,
+                'paged'          => $paged,
+                'fields'         => 'ids',
+                'no_found_rows'  => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+                'meta_query'     => $meta_query,
+            ));
+
+            if (!empty($subscriber_query->posts)) {
+                foreach ($subscriber_query->posts as $subscriber_id) {
+                    $tpl = $templates->render($template_slug, $subscriber_id, $letters);
+                    $queue->enqueue_email($subscriber_id, $template_slug, $tpl['subject'], $tpl['body'], current_time('mysql'), 5);
+                }
+            }
+
+            $paged++;
+        } while (!empty($subscriber_query->posts));
+        
+        wp_reset_postdata();
+    }
+
+    private function get_letters_for_digest($frequency) {
+        $limit = $frequency === 'daily' ? 1 : ($frequency === 'weekly' ? 5 : 10);
+
+        $args = array(
+            'post_type'      => 'letter',
+            'post_status'    => 'publish',
+            'posts_per_page' => $limit,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'no_found_rows'  => true,
+            'meta_query'     => array(
+                array(
+                    'key'   => '_rts_email_ready',
+                    'value' => 1
+                )
+            )
+        );
+
+        $posts = get_posts($args);
+        return $posts ?: array();
+    }
+
+    /**
+     * Dependency Check Helper
+     */
+    private function load_dependencies() {
+        // Assume includes path is standard
+        $includes_path = RTS_PLUGIN_DIR . 'includes/';
+        
+        if (!class_exists('RTS_Email_Templates') && file_exists($includes_path . 'class-email-templates.php')) {
+            require_once $includes_path . 'class-email-templates.php';
+        }
+        
+        if (!class_exists('RTS_Email_Queue') && file_exists($includes_path . 'class-email-queue.php')) {
+            require_once $includes_path . 'class-email-queue.php';
+        }
+
+        if (!class_exists('RTS_Subscriber_CPT') && file_exists($includes_path . 'class-subscriber-cpt.php')) {
+            require_once $includes_path . 'class-subscriber-cpt.php';
+        }
+
+        return class_exists('RTS_Email_Templates') && class_exists('RTS_Email_Queue') && class_exists('RTS_Subscriber_CPT');
+    }
 }
