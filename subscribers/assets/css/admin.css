@@ -1,0 +1,953 @@
+/* RTS SUBSCRIBER ADMIN - COMPLETE STYLING FOR ALL PAGES */
+
+/* ============================================
+   BASE - ALL SUBSCRIBER PAGES
+   ============================================ */
+
+.post-type-rts_subscriber #wpbody-content,
+.post-type-rts_newsletter #wpbody-content,
+.rts-subscriber-page,
+.rts-settings-page,
+.rts-analytics-page,
+.rts-templates-page,
+.rts-import-page {
+    background: #0f172a !important;
+    padding: 20px !important;
+}
+
+.post-type-rts_subscriber #wpbody-content .wrap,
+.rts-subscriber-page .wrap,
+.rts-settings-page .wrap,
+.rts-analytics-page .wrap,
+.rts-templates-page .wrap,
+.rts-import-page .wrap {
+    background: transparent !important;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Page titles */
+.post-type-rts_subscriber #wpbody-content .wrap > h1,
+.post-type-rts_subscriber .wp-heading-inline,
+.rts-page-header h1 {
+    color: #ffffff !important;
+    font-size: 32px !important;
+    font-weight: 700 !important;
+    margin: 0 0 25px 0 !important;
+}
+
+.rts-page-header {
+    margin-bottom: 35px;
+}
+
+/* Add New button */
+.post-type-rts_subscriber .page-title-action {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 15px !important;
+    padding: 12px 24px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+    margin-left: 15px !important;
+    transition: all 0.2s ease !important;
+}
+
+.post-type-rts_subscriber .page-title-action:hover {
+    background: #2563eb !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
+}
+
+/* ============================================
+   SUBSCRIBER LIST TABLE
+   ============================================ */
+
+/* Search box */
+.post-type-rts_subscriber .search-box {
+    margin-bottom: 15px;
+}
+
+.post-type-rts_subscriber .search-box input[type="search"] {
+    background: #1e293b !important;
+    border: 2px solid #334155 !important;
+    color: #ffffff !important;
+    border-radius: 10px !important;
+    padding: 8px 12px !important;
+}
+
+.post-type-rts_subscriber .search-box input[type="submit"] {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 8px 16px !important;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.post-type-rts_subscriber .search-box input[type="submit"]:hover {
+    background: #2563eb !important;
+}
+.table.widefat {
+    background: #2563eb !important;
+}
+
+/* Table navigation (filters and bulk actions) */
+.post-type-rts_subscriber .tablenav {
+    background: #1e293b !important;
+    border-radius: 15px !important;
+    padding: 15px !important;
+    margin-bottom: 15px;
+    border: 1px solid #334155 !important;
+}
+
+.post-type-rts_subscriber .tablenav select,
+.post-type-rts_subscriber .tablenav input[type="text"] {
+    background: #0f172a !important;
+    border: 2px solid #334155 !important;
+    color: #ffffff !important;
+    border-radius: 10px !important;
+    padding: 8px 12px !important;
+    margin-right: 8px;
+}
+
+.post-type-rts_subscriber .tablenav .button,
+.post-type-rts_subscriber .tablenav .button-secondary {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 8px 16px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease;
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+
+.post-type-rts_subscriber .tablenav .button:hover {
+    background: #2563eb !important;
+}
+
+/* Main table - MODERN CARD DESIGN */
+.post-type-rts_subscriber .wp-list-table {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 20px !important;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: none !important;
+}
+
+.post-type-rts_subscriber .wp-list-table thead th,
+.post-type-rts_subscriber .wp-list-table tfoot th {
+    background: #0a0f18 !important;
+    color: #94a3b8 !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid #334155 !important;
+    padding: 15px 12px !important;
+}
+
+.post-type-rts_subscriber .wp-list-table tbody tr {
+    background: #1e293b !important;
+    transition: background 0.2s ease;
+}
+
+.post-type-rts_subscriber .wp-list-table tbody tr:hover {
+    background: #334155 !important;
+}
+
+.post-type-rts_subscriber .wp-list-table tbody td {
+    color: #e2e8f0 !important;
+    border-bottom: 1px solid #0f172a !important;
+    padding: 12px !important;
+}
+
+.post-type-rts_subscriber .wp-list-table tbody tr:last-child td {
+    border-bottom: none !important;
+}
+
+/* Links in table */
+.post-type-rts_subscriber .wp-list-table a {
+    color: #3b82f6 !important;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.post-type-rts_subscriber .wp-list-table a:hover {
+    color: #60a5fa !important;
+}
+
+/* Row actions */
+.post-type-rts_subscriber .wp-list-table .row-actions {
+    color: #64748b !important;
+}
+
+.post-type-rts_subscriber .wp-list-table .row-actions span a {
+    color: #94a3b8 !important;
+}
+
+.post-type-rts_subscriber .wp-list-table .row-actions span a:hover {
+    color: #3b82f6 !important;
+}
+
+.post-type-rts_subscriber .wp-list-table .row-actions .delete a {
+    color: #ef4444 !important;
+}
+
+/* Pagination */
+.post-type-rts_subscriber .tablenav-pages {
+    color: #f1f5f9 !important;
+}
+
+.post-type-rts_subscriber .tablenav-pages a,
+.post-type-rts_subscriber .tablenav-pages .button {
+    background: #0f172a !important;
+    border: 1px solid #334155 !important;
+    color: #f1f5f9 !important;
+    border-radius: 8px !important;
+    padding: 6px 12px !important;
+    margin: 0 2px;
+    transition: all 0.2s ease;
+}
+
+.post-type-rts_subscriber .tablenav-pages a:hover {
+    background: #334155 !important;
+    border-color: #3b82f6 !important;
+}
+
+.post-type-rts_subscriber .tablenav-pages .current-page {
+    background: #0f172a !important;
+    border: 1px solid #334155 !important;
+    color: #f1f5f9 !important;
+}
+
+/* Empty state */
+.post-type-rts_subscriber .no-items td {
+    background: #1e293b !important;
+    color: #94a3b8 !important;
+    text-align: center;
+    padding: 60px 20px !important;
+    font-size: 16px;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-indicator.active { background: #22c55e; }
+.status-indicator.paused { background: #f59e0b; }
+.status-indicator.unsubscribed { background: #ef4444; }
+.status-indicator.bounced { background: #dc2626; }
+
+/* ============================================
+   ADD NEW / EDIT SUBSCRIBER PAGE
+   ============================================ */
+
+/* Post area */
+.post-type-rts_subscriber #poststuff {
+    padding-top: 0 !important;
+}
+
+/* Post boxes - MODERN CARDS */
+.post-type-rts_subscriber .postbox {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 25px !important;
+    margin-bottom: 20px;
+    box-shadow: none !important;
+}
+
+.post-type-rts_subscriber .postbox-header {
+    background: #0a0f18 !important;
+    border-bottom: 1px solid #334155 !important;
+    padding: 15px 20px !important;
+    border-radius: 25px 25px 0 0 !important;
+}
+
+.post-type-rts_subscriber .postbox-header h2,
+.post-type-rts_subscriber .postbox-header .hndle {
+    color: #f8fafc !important;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.post-type-rts_subscriber .postbox .inside {
+    padding: 25px !important;
+    color: #e2e8f0 !important;
+}
+
+/* Title field - EMAIL INPUT */
+.post-type-rts_subscriber #titlewrap {
+    margin-bottom: 20px;
+}
+
+.post-type-rts_subscriber #title {
+    background: #0f172a !important;
+    border: 2px solid #334155 !important;
+    color: #f1f5f9 !important;
+    border-radius: 15px !important;
+    padding: 14px 18px !important;
+    font-size: 18px !important;
+    width: 100% !important;
+}
+
+.post-type-rts_subscriber #title:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+}
+
+.post-type-rts_subscriber #title-prompt-text {
+    color: #64748b !important;
+    padding: 14px 18px !important;
+}
+
+/* Form fields */
+.post-type-rts_subscriber .form-table th {
+    color: #94a3b8 !important;
+    font-weight: 600;
+    padding: 15px 10px !important;
+}
+
+.post-type-rts_subscriber .form-table td {
+    color: #e2e8f0 !important;
+    padding: 15px 10px !important;
+}
+
+.post-type-rts_subscriber .form-table input[type="email"],
+.post-type-rts_subscriber .form-table input[type="text"],
+.post-type-rts_subscriber .form-table select {
+    background: #0f172a !important;
+    border: 2px solid #334155 !important;
+    color: #f1f5f9 !important;
+    border-radius: 12px !important;
+    padding: 10px 14px !important;
+    width: 100%;
+    max-width: 400px;
+}
+
+.post-type-rts_subscriber .form-table input:focus,
+.post-type-rts_subscriber .form-table select:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Publish box */
+.post-type-rts_subscriber #major-publishing-actions {
+    background: transparent !important;
+    border-top: 1px solid #334155 !important;
+    padding: 15px 20px !important;
+}
+
+.post-type-rts_subscriber #publishing-action .button-primary {
+    background: #22c55e !important;
+    border: none !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    padding: 10px 24px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3) !important;
+    transition: all 0.2s ease !important;
+    text-shadow: none !important;
+}
+
+.post-type-rts_subscriber #publishing-action .button-primary:hover {
+    background: #16a34a !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4) !important;
+}
+
+.post-type-rts_subscriber #delete-action a {
+    color: #ef4444 !important;
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+}
+
+.post-type-rts_subscriber #delete-action a:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* ============================================
+   CUSTOM PAGES (Settings, Templates, Analytics, Import)
+   ============================================ */
+
+.rts-card {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 35px !important;
+    padding: 35px !important;
+    margin-bottom: 25px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rts-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.rts-card h2,
+.rts-card h3 {
+    color: #f8fafc !important;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 25px 0;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #334155;
+}
+
+.rts-card p {
+    color: #cbd5e1 !important;
+    line-height: 1.6;
+    margin: 0 0 15px 0;
+}
+
+.rts-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 25px;
+    margin-bottom: 35px;
+}
+
+.rts-metric-card {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+    border: 1px solid #334155 !important;
+    border-radius: 35px !important;
+    padding: 35px !important;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.rts-metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.rts-metric-card:hover::before {
+    opacity: 1;
+}
+
+.rts-metric-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6 !important;
+}
+
+.rts-metric-label {
+    color: #94a3b8 !important;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 15px 0;
+    display: block;
+}
+
+.rts-metric-value {
+    color: #f8fafc !important;
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0 0 10px 0;
+    display: block;
+}
+
+.rts-metric-subtitle {
+    color: #64748b !important;
+    font-size: 14px;
+    margin-top: 12px;
+}
+
+.rts-form-section {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 35px !important;
+    padding: 35px !important;
+    margin-bottom: 25px;
+}
+
+.rts-form-section h3 {
+    color: #f8fafc !important;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 25px 0;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #334155;
+}
+
+.rts-form-row {
+    margin-bottom: 25px;
+    color: #ffffff;
+}
+
+#the-list tr:last-child td {
+    background: #16233b !important;
+}
+.rts-form-label {
+    display: block;
+    color: #f1f5f9 !important;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.rts-form-description {
+    display: block;
+    color: #94a3b8 !important;
+    font-size: 13px;
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+.rts-form-input,
+.rts-form-select,
+.rts-form-textarea {
+    width: 100%;
+    max-width: 600px;
+    background: #0f172a !important;
+    border: 2px solid #334155 !important;
+    border-radius: 15px !important;
+    padding: 14px 18px !important;
+    color: #f1f5f9 !important;
+    font-size: 15px;
+    transition: all 0.2s ease;
+}
+
+.rts-form-input:focus,
+.rts-form-select:focus,
+.rts-form-textarea:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+}
+
+.rts-code-editor {
+    background: #0a0f18 !important;
+    border: 2px solid #334155 !important;
+    border-radius: 15px !important;
+    padding: 20px !important;
+    color: #e2e8f0 !important;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 300px;
+    resize: vertical;
+    width: 100%;
+}
+
+.rts-button,
+.rts-btn {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 15px !important;
+    padding: 14px 32px !important;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.rts-button:hover,
+.rts-btn:hover {
+    background: #2563eb !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.rts-button.secondary { background: #64748b !important; }
+.rts-button.danger { background: #ef4444 !important; }
+.rts-button.success { background: #22c55e !important; }
+
+.rts-button-group {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.rts-template-list {
+    display: grid;
+    gap: 20px;
+}
+
+.rts-template-item {
+    background: #1e293b !important;
+    border: 2px solid #334155 !important;
+    border-radius: 25px !important;
+    padding: 28px !important;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rts-template-item:hover {
+    border-color: #3b82f6 !important;
+    transform: translateX(5px);
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2);
+}
+
+.rts-template-name {
+    color: #f8fafc !important;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.rts-template-badge {
+    background: #3b82f6;
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.rts-template-badge.order-1 { background: #22c55e; }
+.rts-template-badge.order-2 { background: #3b82f6; }
+.rts-template-badge.order-3 { background: #f59e0b; }
+
+.rts-template-description {
+    color: #94a3b8 !important;
+    font-size: 14px;
+    margin: 0 0 10px 0;
+}
+
+.rts-template-meta {
+    color: #64748b !important;
+    font-size: 13px;
+    display: flex;
+    gap: 20px;
+}
+
+.rts-info-box {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+    border: 2px solid rgba(59, 130, 246, 0.3);
+    border-radius: 20px;
+    padding: 25px;
+    margin: 25px 0;
+}
+
+.rts-info-box.success {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.rts-info-box h4 {
+    color: #f8fafc !important;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+.rts-info-box p {
+    color: #cbd5e1 !important;
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 782px) {
+    .post-type-rts_subscriber #wpbody-content {
+        padding: 15px !important;
+    }
+    
+    .rts-metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .rts-card,
+    .rts-metric-card,
+    .rts-form-section,
+    .post-type-rts_subscriber .postbox {
+        border-radius: 20px !important;
+        padding: 20px !important;
+    }
+    
+    .post-type-rts_subscriber .wp-list-table {
+        border-radius: 15px !important;
+    }
+}
+
+
+/* Fix title input contrast (Subscriber + Newsletter CPT) */
+.post-type-rts_subscriber #titlewrap #title,
+.post-type-rts_newsletter #titlewrap #title {
+  background: rgba(0,0,0,0.35) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 16px !important;
+  padding: 14px 18px !important;
+}
+
+.post-type-rts_subscriber #titlewrap #title::placeholder,
+.post-type-rts_newsletter #titlewrap #title::placeholder {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* Metabox contrast on dark admin */
+.post-type-rts_subscriber .postbox,
+.post-type-rts_newsletter .postbox {
+  background: rgba(0,0,0,0.25) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 18px !important;
+}
+
+/* ============================================
+   LIST TABLE LAYOUT: Subscriber + Newsletter CPT
+   ============================================ */
+
+.post-type-rts_subscriber #wpbody-content > .wrap,
+.post-type-rts_newsletter #wpbody-content > .wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 28px;
+  padding: 22px 22px 26px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+
+.post-type-rts_subscriber #wpbody-content > .wrap h1,
+.post-type-rts_newsletter #wpbody-content > .wrap h1,
+.post-type-rts_subscriber #wpbody-content > .wrap .wp-heading-inline,
+.post-type-rts_newsletter #wpbody-content > .wrap .wp-heading-inline {
+  color: #ffffff !important;
+}
+
+/* Remove washed-out / grey text on dark backgrounds */
+.post-type-rts_subscriber .wp-list-table,
+.post-type-rts_newsletter .wp-list-table {
+  color: #ffffff !important;
+}
+
+.post-type-rts_subscriber .wp-list-table thead th,
+.post-type-rts_subscriber .wp-list-table tfoot th,
+.post-type-rts_newsletter .wp-list-table thead th,
+.post-type-rts_newsletter .wp-list-table tfoot th {
+  color: #F4C946 !important;
+  opacity: 1 !important;
+}
+
+.post-type-rts_subscriber .wp-list-table td,
+.post-type-rts_newsletter .wp-list-table td {
+  color: #ffffff !important;
+}
+
+.post-type-rts_subscriber .subsubsub a,
+.post-type-rts_newsletter .subsubsub a {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.post-type-rts_subscriber .subsubsub a.current,
+.post-type-rts_newsletter .subsubsub a.current {
+  color: #F4C946 !important;
+}
+
+/* Tablenav + filters row */
+.post-type-rts_subscriber .tablenav,
+.post-type-rts_newsletter .tablenav {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.post-type-rts_subscriber .tablenav .actions select,
+.post-type-rts_newsletter .tablenav .actions select {
+  background: rgba(0,0,0,0.28) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  border-radius: 14px !important;
+  padding: 10px 14px !important;
+  min-height: 42px !important;
+}
+
+.post-type-rts_subscriber .tablenav .actions input.button,
+.post-type-rts_newsletter .tablenav .actions input.button,
+.post-type-rts_subscriber .tablenav .actions a.button,
+.post-type-rts_newsletter .tablenav .actions a.button {
+  background: #179AD6 !important;
+  border: 0 !important;
+  color: #ffffff !important;
+  border-radius: 14px !important;
+  padding: 10px 16px !important;
+  min-height: 42px !important;
+  font-weight: 700 !important;
+}
+
+.post-type-rts_subscriber .tablenav .actions input.button:hover,
+.post-type-rts_newsletter .tablenav .actions input.button:hover,
+.post-type-rts_subscriber .tablenav .actions a.button:hover,
+.post-type-rts_newsletter .tablenav .actions a.button:hover {
+  background: #DF157C !important;
+  color: #ffffff !important;
+}
+
+/* Row action links */
+.post-type-rts_subscriber .row-actions a,
+.post-type-rts_newsletter .row-actions a {
+  color: #F4C946 !important;
+}
+
+.post-type-rts_subscriber .row-actions a:hover,
+.post-type-rts_newsletter .row-actions a:hover {
+  color: #DF157C !important;
+}
+
+/* Fix any accidental dimming */
+.post-type-rts_subscriber [style*="opacity"],
+.post-type-rts_newsletter [style*="opacity"] {
+  opacity: 1 !important;
+}
+
+.post-type-rts_subscriber .postbox .hndle,
+.post-type-rts_newsletter .postbox .hndle {
+  color: #ffffff !important;
+}
+
+.post-type-rts_subscriber .postbox .inside,
+.post-type-rts_newsletter .postbox .inside {
+  color: #ffffff !important;
+}
+
+.post-type-rts_subscriber .postbox a,
+.post-type-rts_newsletter .postbox a {
+  color: #F4C946 !important;
+}
+
+.post-type-rts_subscriber .postbox a:hover,
+.post-type-rts_newsletter .postbox a:hover {
+  color: #DF157C !important;
+}
+
+/* ==========================================================
+   v2.0.36+ Contrast + table polish fixes
+   ========================================================== */
+
+/* Sub-sub-sub filters: ensure counts are readable on dark */
+.post-type-rts_subscriber .subsubsub a .count,
+.post-type-rts_subscriber .subsubsub a.current .count,
+.post-type-rts_newsletter .subsubsub a .count,
+.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+}
+
+/* Title icons: force solid brand yellow (no dim grey) */
+.post-type-rts_subscriber .wrap .wp-heading-inline .dashicons,
+.post-type-rts_newsletter .wrap .wp-heading-inline .dashicons,
+.post-type-rts_subscriber .rts-admin-page .dashicons,
+.post-type-rts_newsletter .rts-admin-page .dashicons {
+  color: #F4C946 !important;
+  opacity: 1 !important;
+}
+
+/* Force all descriptive text in RTS cards to be readable */
+.post-type-rts_subscriber .rts-card,
+.post-type-rts_newsletter .rts-card,
+.post-type-rts_subscriber .rts-help-card,
+.post-type-rts_newsletter .rts-help-card,
+.post-type-rts_subscriber .rts-card p,
+.post-type-rts_newsletter .rts-card p,
+.post-type-rts_subscriber .rts-card li,
+.post-type-rts_newsletter .rts-card li,
+.post-type-rts_subscriber .description,
+.post-type-rts_newsletter .description {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* WordPress list tables: ensure dark mode consistency (newsletter table was default white) */
+.post-type-rts_subscriber .wp-list-table,
+.post-type-rts_newsletter .wp-list-table {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(148, 163, 184, 0.20) !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+}
+
+.post-type-rts_subscriber .wp-list-table thead th,
+.post-type-rts_newsletter .wp-list-table thead th {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important;
+  color: #F4C946 !important; /* brand yellow */
+}
+
+.post-type-rts_subscriber .wp-list-table tbody tr,
+.post-type-rts_newsletter .wp-list-table tbody tr {
+  background: rgba(30, 41, 59, 0.85) !important;
+}
+
+.post-type-rts_subscriber .wp-list-table tbody tr:nth-child(even),
+.post-type-rts_newsletter .wp-list-table tbody tr:nth-child(even) {
+  background: rgba(36, 52, 73, 0.85) !important;
+}
+
+.post-type-rts_subscriber .wp-list-table td,
+.post-type-rts_subscriber .wp-list-table th,
+.post-type-rts_newsletter .wp-list-table td,
+.post-type-rts_newsletter .wp-list-table th {
+  color: #ffffff !important;
+}
+
+/* Checkbox column background: match row/header backgrounds (no floating white blocks) */
+.post-type-rts_subscriber .wp-list-table th.check-column,
+.post-type-rts_newsletter .wp-list-table th.check-column {
+  background: rgba(0, 0, 0, 0.35) !important;
+}
+
+.post-type-rts_subscriber .wp-list-table td.check-column,
+.post-type-rts_newsletter .wp-list-table td.check-column {
+  background: transparent !important;
+}
+
+.post-type-rts_subscriber .wp-list-table td.check-column input[type="checkbox"],
+.post-type-rts_subscriber .wp-list-table th.check-column input[type="checkbox"],
+.post-type-rts_newsletter .wp-list-table td.check-column input[type="checkbox"],
+.post-type-rts_newsletter .wp-list-table th.check-column input[type="checkbox"] {
+  background: rgba(0,0,0,0.25) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+/* Row actions: avoid low-contrast grey */
+.post-type-rts_subscriber .wp-list-table .row-actions,
+.post-type-rts_newsletter .wp-list-table .row-actions {
+  color: #ffffff !important;
+}
+

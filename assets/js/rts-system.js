@@ -1,7 +1,7 @@
 /**
  * Reasons to Stay - Main JavaScript
  * Handles letter viewer, onboarding, and form submission
- * v2.3.0 - Enterprise Edition (Rocket Loader & Duplicate Safe)
+ * v2.3.1 - Enterprise Edition (Rocket Loader & Duplicate Safe)
  *
  * Notes:
  * - Fixes "Identifier has already been declared" by using window assignment
@@ -69,6 +69,7 @@
       requestQueue: [],
       isProcessingQueue: false,
       activeRequests: new Set(),
+      pendingRequests: new Map(),
       letterCache: {},
       CACHE_TTL: 5 * 60 * 1000,
       cacheVersion: 1,
@@ -122,6 +123,38 @@
         metrics: [],
         MAX_METRICS: 100,
 
+        BUDGETS: {
+          render: 100,
+          network: 2000,
+          total: 3000
+        },
+
+        checkBudget(label, duration) {
+          const budget = (this.BUDGETS && this.BUDGETS[label]) ? this.BUDGETS[label] : 1000;
+          if (duration > budget) {
+            this.logMetric('BUDGET_EXCEEDED_' + label, duration, false);
+            if (label === 'render' && duration > 500) {
+              try { document.documentElement.classList.add('rts-no-animations'); } catch(e){}
+            }
+          }
+        },
+
+        BUDGETS: {
+          render: 100,
+          network: 2000,
+          total: 3000
+        },
+
+        checkBudget(label, duration) {
+          const budget = (this.BUDGETS && this.BUDGETS[label]) ? this.BUDGETS[label] : 1000;
+          if (duration > budget) {
+            this.logMetric('BUDGET_EXCEEDED_' + label, duration, false);
+            if (label === 'render' && duration > 500) {
+              try { document.documentElement.classList.add('rts-no-animations'); } catch(e){}
+            }
+          }
+        },
+
         logMetric(label, duration, success = true) {
           const metric = {
             label,
@@ -144,10 +177,14 @@
 
         reportSlowOperation(metric) {
           // Optional endpoint: /performance
-          if (!this.features.remotePerfReporting) return;
+          const root = (window && window.RTSLetterSystem) ? window.RTSLetterSystem : {};
+          const features = (root && root.features) ? root.features : {};
+          if (!features.remotePerfReporting) return;
           if (!navigator.sendBeacon) return;
 
-          const endpoint = this.getRestBase() + 'performance';
+          const restBase = (root && typeof root.getRestBase === 'function') ? root.getRestBase() : '';
+          if (!restBase) return;
+          const endpoint = restBase + 'performance';
           try { navigator.sendBeacon(endpoint, JSON.stringify(metric)); } catch(e) {}
         }
       },
@@ -181,6 +218,7 @@
           this.autoConfigure();
           this.setupExperiments();
           this.ensureStyles();
+          this.setupPerformanceTracking();
           this.addResourceHints();
 
           this.sessionStartTime = Date.now();
@@ -305,16 +343,59 @@
         }, 100);
       },
 
-      injectCriticalStyles() {
+      
+injectCriticalStyles() {
         const style = document.createElement('style');
         style.textContent = `
           .rts-letter-viewer{max-width:800px;margin:0 auto;padding:20px}
           .rts-loading,.rts-error{text-align:center;padding:40px}
           .rts-btn-next,.rts-btn-helpful,.rts-btn-unhelpful{padding:10px 20px;margin:5px;cursor:pointer}
           .rts-hidden{display:none!important}
+
+          /* Performance optimizations */
+          .rts-letter-body{
+            contain: content;
+            will-change: opacity;
+          }
+          .rts-letter-display{
+            backface-visibility: hidden;
+            transform: translateZ(0);
+          }
+          .rts-fade-in{
+            opacity:0;
+            animation: rtsFadeIn .3s ease forwards;
+          }
+          @keyframes rtsFadeIn{to{opacity:1}}
         `;
         document.head.appendChild(style);
       },
+
+
+      setupPerformanceTracking() {
+        if (!('PerformanceObserver' in window)) return;
+        try {
+          // Largest Contentful Paint
+          const lcpObserver = new PerformanceObserver((entryList) => {
+            const entries = entryList.getEntries();
+            const last = entries && entries.length ? entries[entries.length - 1] : null;
+            if (last && this.performance && typeof this.performance.logMetric === 'function') {
+              this.performance.logMetric('LCP', last.startTime, true);
+            }
+          });
+          lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
+
+          // First Input Delay (where available)
+          const fidObserver = new PerformanceObserver((entryList) => {
+            for (const entry of entryList.getEntries()) {
+              if (this.performance && typeof this.performance.logMetric === 'function') {
+                this.performance.logMetric('FID', entry.duration || 0, true);
+              }
+            }
+          });
+          fidObserver.observe({ entryTypes: ['first-input'] });
+        } catch (e) {}
+      },
+
 
       registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
@@ -359,31 +440,66 @@
         setInterval(checkMemory, 30000);
       },
 
-      cleanupMemory() {
-        this.letterCache = {};
-        if (this.errorLog.length > 10) this.errorLog = this.errorLog.slice(-10);
-        this.performance.metrics = [];
+      optimizeMemory() {
+        const cacheKeys = Object.keys(this.letterCache || {});
+        if (cacheKeys.length > 20) {
+          const sorted = cacheKeys.sort((a, b) => (this.letterCache[b]?.timestamp || 0) - (this.letterCache[a]?.timestamp || 0));
+          for (let i = 10; i < sorted.length; i++) {
+            try { delete this.letterCache[sorted[i]]; } catch (e) {}
+          }
+        }
+
+        if (this.performance && Array.isArray(this.performance.metrics) && this.performance.metrics.length > 50) {
+          this.performance.metrics = this.performance.metrics.slice(-50);
+        }
+
+        if (Array.isArray(this.errorLog) && this.errorLog.length > 20) {
+          this.errorLog = this.errorLog.slice(-20);
+        }
+      },
+
+      
+cleanupMemory() {
+        this.optimizeMemory();
         this.prefetchedLetter = null;
         if (window.gc) { try { window.gc(); } catch(e){} }
       },
 
-      cacheDomElements() {
-        this.domElements.loading = document.querySelector('.rts-loading');
-        this.domElements.display = document.querySelector('.rts-letter-display');
-        this.domElements.content = document.querySelector('.rts-letter-body');        this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
-        this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
-        this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
-        this.domElements.rateUpBtn = document.querySelector('.rts-rate-up');
-        this.domElements.rateDownBtn = document.querySelector('.rts-rate-down');
-        this.domElements.rateSkipBtn = document.querySelector('.rts-rate-skip');
+      
+cacheDomElements() {
+        // Use single query for frequently accessed elements
+        const container = document.querySelector('.rts-letter-viewer');
 
-        setTimeout(() => {
-            if (!this.domElements.display) this.domElements.display = document.querySelector('.rts-letter-display');
-            if (!this.domElements.content) this.domElements.content = document.querySelector('.rts-letter-body');
-            if (!this.domElements.ratePrompt) this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
-            if (!this.domElements.helpfulBtn) this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
-            if (!this.domElements.unhelpBtn) this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
-        }, 500);
+        if (container) {
+          this.domElements.loading = container.querySelector('.rts-loading');
+          this.domElements.display = container.querySelector('.rts-letter-display');
+          this.domElements.content = container.querySelector('.rts-letter-body');
+          this.domElements.helpfulBtn = container.querySelector('.rts-btn-helpful');
+          this.domElements.unhelpBtn = container.querySelector('.rts-btn-unhelpful');
+          this.domElements.ratePrompt = container.querySelector('.rts-rate-prompt');
+          this.domElements.rateUpBtn = container.querySelector('.rts-rate-up');
+          this.domElements.rateDownBtn = container.querySelector('.rts-rate-down');
+          this.domElements.rateSkipBtn = container.querySelector('.rts-rate-skip');
+        }
+
+        // Fallback to document-wide search only if needed
+        if (!this.domElements.display) {
+          this.domElements.display = document.querySelector('.rts-letter-display');
+        }
+        if (!this.domElements.content) {
+          this.domElements.content = document.querySelector('.rts-letter-body');
+        }
+
+        // One-time fallback checks (avoid recurring timeouts)
+        if (!this.domElements.ratePrompt) {
+          this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
+        }
+        if (!this.domElements.helpfulBtn) {
+          this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
+        }
+        if (!this.domElements.unhelpBtn) {
+          this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
+        }
       },
 
       getRestBase() {
@@ -449,8 +565,17 @@
         }
       },
 
+
+
+
+
+
       async queueRequest(requestFn, priority = 'normal', requestId = null, timeout = 30000) {
         const reqId = requestId || (Date.now() + Math.random().toString(36).slice(2));
+
+        if (this.pendingRequests && this.pendingRequests.has(reqId)) {
+          return this.pendingRequests.get(reqId);
+        }
 
         const duplicate = this.requestQueue.find(item => item.requestId === reqId);
         if (duplicate) {
@@ -462,53 +587,61 @@
           });
         }
 
-        return new Promise((resolve, reject) => {
+        const promise = new Promise((resolve, reject) => {
           let timedOut = false;
+
           const timeoutId = setTimeout(() => {
             timedOut = true;
+            try { this.pendingRequests && this.pendingRequests.delete(reqId); } catch(e){}
             reject(new Error('Request timeout'));
           }, timeout);
 
           const queueItem = {
-            async requestFn() {
-              if (timedOut) throw new Error('Request cancelled - timeout');
-              clearTimeout(timeoutId);
-              return await requestFn();
-            },
+            priority,
+            requestId: reqId,
             resolveCallbacks: [resolve],
             rejectCallbacks: [reject],
-            priority,
-            requestId: reqId
+            requestFn: async () => {
+              if (timedOut) throw new Error('Request cancelled - timeout');
+              return await requestFn();
+            }
           };
 
           queueItem.resolve = (result) => {
-            if (!timedOut) {
-              clearTimeout(timeoutId);
-              queueItem.resolveCallbacks.forEach(cb => cb(result));
-            }
+            if (timedOut) return;
+            clearTimeout(timeoutId);
+            try { this.pendingRequests && this.pendingRequests.delete(reqId); } catch(e){}
+            (queueItem.resolveCallbacks || []).forEach(cb => { try { cb(result); } catch(e){} });
           };
 
           queueItem.reject = (error) => {
-            if (!timedOut) {
-              clearTimeout(timeoutId);
-              queueItem.rejectCallbacks.forEach(cb => cb(error));
-            }
+            if (timedOut) return;
+            clearTimeout(timeoutId);
+            try { this.pendingRequests && this.pendingRequests.delete(reqId); } catch(e){}
+            (queueItem.rejectCallbacks || []).forEach(cb => { try { cb(error); } catch(e){} });
           };
 
           this.requestQueue.push(queueItem);
           this.processQueue();
         });
+
+        try { this.pendingRequests && this.pendingRequests.set(reqId, promise); } catch(e){}
+        return promise;
       },
 
-      async processQueue() {
+      
+async processQueue() {
         if (this.isProcessingQueue || this.requestQueue.length === 0) return;
         this.isProcessingQueue = true;
 
         try {
-          this.requestQueue.sort((a, b) => {
-            const order = { high: 0, normal: 1, low: 2 };
-            return order[a.priority] - order[b.priority];
-          });
+          // Sort only when needed
+          if (this.requestQueue.length > 1) {
+            this.requestQueue.sort((a, b) => {
+              const order = { high: 0, normal: 1, low: 2 };
+              return (order[a.priority] ?? 1) - (order[b.priority] ?? 1);
+            });
+          }
 
           const item = this.requestQueue.shift();
           const { requestFn, resolve, reject, requestId } = item;
@@ -524,7 +657,10 @@
           }
         } finally {
           this.isProcessingQueue = false;
-          if (this.requestQueue.length > 0) setTimeout(() => this.processQueue(), 0);
+          // Microtask continuation (faster than setTimeout(0))
+          Promise.resolve().then(() => {
+            if (this.requestQueue.length > 0) this.processQueue();
+          });
         }
       },
 
@@ -563,25 +699,43 @@
         throw new Error('Failed to fetch');
       },
 
+
       sanitizeHtml(html) {
         if (!html) return '';
+
+        // Fast path for plain text (no tags)
+        const str = String(html);
+        if (!/<[a-z][\s\S]*>/i.test(str)) return str;
+
         const template = document.createElement('template');
-        template.innerHTML = String(html);
+        template.innerHTML = str;
 
+        // Remove dangerous nodes in one sweep
         const dangerous = template.content.querySelectorAll('script, iframe, object, embed, style, link, meta');
-        dangerous.forEach(n => n.remove());
+        if (dangerous.length) {
+          for (let i = dangerous.length - 1; i >= 0; i--) {
+            dangerous[i].remove();
+          }
+        }
 
+        // Strip dangerous attributes
         const all = template.content.querySelectorAll('*');
-        all.forEach(el => {
-          [...el.attributes].forEach(attr => {
-            const name = attr.name.toLowerCase();
-            const val = (attr.value || '').toLowerCase();
+        if (all.length) {
+          for (const el of all) {
+            const attrs = el.attributes;
+            for (let i = attrs.length - 1; i >= 0; i--) {
+              const attr = attrs[i];
+              const name = attr.name.toLowerCase();
+              const val  = String(attr.value || '').toLowerCase();
 
-            if (name.startsWith('on')) el.removeAttribute(attr.name);
-            if (name === 'style') el.removeAttribute(attr.name);
-            if ((name === 'href' || name === 'src') && val.includes('javascript:')) el.removeAttribute(attr.name);
-          });
-        });
+              if (name.startsWith('on') || name === 'style') {
+                el.removeAttribute(attr.name);
+              } else if ((name === 'href' || name === 'src') && val.includes('javascript:')) {
+                el.removeAttribute(attr.name);
+              }
+            }
+          }
+        }
 
         return template.innerHTML;
       },
@@ -735,27 +889,42 @@
         this.cacheVersion++;
       },
 
-      getCacheKey() {
-        const lastViewed = this.viewedLetterIds.length ? this.viewedLetterIds[this.viewedLetterIds.length - 1] : 0;
+      
+getCacheKey() {
+        const lastViewed = this.viewedLetterIds.length
+          ? this.viewedLetterIds[this.viewedLetterIds.length - 1]
+          : 0;
+
         const viewedLen = this.viewedLetterIds.length;
-        const prefHash = JSON.stringify(this.preferences);
+
+        // Stable string for hashing (avoid JSON.stringify on whole prefs object)
+        const feelingsStr = (this.preferences && Array.isArray(this.preferences.feelings))
+          ? this.preferences.feelings.join(',')
+          : '';
+        const readingTime = (this.preferences && this.preferences.readingTime) ? this.preferences.readingTime : 'long';
+        const tone = (this.preferences && this.preferences.tone) ? this.preferences.tone : 'any';
+        const skip = (this.preferences && this.preferences.skipOnboarding) ? '1' : '0';
+
+        // Simple 32-bit hash (fast)
+        const prefStr = `${feelingsStr}|${readingTime}|${tone}|${skip}`;
+        let hash = 0;
+        for (let i = 0; i < prefStr.length; i++) {
+          hash = ((hash << 5) - hash) + prefStr.charCodeAt(i);
+          hash |= 0; // force 32-bit
+        }
 
         if (
           !this._lastCacheKey ||
           this._cacheKeyVersion !== this.cacheVersion ||
           this._cacheKeyLastViewed !== lastViewed ||
           this._cacheKeyViewedLen !== viewedLen ||
-          this._cacheKeyPrefHash !== prefHash
+          this._cacheKeyPrefHash !== hash
         ) {
-          this._lastCacheKey = JSON.stringify({
-            preferences: this.preferences,
-            viewed: this.viewedLetterIds,
-            _v: this.cacheVersion
-          });
+          this._lastCacheKey = `${hash}:${readingTime}:${tone}:${lastViewed}:${viewedLen}:v${this.cacheVersion}`;
           this._cacheKeyVersion = this.cacheVersion;
           this._cacheKeyLastViewed = lastViewed;
           this._cacheKeyViewedLen = viewedLen;
-          this._cacheKeyPrefHash = prefHash;
+          this._cacheKeyPrefHash = hash;
         }
 
         return this._lastCacheKey;
@@ -940,47 +1109,37 @@
           }
         }, 'high');
       },
+      getConnectionInfo() {
+        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        return {
+          effectiveType: (conn && conn.effectiveType) ? conn.effectiveType : '4g',
+          saveData: !!(conn && conn.saveData),
+          rtt: (conn && typeof conn.rtt === 'number') ? conn.rtt : 100,
+          downlink: (conn && typeof conn.downlink === 'number') ? conn.downlink : 10
+        };
+      },
 
       async prefetchNextLetter() {
         if (!this.features.prefetch) return;
-        if (this.getInactivityTime() > 30000) return;
 
-        if (navigator.connection) {
-          const conn = navigator.connection;
-          if (conn.saveData || conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') return;
-        }
+        const connection = this.getConnectionInfo();
+
+        // Don't prefetch if user is idle or connection is constrained
+        if (this.getInactivityTime() > 30000) return;
+        if (connection.saveData || connection.effectiveType === 'slow-2g') return;
+
+        // Adaptive throttling based on connection quality
+        if (connection.effectiveType === '2g' && Math.random() < 0.7) return;
+        if (connection.effectiveType === '3g' && Math.random() < 0.3) return;
 
         if (this.prefetchInFlight) return;
         if (this.prefetchedLetter && this.prefetchedLetter.id) return;
 
         try {
           this.prefetchInFlight = true;
-
-          const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
-            method: 'POST',
-            headers: this.getHeaders(),
-            credentials: 'same-origin',
-            body: JSON.stringify({
-              preferences: this.preferences,
-              viewed: this.viewedLetterIds,
-              timestamp: Date.now()
-            })
-          });
-
-              let data = await this.parseJson(response).catch(() => ({}));
-              // REST may return { ok: true } rather than { success: true }.
-              const restOk = (data && (data.success === true || data.ok === true));
-              if ((response.status === 403 || response.status === 404) && (!data || !restOk)) {
-                data = await this.ajaxPost('rts_get_next_letter', {
-                  preferences: this.preferences,
-                  viewed: this.viewedLetterIds,
-                  timestamp: Date.now()
-                });
-              }
-          const prefetchLetter = (data && data.letter) ? data.letter : (data && data.data && data.data.letter) ? data.data.letter : null;
-          const prefetchOk = (data && (data.success === true || data.ok === true));
-          if (prefetchOk && prefetchLetter && prefetchLetter.id) {
-            if (!this.viewedLetterIds.includes(prefetchLetter.id)) this.prefetchedLetter = prefetchLetter;
+          const prefetchLetter = await this.queueRequest(() => this.fetchNextLetter(), 'low', 'prefetch', 15000);
+          if (prefetchLetter && prefetchLetter.id && (!this.viewedLetterIds || !this.viewedLetterIds.includes(prefetchLetter.id))) {
+            this.prefetchedLetter = prefetchLetter;
             this.trackSuccess('prefetch');
           }
         } catch (e) {
@@ -990,7 +1149,57 @@
         }
       },
 
+
+
+
+      progressiveRender(contentEl, html) {
+        // Fast path for small payloads
+        if (typeof html === 'string' && html.length < 1000) {
+          contentEl.innerHTML = html;
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        const children = tempDiv.children;
+        const total = children.length;
+
+        // Clear once
+        contentEl.textContent = '';
+
+        if (total > 10) {
+          // First batch
+          for (let i = 0; i < Math.min(5, total); i++) {
+            fragment.appendChild(children[i].cloneNode(true));
+          }
+          contentEl.appendChild(fragment);
+
+          const renderRemaining = () => {
+            const remaining = document.createDocumentFragment();
+            for (let i = 5; i < total; i++) {
+              remaining.appendChild(children[i].cloneNode(true));
+            }
+            contentEl.appendChild(remaining);
+            tempDiv.innerHTML = '';
+          };
+
+          if (window.requestIdleCallback) {
+            window.requestIdleCallback(renderRemaining, { timeout: 100 });
+          } else {
+            setTimeout(renderRemaining, 0);
+          }
+        } else {
+          while (tempDiv.firstChild) fragment.appendChild(tempDiv.firstChild);
+          contentEl.appendChild(fragment);
+          tempDiv.innerHTML = '';
+        }
+      },
+
+
       renderLetter(letter) {
+        const renderStart = (window.performance && performance.now) ? performance.now() : Date.now();
         const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
         const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
         const contentEl = this.domElements.content || document.querySelector('.rts-letter-body');
@@ -1005,30 +1214,92 @@
         this.pendingNextAfterRate = false;
         this.hideRatePrompt();
 
-        contentEl.innerHTML = this.sanitizeHtml(letter.content);
+        // Use requestAnimationFrame for smoother rendering and reduced layout thrashing
+        requestAnimationFrame(() => {
+            // Batch visibility changes
+            if (loadingEl) loadingEl.style.display = 'none';
+            displayEl.style.display = 'block';
+            
+            // Use progressive rendering for large letters
+            const sanitized = this.sanitizeHtml(letter.content);
+            this.progressiveRender(contentEl, sanitized);
+            this.setupLazyLoading(contentEl);
 
-        if (loadingEl) loadingEl.style.display = 'none';
-        displayEl.style.display = 'block';
+            // Animation with proper timing for smoother transitions
+            displayEl.classList.remove('rts-fade-in');
+            setTimeout(() => {
+                displayEl.classList.add('rts-fade-in');
+            }, 16); // ~1 frame delay (16ms at 60fps)
+            
+            // Update button states
+            const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-btn-helpful');
+            const unhelpBtn = this.domElements.unhelpBtn || document.querySelector('.rts-btn-unhelpful');
+            
+            if (helpfulBtn) {
+                helpfulBtn.classList.remove('rts-helped');
+                helpfulBtn.disabled = false;
+            }
+            if (unhelpBtn) {
+                unhelpBtn.classList.remove('rts-helped');
+                unhelpBtn.disabled = false;
+            }
+            
+            // Batch feedback form updates
+            const fbForm = document.querySelector('.rts-feedback-form');
+            if (fbForm) {
+                const idField = fbForm.querySelector('input[name="letter_id"]');
+                if (idField) idField.value = letter.id;
+                const keepId = letter.id;
+                fbForm.reset();
+                if (idField) idField.value = keepId;
+            }
+            
+            this.closeFeedbackModal();
+        
+            const renderEnd = (window.performance && performance.now) ? performance.now() : Date.now();
+            try {
+              if (this.performance && typeof this.performance.checkBudget === 'function') {
+                this.performance.checkBudget('render', renderEnd - renderStart);
+              }
+            } catch(e) {}
+});
+      },
 
-        displayEl.classList.remove('rts-fade-in');
-        setTimeout(() => displayEl.classList.add('rts-fade-in'), 10);
+      setupLazyLoading(scopeEl) {
+        try {
+          const root = scopeEl || document;
+          const imgs = root.querySelectorAll ? root.querySelectorAll('img[data-src], img[data-rts-src]') : [];
+          if (!imgs || !imgs.length) return;
 
-        const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-btn-helpful');
-        const unhelpBtn = this.domElements.unhelpBtn || document.querySelector('.rts-btn-unhelpful');
+          // Simple fallback: eager swap if IntersectionObserver not available
+          if (!('IntersectionObserver' in window)) {
+            imgs.forEach(img => {
+              const src = img.getAttribute('data-src') || img.getAttribute('data-rts-src');
+              if (src) {
+                img.setAttribute('src', src);
+                img.removeAttribute('data-src');
+                img.removeAttribute('data-rts-src');
+              }
+            });
+            return;
+          }
 
-        if (helpfulBtn) { helpfulBtn.classList.remove('rts-helped'); helpfulBtn.disabled = false; }
-        if (unhelpBtn) { unhelpBtn.classList.remove('rts-helped'); unhelpBtn.disabled = false; }
+          const io = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+              if (!entry.isIntersecting) return;
+              const img = entry.target;
+              const src = img.getAttribute('data-src') || img.getAttribute('data-rts-src');
+              if (src) {
+                img.setAttribute('src', src);
+                img.removeAttribute('data-src');
+                img.removeAttribute('data-rts-src');
+              }
+              io.unobserve(img);
+            });
+          }, { rootMargin: '200px 0px' });
 
-        const fbForm = document.querySelector('.rts-feedback-form');
-        if (fbForm) {
-          const idField = fbForm.querySelector('input[name="letter_id"]');
-          if (idField) idField.value = letter.id;
-          const keepId = letter.id;
-          fbForm.reset();
-          if (idField) idField.value = keepId;
-        }
-
-        this.closeFeedbackModal();
+          imgs.forEach(img => io.observe(img));
+        } catch(e) {}
       },
 
       async trackView(letterId) {
@@ -1204,27 +1475,6 @@
           default:
             break;
         }
-      },
-
-      showHelpfulToast(message) {
-        if (!this.features.toastNotifications) return;
-        let toast = document.querySelector('.rts-helpful-toast');
-
-        if (!toast) {
-          toast = document.createElement('div');
-          toast.className = 'rts-helpful-toast';
-          document.body.appendChild(toast);
-        }
-
-        toast.textContent = message || 'Thanks.';
-
-        toast.style.display = 'block';
-        setTimeout(() => toast.classList.add('rts-toast-show'), 10);
-
-        setTimeout(() => {
-          toast.classList.remove('rts-toast-show');
-          setTimeout(() => { toast.style.display = 'none'; }, 300);
-        }, 3000);
       },
 
       openFeedbackModal(defaultRating = 'neutral', forceTriggered = false) {
@@ -1619,9 +1869,7 @@ async submitLetter(formData) {
   }
 },
 
-cleanup(
-
-) {
+cleanup() {
         if (!Array.isArray(this.eventListeners)) {
             this.eventListeners = [];
             return;
@@ -1633,13 +1881,43 @@ cleanup(
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
       },
 
-      bindEvents() {
-        ['click', 'scroll', 'keydown', 'mousemove'].forEach(event => {
-          const handler = () => { this.lastActivityTime = Date.now(); };
-          document.addEventListener(event, handler, { passive: true });
-          this.eventListeners.push({ element: document, type: event, handler });
+      debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+          const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+          };
+          clearTimeout(timeout);
+          timeout = setTimeout(later, wait);
+        };
+      },
+
+      
+
+bindEvents() {
+        // Debounced activity tracker - reduces CPU usage
+        const debouncedActivity = this.debounce(() => {
+          this.lastActivityTime = Date.now();
+        }, 250);
+
+        // Activity events (passive where safe)
+        ['scroll', 'mousemove'].forEach(evt => {
+          document.addEventListener(evt, debouncedActivity, { passive: true });
+          this.eventListeners.push({ element: document, type: evt, handler: debouncedActivity });
         });
 
+        // keydown can't be passive (we may preventDefault later)
+        document.addEventListener('keydown', debouncedActivity);
+        this.eventListeners.push({ element: document, type: 'keydown', handler: debouncedActivity });
+
+        // Mobile touch activity (passive)
+        if ('ontouchstart' in window) {
+          document.addEventListener('touchstart', debouncedActivity, { passive: true });
+          this.eventListeners.push({ element: document, type: 'touchstart', handler: debouncedActivity });
+        }
+
+        // Keep existing online/offline handlers
         const onlineHandler = () => {
           this.isOnline = true;
           this.showHelpfulToast('Connection restored');
@@ -1655,15 +1933,14 @@ cleanup(
         window.addEventListener('offline', offlineHandler);
         this.eventListeners.push({ element: window, type: 'offline', handler: offlineHandler });
 
+        // Single delegated click handler
         const clickHandler = (e) => {
           // 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
             e.preventDefault();
-            e.stopPropagation(); // Stop propagation
-            
+            e.stopPropagation();
+
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
-
-
 
             if (this.currentLetter && !this.currentLetter._rtsRated && ratePrompt) {
               this.pendingNextAfterRate = true;
@@ -1715,33 +1992,29 @@ cleanup(
           if (nextStepBtn) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
             const stepEl = nextStepBtn.closest('.rts-onboarding-step');
-            
+
             if (stepEl && stepEl.dataset && stepEl.dataset.step && modalEl) {
               const currentStep = parseInt(stepEl.dataset.step, 10);
               const nextStep = currentStep + 1;
-              
-              // Scope: Hide steps ONLY in this modal instance
+
               const stepsInModal = modalEl.querySelectorAll('.rts-onboarding-step');
               stepsInModal.forEach(s => s.style.display = 'none');
-              
-              // Scope: Show next step ONLY in this modal instance
+
               const nextEl = modalEl.querySelector(`.rts-onboarding-step[data-step="${nextStep}"]`);
-              if (nextEl) {
-                  nextEl.style.display = 'block';
-              }
+              if (nextEl) nextEl.style.display = 'block';
             }
             return;
           }
 
           // 7. Onboarding: Complete
-          if (e.target.closest('.rts-btn-complete')) { 
-              e.preventDefault(); 
-              e.stopPropagation(); 
-              this.completeOnboarding(); 
-              return; 
+          if (e.target.closest('.rts-btn-complete')) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.completeOnboarding();
+            return;
           }
 
           // 8. Feedback Modal Triggers
@@ -1762,15 +2035,15 @@ cleanup(
           if (e.target.closest('[data-rts-close]')) { e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
         };
 
-        document.addEventListener('click', clickHandler);
+        document.addEventListener('click', clickHandler, { passive: true });
         this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
 
+        // Keydown handler (Escape handling)
         const keydownHandler = (e) => {
           if (e.key !== 'Escape') return;
           const modal = document.getElementById('rts-feedback-modal');
           if (modal && modal.getAttribute('aria-hidden') === 'false') this.closeFeedbackModal();
 
-          // Onboarding escape (WCAG 2.2 AA keyboard support)
           const onboarding = document.querySelector('.rts-onboarding-overlay');
           if (onboarding) {
             const isHidden = onboarding.classList.contains('rts-hidden-force') || onboarding.getAttribute('aria-hidden') === 'true';
@@ -1786,6 +2059,7 @@ cleanup(
         document.addEventListener('keydown', keydownHandler);
         this.eventListeners.push({ element: document, type: 'keydown', handler: keydownHandler });
 
+        // Feedback submit handler (delegated)
         const submitHandler = (e) => {
           const form = e.target.closest('.rts-feedback-form');
           if (!form) return;
@@ -1795,6 +2069,7 @@ cleanup(
         document.addEventListener('submit', submitHandler);
         this.eventListeners.push({ element: document, type: 'submit', handler: submitHandler });
 
+        // Submit form handlers (as-is, but only bound once)
         const submitForm = document.getElementById('rts-submit-form');
         if (submitForm) {
           const textarea = submitForm.querySelector('#rts-letter-text');
@@ -1822,6 +2097,7 @@ cleanup(
           this.eventListeners.push({ element: submitForm, type: 'submit', handler: formSubmitHandler });
         }
       }
+
     };
 
     // Auto-initialize (Robust Check)

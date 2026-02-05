@@ -473,14 +473,27 @@ if (file_exists($multilingual_path)) {
 }
 
 
-require_once get_stylesheet_directory() . '/inc/security.php';            // Security utilities and helper functions
-require_once get_stylesheet_directory() . '/inc/cpt-letters-complete.php';  // COMPLETE CPT with dashboard, filters, auto-process
-require_once get_stylesheet_directory() . '/inc/rts-bulk-jobs.php';       // Bulk async jobs (Action Scheduler)
-require_once get_stylesheet_directory() . '/inc/shortcodes.php';         // Shortcodes
-require_once get_stylesheet_directory() . '/inc/logger.php';             // Lightweight logger (used by other components)
-require_once get_stylesheet_directory() . '/inc/rts-multilingual.php';   // Multilingual support & language switcher
-require_once get_stylesheet_directory() . '/inc/rts-google-translate.php'; // Google Translate automatic translation
-require_once get_stylesheet_directory() . '/inc/rts-quick-exit.php';      // Quick Exit button (front-end safety)
+// Core includes with file_exists() checks for safety
+$core_includes = [
+    'security.php',
+    'cpt-letters-complete.php',
+    'rts-bulk-jobs.php',
+    'shortcodes.php',
+    'logger.php',
+    'rts-multilingual.php',
+    'rts-google-translate.php',
+    'rts-quick-exit.php',
+];
+
+foreach ($core_includes as $file) {
+    $path = get_stylesheet_directory() . '/inc/' . $file;
+    if (file_exists($path)) {
+        require_once $path;
+    } else {
+        error_log('RTS Theme: Missing required file - ' . $file);
+    }
+}
+
 
 
 /**
@@ -497,7 +510,11 @@ function rts_get_stat($stat_type) {
             }
             // Otherwise use database count
             global $wpdb;
-            $count = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'letter' AND post_status = 'publish'");
+            $count = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status = %s",
+                'letter',
+                'publish'
+            ));
             return number_format($count);
             
         case 'helpful_percentage':
@@ -508,8 +525,14 @@ function rts_get_stat($stat_type) {
             }
             // Otherwise calculate from database
             global $wpdb;
-            $thumbs_up = $wpdb->get_var("SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = 'thumbs_up'");
-            $thumbs_down = $wpdb->get_var("SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = 'thumbs_down'");
+            $thumbs_up = $wpdb->get_var($wpdb->prepare(
+                "SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+                'thumbs_up'
+            ));
+            $thumbs_down = $wpdb->get_var($wpdb->prepare(
+                "SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+                'thumbs_down'
+            ));
             $total = $thumbs_up + $thumbs_down;
             if ($total > 0) {
                 $percent = round(($thumbs_up / $total) * 100);
@@ -771,3 +794,181 @@ function rts_ajax_clear_import_progress() {
     wp_send_json_success(['message' => 'Import progress cleared']);
 }
 
+// =============================================================================
+// MODERATION LEARNING SYSTEM (v3.5.6+)
+// Self-learning system that improves moderation accuracy over time
+// =============================================================================
+
+// Load and initialize the learning system
+if (file_exists(get_stylesheet_directory() . '/inc/rts-moderation-learning.php')) {
+    require_once get_stylesheet_directory() . '/inc/rts-moderation-learning.php';
+    
+    if (class_exists('RTS_Moderation_Learning')) {
+        add_action('init', ['RTS_Moderation_Learning', 'init'], 15);
+    }
+}
+
+/**
+ * Add moderation feedback buttons to letter edit screen
+ * Allows admins to rate moderation decisions for learning
+ */
+function rts_add_feedback_buttons($post) {
+    if ($post->post_type !== 'letter') return;
+    
+    $current_flags = get_post_meta($post->ID, 'rts_flagged_keywords', true);
+    if (empty($current_flags)) return;
+    
+    $existing_feedback = get_post_meta($post->ID, 'rts_moderation_feedback', true);
+    ?>
+    
+    <div class="misc-pub-section rts-moderation-feedback" style="padding: 10px; border-top: 1px solid #ddd;">
+        <h4 style="margin: 0 0 10px 0;">📊 Moderation Feedback</h4>
+        <p style="margin: 0 0 10px 0; font-size: 13px;">Was the automatic moderation correct?</p>
+        
+        <?php if ($existing_feedback): ?>
+            <div style="padding: 10px; background: #f0f6fc; border-radius: 4px; margin-bottom: 10px;">
+                <strong>Previous feedback:</strong> <?php echo esc_html($existing_feedback['feedback']); ?>
+                <?php if (!empty($existing_feedback['notes'])): ?>
+                    <br><em><?php echo esc_html($existing_feedback['notes']); ?></em>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+        
+        
+        <?php $nonce = wp_create_nonce('rts_feedback_action'); ?>
+        <div class="rts-feedback-controls" data-post-id="<?php echo (int) $post->ID; ?>" data-nonce="<?php echo esc_attr($nonce); ?>">
+            <div style="display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap;">
+                <button type="button" data-feedback="correct" class="button button-small rts-feedback-btn">
+                    ✓ Correct
+                </button>
+
+                <button type="button" data-feedback="too_strict" class="button button-small rts-feedback-btn">
+                    ← Too Strict
+                </button>
+
+                <button type="button" data-feedback="too_lenient" class="button button-small rts-feedback-btn">
+                    → Too Lenient
+                </button>
+            </div>
+
+            <textarea class="rts-feedback-notes" placeholder="Optional notes..." rows="2" style="width:100%; font-size: 12px;"></textarea>
+            <p class="rts-feedback-status" style="margin:8px 0 0; font-size:12px; display:none;"></p>
+        </div>
+
+    </div>
+    
+    <?php
+}
+add_action('post_submitbox_misc_actions', 'rts_add_feedback_buttons');
+
+
+
+
+/**
+ * Admin: moderation feedback buttons (no nested forms)
+ */
+function rts_enqueue_moderation_feedback_admin_js($hook) {
+    // Only on post edit screens
+    if (!in_array($hook, ['post.php', 'post-new.php'], true)) {
+        return;
+    }
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || $screen->post_type !== 'letter') {
+        return;
+    }
+
+    $js = "(function(){\n"
+        . "  if(typeof ajaxurl==='undefined') return;\n"
+        . "  function post(data){\n"
+        . "    var body = new URLSearchParams(data);\n"
+        . "    return fetch(ajaxurl, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body: body.toString()});\n"
+        . "  }\n"
+        . "  function setStatus(box, msg, ok){\n"
+        . "    var el = box.querySelector('.rts-feedback-status');\n"
+        . "    if(!el) return;\n"
+        . "    el.style.display = 'block';\n"
+        . "    el.style.color = ok ? '#0a7b34' : '#b32d2e';\n"
+        . "    el.textContent = msg;\n"
+        . "  }\n"
+        . "  document.addEventListener('click', function(e){\n"
+        . "    var btn = e.target && e.target.closest ? e.target.closest('.rts-feedback-btn') : null;\n"
+        . "    if(!btn) return;\n"
+        . "    var box = btn.closest('.rts-feedback-controls');\n"
+        . "    if(!box) return;\n"
+        . "    e.preventDefault();\n"
+        . "    var postId = box.getAttribute('data-post-id') || '';\n"
+        . "    var nonce = box.getAttribute('data-nonce') || '';\n"
+        . "    var feedback = btn.getAttribute('data-feedback') || '';\n"
+        . "    var notesEl = box.querySelector('.rts-feedback-notes');\n"
+        . "    var notes = notesEl ? notesEl.value : '';\n"
+        . "    btn.disabled = true;\n"
+        . "    setStatus(box, 'Saving…', true);\n"
+        . "    post({action:'rts_record_feedback_ajax', _wpnonce: nonce, post_id: postId, feedback: feedback, notes: notes})\n"
+        . "      .then(function(r){ return r.json(); })\n"
+        . "      .then(function(resp){\n"
+        . "        if(resp && resp.success){\n"
+        . "          setStatus(box, 'Saved. Thank you!', true);\n"
+        . "        } else {\n"
+        . "          var m = (resp && resp.data && resp.data.message) ? resp.data.message : 'Could not save feedback.';\n"
+        . "          setStatus(box, m, false);\n"
+        . "        }\n"
+        . "      })\n"
+        . "      .catch(function(){ setStatus(box, 'Network error. Please try again.', false); })\n"
+        . "      .finally(function(){ btn.disabled = false; });\n"
+        . "  });\n"
+        . "})();";
+    wp_add_inline_script('jquery-core', $js, 'after');
+}
+add_action('admin_enqueue_scripts', 'rts_enqueue_moderation_feedback_admin_js', 20);
+
+// =============================================================================
+// 7. RTS SUBSCRIBER SYSTEM
+// Email subscription management with GDPR compliance
+// =============================================================================
+
+require_once get_stylesheet_directory() . '/subscribers/class-rts-subscriber-system.php';
+
+/**
+ * Manual activation for subscriber system
+ */
+add_action('admin_post_rts_activate_subscriber_system', 'rts_manual_activate_subscriber_system');
+function rts_manual_activate_subscriber_system() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+    check_admin_referer('rts_activate_system');
+    
+    $system = RTS_Subscriber_System();
+    $system->activate();
+    
+    wp_redirect(add_query_arg(array(
+        'page' => 'edit.php?post_type=rts_subscriber',
+        'activated' => '1'
+    ), admin_url()));
+    exit;
+}
+
+/**
+ * Show activation notice if database not initialized
+ */
+add_action('admin_notices', 'rts_show_activation_notice');
+function rts_show_activation_notice() {
+    $db_version = get_option('rts_subscriber_db_version', '0');
+    
+    if (version_compare($db_version, '1.0', '<')) {
+        $activate_url = wp_nonce_url(
+            admin_url('admin-post.php?action=rts_activate_subscriber_system'),
+            'rts_activate_system'
+        );
+        ?>
+        <div class="notice notice-warning">
+            <p>
+                <strong>RTS Subscriber System:</strong> Database tables not initialized. 
+                <a href="<?php echo esc_url($activate_url); ?>" class="button button-primary">
+                    Initialize Now
+                </a>
+            </p>
+        </div>
+        <?php
+    }
+}

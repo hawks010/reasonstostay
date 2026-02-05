@@ -1,3 +1,104 @@
+/* Add to your dashboard CSS */
+.rts-collapsible-content {
+    transition: max-height 0.3s ease-out;
+    overflow: hidden;
+    max-height: 0;
+}
+
+.rts-collapsible-content.expanded {
+    max-height: 1000px; /* Adjust as needed */
+}
+
+.rts-collapsible-toggle {
+    transition: transform 0.3s ease;
+}
+
+.rts-collapsible-toggle.expanded {
+    transform: rotate(180deg);
+}
+
+/* Toast notifications */
+#rts-toast-container {
+    position: fixed;
+    top: 40px;
+    right: 20px;
+    z-index: 9999;
+    max-width: 400px;
+}
+
+.rts-toast {
+    background: #1e1e1e;
+    color: #fff;
+    border-left: 4px solid #007cba;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: flex-start;
+    animation: slideIn 0.3s ease;
+}
+
+.rts-toast-success {
+    border-left-color: #00a32a;
+}
+
+.rts-toast-error {
+    border-left-color: #d63638;
+}
+
+.rts-toast-warning {
+    border-left-color: #dba617;
+}
+
+.rts-toast-icon {
+    margin-right: 12px;
+    font-size: 18px;
+}
+
+.rts-toast-content {
+    flex: 1;
+}
+
+.rts-toast-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.rts-toast-message {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.rts-toast-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0 0 0 8px;
+    line-height: 1;
+}
+
+.rts-toast-close:hover {
+    opacity: 1;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+
+
+
 /* ============================================
    RTS ADMIN - PERMANENT DARK MODE
    Complete dark theme with proper contrast
@@ -219,7 +320,10 @@ button.rts-action-btn:hover {
    ============================================ */
 .rts-table,
 .rts-feedback-table,
-table.wp-list-table {
+.wrap.rts-dashboard table.wp-list-table,
+.wrap.rts-settings table.wp-list-table,
+.wrap.rts-letter-management table.wp-list-table,
+.wrap.rts-system table.wp-list-table {
     width: 100%;
     background: #1e293b !important;
     border-radius: 8px;
@@ -425,7 +529,10 @@ table.wp-list-table {
 /* ============================================
    TAB NAVIGATION
    ============================================ */
-.nav-tab-wrapper {
+.wrap.rts-dashboard .nav-tab-wrapper,
+.wrap.rts-settings .nav-tab-wrapper,
+.wrap.rts-letter-management .nav-tab-wrapper,
+.wrap.rts-system .nav-tab-wrapper {
     border-bottom: 1px solid #334155 !important;
     margin-bottom: 2rem;
 }

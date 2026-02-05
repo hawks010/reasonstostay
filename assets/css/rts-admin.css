@@ -31,24 +31,169 @@
     font-weight: 600;
     color: #1d2327;
 }
+.rts-table-footer {
+    background: #070b13!important;
+}
 
 /* =========================================================
    2. Modern Dashboard Styles (v2.40+)
    ========================================================= */
 
-.rts-analytics-title{
-    color: #fda310 !important;
+/* =========================================================
+   ANALYTICS BOX - Fixed Dark Mode Styling
+   ========================================================= */
+.rts-analytics-container {
+    max-width: 100%;
+    margin: 0 0 20px 0;
 }
-.rts-analytics-subtitle{
-    color:#ffffff !important;
+
+.rts-analytics-box {
+    background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%);
+    border: 1px solid rgba(252, 163, 17, 0.15);
+    border-radius: 35px;
+    padding: 35px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    color: #F1E3D3;
 }
-.rts-analytics-box{
-    border-radius: 35px !important;
-    padding: 35px !important;
-    max-width: 100% !important;
-    color: #ffffff !important;
-    background: #0f1626 !important;
-    margin: 20px 20px 20px 0px !important;
+
+.rts-analytics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+    padding-bottom: 25px;
+    border-bottom: 1px solid rgba(252, 163, 17, 0.2);
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.rts-analytics-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #FCA311;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.5px;
+}
+
+.rts-analytics-subtitle {
+    font-size: 13px;
+    color: rgba(241, 227, 211, 0.7);
+    margin: 0;
+    font-weight: 400;
+}
+
+.rts-analytics-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.rts-analytics-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #F1E3D3;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.rts-analytics-actions .button:hover {
+    background: rgba(252, 163, 17, 0.15);
+    border-color: #FCA311;
+    color: #FCA311;
+    transform: translateY(-1px);
+}
+
+.rts-analytics-actions .button-primary {
+    background: #FCA311;
+    color: #070C13;
+    border-color: #FCA311;
+    font-weight: 600;
+}
+
+.rts-analytics-actions .button-primary:hover {
+    background: #f8b739;
+    border-color: #f8b739;
+    color: #070C13;
+    transform: translateY(-1px);
+}
+
+.rts-analytics-actions .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Stats Grid */
+.rts-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.rts-stat-box {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 25px;
+    padding: 25px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.rts-stat-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(252, 163, 17, 0.08);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 0;
+}
+
+.rts-stat-box:hover::before {
+    opacity: 1;
+}
+
+.rts-stat-box:hover {
+    border-color: #FCA311;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(252, 163, 17, 0.2);
+}
+
+.rts-stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(241, 227, 211, 0.6);
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.rts-stat-value {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--stat-value-color, #FCA311);
+    line-height: 1;
+    position: relative;
+    z-index: 1;
 }
 
 .rts-dashboard {
@@ -190,7 +335,7 @@
 
 .rts-stat-label {
     font-size: 13px;
-    color: #646970;
+    color: #ffffff;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 5px;
@@ -200,7 +345,7 @@
 .rts-stat-value {
     font-size: 32px;
     font-weight: 700;
-    color: #1d2327;
+    color: #fda310;
     line-height: 1;
     margin: 5px 0;
 }
@@ -594,7 +739,7 @@
    ========================================================= */
 
 .wp-die-message, p {
-    color: #ffffff !important;
+    color: #fda310 !important;
 }
 .widefat td, .widefat th {
     color: #ffffff !important;
@@ -664,7 +809,7 @@
 .rts-dashboard.rts-darkmode .rts-progress-text,
 .rts-dashboard.rts-darkmode .rts-activity-meta,
 .rts-dashboard.rts-darkmode .rts-status-label{
-  color: var(--rts-text-muted);
+  color: #ffffff;
 }
 
 .rts-dashboard.rts-darkmode .rts-dashboard-header{
@@ -697,9 +842,9 @@
 .rts-dashboard.rts-darkmode .rts-info-card,
 .rts-dashboard.rts-darkmode .rts-activity-feed,
 .rts-dashboard.rts-darkmode .rts-activity-item{
-  background: var(--rts-surface);
-  color: var(--rts-text);
-  border-color: var(--rts-border);
+  background: var(--rts-surface)!important;
+  color: var(--rts-text)!important;
+  border-color: var(--rts-border)!important;
   border-radius: 20px;
 }
 
@@ -1820,8 +1965,13 @@ body:not(.rts-dark-mode) .rts-nav-tab.nav-tab-active .dashicons {
 
 .rts-quarantine-toolbar {
 	padding: 16px;
-	background: #0f1626;
+	background: #0f1626 !important;
 	border-bottom: 1px solid #2A3B52;
+	color: #F1E3D3 !important;
+}
+
+.rts-quarantine-toolbar * {
+	color: #F1E3D3 !important;
 }
 
 .rts-empty-state {
@@ -1982,14 +2132,19 @@ body:not(.rts-dark-mode) .rts-card {
 }
 
 body:not(.rts-dark-mode) .rts-letters-table thead,
+/* Quarantine toolbar should always be dark */
 body:not(.rts-dark-mode) .rts-quarantine-toolbar {
-	background: #F9F9F9;
+	background: #0f1626 !important;
+	color: #F1E3D3 !important;
+}
+
+body:not(.rts-dark-mode) .rts-quarantine-toolbar * {
+	color: #F1E3D3 !important;
 }
 
 body:not(.rts-dark-mode) .rts-letters-table th,
 body:not(.rts-dark-mode) .rts-letters-table td,
 body:not(.rts-dark-mode) .rts-card form table th,
-body:not(.rts-dark-mode) .rts-card form table td,
 body:not(.rts-dark-mode) .rts-card table.widefat th,
 body:not(.rts-dark-mode) .rts-card table.widefat td {
 	color: #1d2327;
@@ -2042,4 +2197,1466 @@ body:not(.rts-dark-mode) .rts-score-bar {
 
 #rts-cancel-import-btn .dashicons {
 	margin-top: -2px;
+}
+
+
+/* =========================================================
+   Letters List Table Badges (moved from inline admin_css)
+   ========================================================= */
+.post-type-letter .wp-list-table .rts-score{
+  display:inline-block;
+  padding:4px 12px;
+  border-radius:4px;
+  font-weight:700;
+  font-size:16px;
+}
+.post-type-letter .wp-list-table .rts-score-good{ background:#d4edda; color:#155724; }
+.post-type-letter .wp-list-table .rts-score-ok{ background:#fff3cd; color:#856404; }
+.post-type-letter .wp-list-table .rts-score-low{ background:#f8d7da; color:#721c24; }
+
+.post-type-letter .wp-list-table .rts-unrated{ color:#999; font-style:italic; font-size:13px; }
+
+.post-type-letter .wp-list-table .rts-safety{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:4px;
+  font-size:13px;
+  font-weight:600;
+}
+.post-type-letter .wp-list-table .rts-safety-ok{ background:#d4edda; color:#155724; }
+.post-type-letter .wp-list-table .rts-safety-flag{ background:#fff3cd; color:#856404; }
+
+.post-type-letter .wp-list-table .rts-rating{
+  display:block;
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:4px;
+}
+.post-type-letter .wp-list-table .rts-rating-good{ color:#00a32a; }
+.post-type-letter .wp-list-table .rts-rating-ok{ color:#f0b849; }
+.post-type-letter .wp-list-table .rts-rating-low{ color:#d63638; }
+.post-type-letter .wp-list-table .rts-votes{ font-size:11px; color:#999; }
+.post-type-letter .wp-list-table .rts-no-rating{ color:#999; font-size:13px; }
+
+.post-type-letter .wp-list-table .rts-tags{ display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+.post-type-letter .wp-list-table .rts-tag{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  border:1px solid #dcdcde;
+  background:#f6f7f7;
+  color:#1d2327;
+}
+
+
+/* RTS scoped notices (safe light background text) */
+.rts-notice {
+  color: #1d2327;
+}
+
+.rts-notice p,
+.rts-notice li,
+.rts-notice strong {
+  color: #1d2327;
+}
+
+.rts-notice-warning {
+  background: #fff3cd;
+  border-left: 4px solid #f0b849;
+}
+
+.rts-notice-info {
+  background: #f8fafc;
+  border-left: 4px solid #2271b1;
+}
+
+
+/* =========================================================
+   RTS Notices (scoped, safe, no global overrides)
+   ========================================================= */
+.rts-dashboard .rts-notice{
+  color:#1d2327;
+  padding:12px;
+  border-radius:6px;
+  margin-top:15px;
+}
+
+.rts-dashboard .rts-notice p,
+.rts-dashboard .rts-notice li,
+.rts-dashboard .rts-notice strong{
+  color:inherit;
+}
+
+.rts-dashboard .rts-notice-center{
+  text-align:center;
+}
+
+.rts-dashboard .rts-notice-title{
+  margin:0 0 10px 0;
+}
+
+.rts-dashboard .rts-notice-footer{
+  margin:10px 0 0 0;
+  font-size:13px;
+}
+
+.rts-dashboard .rts-notice-list{
+  margin:8px 0 0 0;
+  padding-left:20px;
+  font-size:13px;
+}
+
+.rts-dashboard .rts-notice-warning{
+  background:#fff3cd;
+  border-left:4px solid #f0b849;
+}
+
+.rts-dashboard .rts-notice-muted{
+  background:#f8f9fa;
+}
+
+.rts-dashboard .rts-notice-info{
+  background:#f0f6fc;
+  border-left:4px solid #0073aa;
+}
+
+
+
+/* =========================================================
+   Letters CPT List Screen - Dark Mode Leak Guard
+   Scope: ONLY edit.php?post_type=letter (admin list table)
+   Goal: ensure readable text if any dark styles leak onto the table.
+   ========================================================= */
+body.edit-php.post-type-letter .wp-list-table,
+body.edit-php.post-type-letter .widefat{
+  background:#0f1626;
+  color:#F1E3D3;
+  border-color:#2A3B52;
+}
+
+body.edit-php.post-type-letter .wp-list-table thead th,
+body.edit-php.post-type-letter .wp-list-table tfoot th{
+  background:#0b1220;
+  color:#F1E3D3;
+  border-color:#2A3B52;
+}
+
+body.edit-php.post-type-letter .wp-list-table td,
+body.edit-php.post-type-letter .wp-list-table th{
+  color:#F1E3D3;
+  border-color:#2A3B52;
+}
+
+body.edit-php.post-type-letter .wp-list-table a{
+  color:#9bd1ff;
+}
+body.edit-php.post-type-letter .wp-list-table a:hover{
+  color:#ffffff;
+}
+
+body.edit-php.post-type-letter .wp-list-table.striped > tbody > :nth-child(odd),
+body.edit-php.post-type-letter .wp-list-table tbody tr:nth-child(odd){
+  background: rgba(255,255,255,0.03);
+}
+body.edit-php.post-type-letter .wp-list-table tbody tr:hover{
+  background: rgba(252,163,17,0.10);
+}
+
+/* Row actions + meta */
+body.edit-php.post-type-letter .row-actions a,
+body.edit-php.post-type-letter .subsubsub a,
+body.edit-php.post-type-letter .tablenav a{
+  color:#9bd1ff;
+}
+body.edit-php.post-type-letter .row-actions a:hover,
+body.edit-php.post-type-letter .subsubsub a:hover,
+body.edit-php.post-type-letter .tablenav a:hover{
+  color:#ffffff;
+}
+
+/* Filters / inputs on the list screen */
+body.edit-php.post-type-letter .tablenav select,
+body.edit-php.post-type-letter .tablenav input[type="text"],
+body.edit-php.post-type-letter .tablenav input[type="search"]{
+  background:#0b1220;
+  color:#F1E3D3;
+  border-color:#2A3B52;
+}
+body.edit-php.post-type-letter .tablenav select:focus,
+body.edit-php.post-type-letter .tablenav input[type="text"]:focus,
+body.edit-php.post-type-letter .tablenav input[type="search"]:focus{
+  border-color:#FCA311;
+  box-shadow: 0 0 0 1px #FCA311;
+  outline: none;
+}
+
+/* Keep your badges readable on dark backgrounds */
+body.edit-php.post-type-letter .wp-list-table .rts-tag{
+  border-color:#2A3B52;
+  background: rgba(255,255,255,0.06);
+  color:#F1E3D3;
+}
+
+
+
+/* =========================================================
+   Letters CPT List Screen - Light UI Link Contrast
+   Scope: ONLY edit.php?post_type=letter areas OUTSIDE the list table.
+   Keeps table links in the dark scheme, but restores readable link colors
+   for subsubsub filters, pagination, and actions on light backgrounds.
+   ========================================================= */
+body.edit-php.post-type-letter #posts-filter > .subsubsub a,
+body.edit-php.post-type-letter #posts-filter > .subsubsub a:visited,
+body.edit-php.post-type-letter #posts-filter .tablenav a,
+body.edit-php.post-type-letter #posts-filter .tablenav a:visited,
+body.edit-php.post-type-letter .wrap .page-title-action{
+  color:#2271b1;
+}
+body.edit-php.post-type-letter #posts-filter > .subsubsub a:hover,
+body.edit-php.post-type-letter #posts-filter .tablenav a:hover,
+body.edit-php.post-type-letter .wrap .page-title-action:hover{
+  color:#135e96;
+}
+
+/* Ensure the "current" filter state is visible */
+body.edit-php.post-type-letter #posts-filter > .subsubsub a.current{
+  color:#1d2327;
+  font-weight:600;
+}
+
+/* Keep dark table links untouched */
+body.edit-php.post-type-letter .wp-list-table a,
+body.edit-php.post-type-letter .wp-list-table a:visited{
+  color:#9bd1ff;
+}
+body.edit-php.post-type-letter .wp-list-table a:hover{
+  color:#ffffff;
+}
+
+
+
+
+/* =========================================================
+   LETTERS SUBMENU PAGES - Dark Mode Treatment
+   ========================================================= */
+
+/* Global dark background for all Letters pages */
+body.post-type-letter #wpbody-content,
+body[class*="letter_page_"] #wpbody-content {
+    background: #070C13 !important;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+body.post-type-letter #wpcontent,
+body[class*="letter_page_"] #wpcontent {
+    background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%);
+    border: 1px solid rgba(252, 163, 17, 0.15);
+    border-radius: 35px;
+    padding: 35px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+body.post-type-letter #wpbody-content .wrap,
+body[class*="letter_page_"] #wpbody-content .wrap {
+    background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%);
+    border: 1px solid rgba(252, 163, 17, 0.15);
+    border-radius: 35px;
+    padding: 35px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Security Logs Page */
+body.letter_page_rts-security-logs #wpbody-content {
+    background: #070C13 !important;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+body.letter_page_rts-security-logs #wpcontent {
+    background: #070C13 !important;
+}
+
+body.letter_page_rts-security-logs .wrap {
+    max-width: 100%;
+    margin: 0;
+    background: #0B121E;
+}
+
+body.letter_page_rts-security-logs .wrap > h1 {
+    color: #FCA311;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid rgba(252, 163, 17, 0.2);
+}
+
+body.letter_page_rts-security-logs .widefat {
+    background: #0b1220;
+    border: 1px solid rgba(252, 163, 17, 0.15);
+    border-radius: 25px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    border-spacing: 0;
+}
+
+body.letter_page_rts-security-logs .widefat thead th {
+    background: linear-gradient(135deg, #0f1626 0%, #0b1220 100%);
+    color: #FCA311;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 12px;
+    padding: 18px 15px;
+    border-bottom: 2px solid rgba(252, 163, 17, 0.3);
+}
+
+body.letter_page_rts-security-logs .widefat tbody tr {
+    background: #0B121E;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.letter_page_rts-security-logs .widefat tbody tr:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+body.letter_page_rts-security-logs .widefat tbody tr:hover {
+    background: rgba(252, 163, 17, 0.08);
+}
+
+body.letter_page_rts-security-logs .widefat tbody td {
+    color: #F1E3D3;
+    padding: 15px;
+    border-top: none;
+}
+
+body.letter_page_rts-security-logs .widefat tbody td pre {
+    background: rgba(0, 0, 0, 0.3);
+    color: #9BD1FF;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* Diagnostics Section */
+body.letter_page_rts-security-logs details {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 20px;
+    margin-top: 25px;
+}
+
+body.letter_page_rts-security-logs details summary {
+    color: #FCA311;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    user-select: none;
+}
+
+body.letter_page_rts-security-logs details summary:hover {
+    color: #f8b739;
+}
+
+body.letter_page_rts-security-logs details[open] summary {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(252, 163, 17, 0.2);
+}
+
+/* Fix inline details/summary in table cells (View Context dropdowns) */
+body.letter_page_rts-security-logs .widefat td details {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin-top: 8px !important;
+}
+
+body.letter_page_rts-security-logs .widefat td details summary {
+    color: #FCA311 !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    padding: 4px 8px !important;
+    background: rgba(252, 163, 17, 0.1) !important;
+    border-radius: 4px !important;
+    display: inline-block !important;
+}
+
+body.letter_page_rts-security-logs .widefat td details summary:hover {
+    background: rgba(252, 163, 17, 0.2) !important;
+    color: #f8b739 !important;
+}
+
+body.letter_page_rts-security-logs .widefat td details pre {
+    background: #0f1626 !important;
+    color: #F1E3D3 !important;
+    border: 1px solid rgba(252, 163, 17, 0.2) !important;
+    padding: 10px !important;
+    margin: 8px 0 0 !important;
+    font-size: 10px !important;
+    overflow-x: auto !important;
+    border-radius: 4px !important;
+}
+
+/* Generic submenu pages wrapper styling */
+body[class*="letter_page_"] .wrap {
+    max-width: 100%;
+    margin: 0;
+    background: transparent;
+}
+
+body[class*="letter_page_"] .wrap > h1,
+body[class*="letter_page_"] .wrap h1.wp-heading-inline {
+    color: #FCA311;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 25px;
+}
+
+/* Form styling for submenu pages */
+body[class*="letter_page_"] .form-table {
+    background: #0b1220;
+    border: 1px solid rgba(252, 163, 17, 0.15);
+    border-radius: 25px;
+    padding: 25px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+body[class*="letter_page_"] .form-table th {
+    color: rgba(241, 227, 211, 0.7);
+    font-weight: 600;
+    padding: 15px 10px;
+}
+
+body[class*="letter_page_"] .form-table td {
+    color: #F1E3D3;
+    padding: 15px 10px;
+}
+
+body[class*="letter_page_"] .form-table input[type="text"],
+body[class*="letter_page_"] .form-table input[type="number"],
+body[class*="letter_page_"] .form-table input[type="email"],
+body[class*="letter_page_"] .form-table textarea,
+body[class*="letter_page_"] .form-table select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #F1E3D3;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+body[class*="letter_page_"] .form-table input[type="text"]:focus,
+body[class*="letter_page_"] .form-table input[type="number"]:focus,
+body[class*="letter_page_"] .form-table input[type="email"]:focus,
+body[class*="letter_page_"] .form-table textarea:focus,
+body[class*="letter_page_"] .form-table select:focus {
+    border-color: #FCA311;
+    box-shadow: 0 0 0 2px rgba(252, 163, 17, 0.2);
+    outline: none;
+}
+
+/* Buttons on submenu pages */
+body[class*="letter_page_"] .button,
+body[class*="letter_page_"] .button-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #F1E3D3;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+body[class*="letter_page_"] .button:hover,
+body[class*="letter_page_"] .button-secondary:hover {
+    background: rgba(252, 163, 17, 0.15);
+    border-color: #FCA311;
+    color: #FCA311;
+}
+
+body[class*="letter_page_"] .button-primary {
+    background: #FCA311;
+    color: #070C13;
+    border-color: #FCA311;
+    font-weight: 600;
+}
+
+/* =========================================================
+   LETTERS CPT - DARK SURFACE (scoped, safe)
+   This prevents RTS dark styles from leaking unpredictably
+   by intentionally styling the Letters list screen to match
+   the RTS dashboard aesthetic.
+   Scope: admin list + edit screens for post type "letter".
+   ========================================================= */
+
+/* Full page dark background */
+body.post-type-letter,
+body[class*="letter_page_"] {
+  background: #070C13 !important;
+}
+
+body.post-type-letter #wpcontent,
+body[class*="letter_page_"] #wpcontent {
+  background: #070C13 !important;
+}
+
+body.post-type-letter #wpbody-content {
+  background: #070C13 !important;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+body.post-type-letter .wrap {
+  background: transparent;
+  margin: 0;
+}
+
+body.post-type-letter .wrap > h1,
+body.post-type-letter .wrap h1.wp-heading-inline {
+  color: #FCA311;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+/* Subsubsub links (All | Mine | Published...) */
+body.post-type-letter .subsubsub {
+  margin: 15px 0;
+  padding: 15px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+}
+
+body.post-type-letter .subsubsub a {
+  color: #9BD1FF;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+body.post-type-letter .subsubsub a:hover,
+body.post-type-letter .subsubsub a:focus {
+  color: #FCA311;
+  background: rgba(252, 163, 17, 0.1);
+}
+
+body.post-type-letter .subsubsub .current a {
+  color: #FCA311;
+  font-weight: 700;
+  background: rgba(252, 163, 17, 0.15);
+}
+
+body.post-type-letter .subsubsub .count {
+  color: rgba(241, 227, 211, 0.6);
+}
+
+/* Page title action button */
+body.post-type-letter .page-title-action {
+  background: #FCA311;
+  color: #070C13;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+body.post-type-letter .page-title-action:hover {
+  background: #f8b739;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(252, 163, 17, 0.3);
+}
+
+/* Make the main list table area a modern dark card */
+body.post-type-letter .wrap .wp-list-table {
+  background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%);
+  border: 1px solid rgba(252, 163, 17, 0.15);
+  border-radius: 25px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  border-spacing: 0;
+}
+
+/* Table head / foot */
+body.post-type-letter .wrap .wp-list-table thead th,
+body.post-type-letter .wrap .wp-list-table tfoot th {
+  background: linear-gradient(135deg, #0f1626 0%, #0b1220 100%);
+  color: #FCA311;
+  border-bottom: 2px solid rgba(252, 163, 17, 0.3);
+  padding: 18px 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 12px;
+}
+
+body.post-type-letter .wrap .wp-list-table thead th a {
+  color: #FCA311;
+  font-weight: 600;
+}
+
+body.post-type-letter .wrap .wp-list-table thead th a:hover {
+  color: #f8b739;
+}
+
+/* Cells + rows */
+body.post-type-letter .wrap .wp-list-table td,
+body.post-type-letter .wrap .wp-list-table th {
+  color: #F1E3D3;
+  border-top: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 15px;
+}
+
+body.post-type-letter .wrap .wp-list-table tbody tr {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+body.post-type-letter .wrap .wp-list-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+body.post-type-letter .wrap .wp-list-table tbody tr:hover {
+  background: rgba(252, 163, 17, 0.08);
+}
+
+/* Links inside the table */
+body.post-type-letter .wrap .wp-list-table a {
+  color: #9BD1FF;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+body.post-type-letter .wrap .wp-list-table a:hover,
+body.post-type-letter .wrap .wp-list-table a:focus {
+  color: #FCA311;
+  text-decoration: none;
+}
+
+/* Post row title link should be extra readable */
+body.post-type-letter .wrap .wp-list-table .row-title {
+  color: #F1E3D3;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+body.post-type-letter .wrap .wp-list-table .row-title:hover {
+  color: #FCA311;
+}
+
+/* Row actions */
+body.post-type-letter .wrap .wp-list-table .row-actions {
+  color: rgba(155, 209, 255, 0.7);
+}
+
+body.post-type-letter .wrap .wp-list-table .row-actions a {
+  color: #9BD1FF;
+}
+
+body.post-type-letter .wrap .wp-list-table .row-actions a:hover {
+  color: #FCA311;
+}
+
+body.post-type-letter .wrap .wp-list-table .row-actions span.delete a {
+  color: #ff6b6b;
+}
+
+body.post-type-letter .wrap .wp-list-table .row-actions span.delete a:hover {
+  color: #ff4444;
+}
+
+
+body.post-type-letter .tablenav .actions select,
+body.post-type-letter .tablenav .actions input[type="text"],
+body.post-type-letter .tablenav .actions input[type="search"] {
+  background: rgba(0, 0, 0, 0.3);
+  color: #F1E3D3;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+body.post-type-letter .tablenav .actions select:focus,
+body.post-type-letter .tablenav .actions input[type="text"]:focus,
+body.post-type-letter .tablenav .actions input[type="search"]:focus {
+  border-color: #FCA311;
+  box-shadow: 0 0 0 2px rgba(252, 163, 17, 0.2);
+  outline: none;
+}
+
+/* Buttons near tablenav keep WP styling but improve contrast on dark */
+body.post-type-letter .tablenav .button,
+body.post-type-letter .search-box .button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #F1E3D3;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: all 0.2s ease;
+}
+
+body.post-type-letter .tablenav .button:hover,
+body.post-type-letter .search-box .button:hover {
+  background: rgba(252, 163, 17, 0.15);
+  border-color: #FCA311;
+  color: #FCA311;
+}
+
+body.post-type-letter .tablenav .tablenav-pages {
+  color: #F1E3D3;
+}
+
+body.post-type-letter .tablenav .tablenav-pages a,
+body.post-type-letter .tablenav .tablenav-pages span.current {
+  color: #F1E3D3;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 0 2px;
+}
+
+body.post-type-letter .tablenav .tablenav-pages a:hover {
+  color: #FCA311;
+  background: rgba(252, 163, 17, 0.15);
+  border-color: #FCA311;
+}
+
+body.post-type-letter .tablenav .tablenav-pages span.current {
+  background: #FCA311;
+  color: #070C13;
+  border-color: #FCA311;
+  font-weight: 600;
+}
+
+/* Search box */
+body.post-type-letter .search-box {
+  margin: 0;
+}
+
+body.post-type-letter .search-box input[type="search"] {
+  background: rgba(0, 0, 0, 0.3);
+  color: #F1E3D3;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+body.post-type-letter .search-box input[type="search"]:focus {
+  border-color: #FCA311;
+  box-shadow: 0 0 0 2px rgba(252, 163, 17, 0.2);
+}
+
+/* Small muted text */
+body.post-type-letter .wp-list-table .description,
+body.post-type-letter .wp-list-table .post-state,
+body.post-type-letter .wp-list-table .rts-unrated {
+  color: rgba(241, 227, 211, 0.6) !important;
+  font-size: 12px;
+}
+
+/* Badges and tags */
+body.post-type-letter .wp-list-table .rts-tag {
+  background: rgba(252, 163, 17, 0.15);
+  color: #FCA311;
+  border: 1px solid rgba(252, 163, 17, 0.3);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+  margin: 2px;
+}
+
+/* Ensure WP notice text is readable if it appears above the table */
+body.post-type-letter .notice,
+body.post-type-letter .updated,
+body.post-type-letter .error,
+body[class*="letter_page_"] .notice,
+body[class*="letter_page_"] .updated,
+body[class*="letter_page_"] .error {
+  border-radius: 15px;
+  border-left-width: 4px;
+  background: #fff;
+}
+
+body.post-type-letter .notice p,
+body.post-type-letter .updated p,
+body.post-type-letter .error p,
+body[class*="letter_page_"] .notice p,
+body[class*="letter_page_"] .updated p,
+body[class*="letter_page_"] .error p {
+  color: #1d2327;
+}
+
+/* Checkboxes */
+body.post-type-letter .wp-list-table input[type="checkbox"] {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+body.post-type-letter .wp-list-table input[type="checkbox"]:checked {
+  background: #FCA311;
+  border-color: #FCA311;
+}
+
+/* Bulk action controls */
+body.post-type-letter #bulk-action-selector-top,
+body.post-type-letter #bulk-action-selector-bottom {
+  background: rgba(0, 0, 0, 0.3);
+  color: #F1E3D3;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+/* Screen options and help tabs */
+body.post-type-letter #screen-meta {
+  background: #0b1220;
+  border-color: rgba(252, 163, 17, 0.15);
+}
+
+body.post-type-letter #screen-meta-links .show-settings {
+  color: #F1E3D3;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.post-type-letter #screen-meta-links .show-settings:hover {
+  color: #FCA311;
+  background: rgba(252, 163, 17, 0.1);
+}
+
+/* =========================================================
+   MOBILE RESPONSIVE ADMIN - Tables & Typography
+   Added: v2.0.12
+   ========================================================= */
+
+/* Improve base readability */
+body.post-type-letter .wp-list-table th,
+body.post-type-letter .wp-list-table td,
+body[class*="letter_page_"] .widefat th,
+body[class*="letter_page_"] .widefat td {
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Increase font size for better readability on desktop */
+body.post-type-letter .wp-list-table {
+    font-size: 15px;
+}
+
+body.post-type-letter .subsubsub {
+    font-size: 14px;
+}
+
+/* Tablet and below - 1024px */
+@media screen and (max-width: 1024px) {
+    /* Analytics adjustments */
+    .rts-analytics-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .rts-analytics-actions {
+        width: 100%;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .rts-analytics-actions .button {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .rts-stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+    }
+    
+    /* Increase touch targets */
+    body.post-type-letter .wp-list-table th,
+    body.post-type-letter .wp-list-table td {
+        padding: 12px 10px;
+        font-size: 14px;
+    }
+}
+
+/* Mobile phones - 782px (WordPress admin breakpoint) */
+@media screen and (max-width: 782px) {
+    /* Hide less critical columns on mobile */
+    body.post-type-letter .wp-list-table .column-author,
+    body.post-type-letter .wp-list-table .column-categories,
+    body.post-type-letter .wp-list-table .column-tags,
+    body.post-type-letter .wp-list-table .column-date {
+        display: none;
+    }
+    
+    /* Card-style layout for table rows */
+    body.post-type-letter .wp-list-table,
+    body.post-type-letter .wp-list-table thead,
+    body.post-type-letter .wp-list-table tbody,
+    body.post-type-letter .wp-list-table th,
+    body.post-type-letter .wp-list-table td,
+    body.post-type-letter .wp-list-table tr {
+        display: block;
+        width: 100%;
+    }
+    
+    /* Hide table header */
+    body.post-type-letter .wp-list-table thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    
+    /* Card-style rows with spacing */
+    body.post-type-letter .wp-list-table tbody tr {
+        border: 1px solid rgba(252, 163, 17, 0.15) !important;
+        border-radius: 15px;
+        margin-bottom: 15px;
+        padding: 15px !important;
+        background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%) !important;
+    }
+    
+    /* Style each cell as a row with label */
+    body.post-type-letter .wp-list-table td {
+        border: none !important;
+        position: relative;
+        padding-left: 45% !important;
+        padding-right: 10px !important;
+        padding-top: 12px !important;
+        padding-bottom: 12px !important;
+        text-align: right;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    
+    /* Add labels before each cell */
+    body.post-type-letter .wp-list-table .column-cb:before {
+        display: none; /* Checkbox doesn't need label */
+    }
+    
+    body.post-type-letter .wp-list-table .column-title:before {
+        content: "Letter:";
+    }
+    
+    body.post-type-letter .wp-list-table .column-quality:before {
+        content: "Quality:";
+    }
+    
+    body.post-type-letter .wp-list-table .column-safety:before {
+        content: "Safety:";
+    }
+    
+    body.post-type-letter .wp-list-table .column-user_rating:before {
+        content: "Rating:";
+    }
+    
+    body.post-type-letter .wp-list-table .column-tags:before {
+        content: "Tags:";
+    }
+    
+    body.post-type-letter .wp-list-table td:before {
+        position: absolute;
+        left: 10px;
+        width: 40%;
+        padding-right: 10px;
+        text-align: left;
+        font-weight: 600;
+        color: #FCA311;
+        font-size: 12px;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    
+    /* Checkbox column - top right */
+    body.post-type-letter .wp-list-table .check-column {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 0 !important;
+        min-height: auto;
+    }
+    
+    /* Title column - full width, prominent */
+    body.post-type-letter .wp-list-table .column-title {
+        padding-left: 10px !important;
+        justify-content: flex-start;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        padding-top: 10px !important;
+    }
+    
+    body.post-type-letter .wp-list-table .column-title strong {
+        font-size: 16px;
+    }
+    
+    /* Row actions */
+    body.post-type-letter .wp-list-table .row-actions {
+        position: static;
+        padding-left: 10px !important;
+        justify-content: flex-start;
+        padding-top: 10px;
+        margin-top: 10px;
+        border-top: 1px solid rgba(252, 163, 17, 0.1);
+    }
+    
+    /* Subsubsub filters - vertical stack */
+    body.post-type-letter .subsubsub {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+        margin: 0 !important;
+    }
+    
+    body.post-type-letter .subsubsub li {
+        display: block;
+        margin: 0 !important;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    body.post-type-letter .subsubsub li:last-child {
+        border-bottom: none;
+    }
+    
+    body.post-type-letter .subsubsub a {
+        font-size: 15px;
+        padding: 8px 12px;
+        display: inline-block;
+    }
+    
+    /* Tablenav - stack elements */
+    body.post-type-letter .tablenav {
+        display: flex;
+        flex-direction: column;
+        padding: 15px !important;
+    }
+    
+    body.post-type-letter .tablenav .actions {
+        width: 100%;
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    body.post-type-letter .tablenav select,
+    body.post-type-letter .tablenav input[type="text"],
+    body.post-type-letter .tablenav input[type="search"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-bottom: 10px !important;
+        font-size: 16px !important; /* Prevent iOS zoom */
+        padding: 10px !important;
+    }
+    
+    body.post-type-letter .tablenav .button {
+        width: 100%;
+        margin-bottom: 10px !important;
+        padding: 10px 15px !important;
+        font-size: 15px;
+    }
+    
+    body.post-type-letter .tablenav-pages {
+        width: 100%;
+        text-align: center;
+        margin-top: 15px;
+    }
+    
+    body.post-type-letter .tablenav-pages .pagination-links {
+        display: flex;
+        justify-content: center;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    
+    body.post-type-letter .tablenav-pages .pagination-links a,
+    body.post-type-letter .tablenav-pages .pagination-links span {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+    }
+    
+    /* Analytics box */
+    .rts-analytics-box {
+        padding: 20px !important;
+    }
+    
+    .rts-analytics-title {
+        font-size: 22px;
+    }
+    
+    .rts-analytics-subtitle {
+        font-size: 12px;
+    }
+    
+    .rts-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .rts-stat-box {
+        padding: 20px;
+    }
+    
+    .rts-stat-label {
+        font-size: 12px;
+    }
+    
+    .rts-stat-value {
+        font-size: 32px;
+    }
+    
+    /* Security logs table - mobile responsive */
+    body.letter_page_rts-security-logs .widefat,
+    body.letter_page_rts-security-logs .widefat thead,
+    body.letter_page_rts-security-logs .widefat tbody,
+    body.letter_page_rts-security-logs .widefat th,
+    body.letter_page_rts-security-logs .widefat td,
+    body.letter_page_rts-security-logs .widefat tr {
+        display: block;
+        width: 100%;
+    }
+    
+    body.letter_page_rts-security-logs .widefat thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    
+    body.letter_page_rts-security-logs .widefat tbody tr {
+        border: 1px solid rgba(252, 163, 17, 0.15);
+        border-radius: 15px;
+        margin-bottom: 15px;
+        padding: 15px;
+        background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%);
+    }
+    
+    body.letter_page_rts-security-logs .widefat td {
+        border: none !important;
+        padding: 10px !important;
+        text-align: left;
+        display: block;
+        width: 100%;
+    }
+    
+    body.letter_page_rts-security-logs .widefat td:first-child {
+        font-weight: 600;
+        color: #FCA311;
+        font-size: 14px;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(252, 163, 17, 0.2) !important;
+    }
+    
+    body.letter_page_rts-security-logs .widefat td pre {
+        font-size: 11px;
+        padding: 10px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
+    /* Increase base font sizes for mobile */
+    body.post-type-letter,
+    body[class*="letter_page_"] {
+        font-size: 16px; /* Prevents iOS zoom */
+    }
+    
+    body.post-type-letter .wrap > h1,
+    body[class*="letter_page_"] .wrap > h1 {
+        font-size: 24px;
+        margin-bottom: 15px;
+    }
+    
+    /* Better padding for dark wrapper */
+    .rts-admin-dark-wrapper {
+        padding: 15px;
+        margin: -20px -10px -20px -2px;
+    }
+    
+    body.post-type-letter .wrap {
+        padding: 15px;
+    }
+    
+    /* Page title actions */
+    body.post-type-letter .page-title-action {
+        display: block;
+        width: 100%;
+        text-align: center;
+        margin-top: 10px;
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+}
+
+/* Small phones - 480px */
+@media screen and (max-width: 480px) {
+    .rts-analytics-actions .button {
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+    
+    .rts-analytics-actions .dashicons {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+    }
+    
+    .rts-stat-label {
+        font-size: 11px;
+    }
+    
+    .rts-stat-value {
+        font-size: 28px;
+    }
+    
+    body.post-type-letter .wp-list-table td {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+    }
+    
+    body.post-type-letter .wp-list-table td:before {
+        position: static;
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .rts-analytics-title {
+        font-size: 20px;
+    }
+}
+
+/* Prevent iOS text size adjustment */
+@supports (-webkit-touch-callout: none) {
+    body.post-type-letter,
+    body[class*="letter_page_"] {
+        -webkit-text-size-adjust: 100%;
+    }
+}
+
+/* Improve touch targets globally */
+body.post-type-letter .button,
+body.post-type-letter a.row-action,
+body[class*="letter_page_"] .button {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Better spacing for small screens */
+@media screen and (max-width: 782px) {
+    body.post-type-letter .wp-list-table {
+        margin: 0 !important;
+    }
+    
+    body.post-type-letter .tablenav {
+        margin: 15px 0 !important;
+    }
+}
+
+/* ============================================================
+   RTS Subscribers + Newsletters (match Letters dashboard style)
+   ============================================================ */
+
+/* Shared base for list + edit screens */
+body.post-type-rts_subscriber,
+body.post-type-rts_newsletter,
+body.post-new-php.post-type-rts_subscriber,
+body.post-new-php.post-type-rts_newsletter,
+body.post-php.post-type-rts_subscriber,
+body.post-php.post-type-rts_newsletter {
+    background: #0b1220;
+}
+
+/* Main content wrap */
+body.post-type-rts_subscriber #wpbody-content,
+body.post-type-rts_newsletter #wpbody-content,
+body.post-new-php.post-type-rts_subscriber #wpbody-content,
+body.post-new-php.post-type-rts_newsletter #wpbody-content,
+body.post-php.post-type-rts_subscriber #wpbody-content,
+body.post-php.post-type-rts_newsletter #wpbody-content {
+    padding: 26px 26px 40px 26px;
+}
+
+/* Headings */
+body.post-type-rts_subscriber .wrap h1,
+body.post-type-rts_newsletter .wrap h1,
+body.post-new-php.post-type-rts_subscriber .wrap h1,
+body.post-new-php.post-type-rts_newsletter .wrap h1 {
+    color: #ffffff !important;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+/* Buttons */
+body.post-type-rts_subscriber .page-title-action,
+body.post-type-rts_newsletter .page-title-action,
+body.post-new-php.post-type-rts_subscriber .page-title-action,
+body.post-new-php.post-type-rts_newsletter .page-title-action {
+    background: #179AD6 !important;
+    border: 0 !important;
+    color: #ffffff !important;
+    border-radius: 14px !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+}
+body.post-type-rts_subscriber .page-title-action:hover,
+body.post-type-rts_newsletter .page-title-action:hover,
+body.post-new-php.post-type-rts_subscriber .page-title-action:hover,
+body.post-new-php.post-type-rts_newsletter .page-title-action:hover {
+    filter: brightness(1.05);
+}
+
+/* List table wrapper */
+body.post-type-rts_subscriber .wrap,
+body.post-type-rts_newsletter .wrap {
+    background: radial-gradient(1200px 600px at 30% 0%, rgba(23,154,214,0.18), transparent 60%),
+                radial-gradient(800px 400px at 80% 40%, rgba(223,21,124,0.12), transparent 55%),
+                rgba(11,18,32,0.96);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 28px;
+    padding: 22px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+}
+
+/* Filters bar */
+body.post-type-rts_subscriber .tablenav.top,
+body.post-type-rts_newsletter .tablenav.top {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 12px;
+    margin: 14px 0 16px 0;
+}
+
+body.post-type-rts_subscriber select,
+body.post-type-rts_newsletter select,
+body.post-type-rts_subscriber input[type="text"],
+body.post-type-rts_newsletter input[type="text"],
+body.post-type-rts_subscriber input[type="search"],
+body.post-type-rts_newsletter input[type="search"],
+body.post-type-rts_subscriber input[type="email"],
+body.post-type-rts_newsletter input[type="email"] {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    color: #ffffff !important;
+    border-radius: 14px !important;
+    min-height: 42px;
+}
+
+body.post-type-rts_subscriber input::placeholder,
+body.post-type-rts_newsletter input::placeholder {
+    color: rgba(255,255,255,0.72) !important;
+}
+
+/* Table itself (fix white bg + white text issue) */
+body.post-type-rts_subscriber table.wp-list-table,
+body.post-type-rts_newsletter table.wp-list-table {
+    background: rgba(0,0,0,0.20) !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    border-radius: 18px;
+    overflow: hidden;
+}
+
+body.post-type-rts_subscriber .wp-list-table thead th,
+body.post-type-rts_newsletter .wp-list-table thead th {
+    background: rgba(0,0,0,0.28) !important;
+    color: #F4C946 !important; /* brand yellow */
+    border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+}
+
+body.post-type-rts_subscriber .wp-list-table tbody td,
+body.post-type-rts_newsletter .wp-list-table tbody td {
+    background: transparent !important;
+    color: #ffffff !important;
+    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+body.post-type-rts_subscriber .wp-list-table tbody tr:hover td,
+body.post-type-rts_newsletter .wp-list-table tbody tr:hover td {
+    background: rgba(255,255,255,0.05) !important;
+}
+
+body.post-type-rts_subscriber .wp-list-table a,
+body.post-type-rts_newsletter .wp-list-table a {
+    color: #179AD6 !important;
+}
+body.post-type-rts_subscriber .wp-list-table a:hover,
+body.post-type-rts_newsletter .wp-list-table a:hover {
+    color: #F4C946 !important;
+}
+
+/* No grey/reduced transparency text on dark bg */
+body.post-type-rts_subscriber .subsubsub a,
+body.post-type-rts_newsletter .subsubsub a,
+body.post-type-rts_subscriber .tablenav .displaying-num,
+body.post-type-rts_newsletter .tablenav .displaying-num,
+body.post-type-rts_subscriber .tablenav-pages,
+body.post-type-rts_newsletter .tablenav-pages {
+    color: #ffffff !important;
+}
+
+body.post-type-rts_subscriber .subsubsub a.current,
+body.post-type-rts_newsletter .subsubsub a.current {
+    color: #F4C946 !important;
+}
+
+/* Newsletter editor page: metaboxes */
+body.post-new-php.post-type-rts_newsletter #poststuff,
+body.post-php.post-type-rts_newsletter #poststuff {
+    background: radial-gradient(1200px 600px at 30% 0%, rgba(23,154,214,0.18), transparent 60%),
+                rgba(11,18,32,0.96);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 28px;
+    padding: 22px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+}
+
+body.post-new-php.post-type-rts_newsletter #poststuff .postbox,
+body.post-php.post-type-rts_newsletter #poststuff .postbox {
+    background: rgba(0,0,0,0.22) !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    border-radius: 18px;
+}
+
+body.post-new-php.post-type-rts_newsletter #poststuff .postbox .hndle,
+body.post-php.post-type-rts_newsletter #poststuff .postbox .hndle {
+    color: #ffffff !important;
+}
+
+/* Subscriber add/edit screen: prevent label overlap + keep visible */
+body.post-new-php.post-type-rts_subscriber #titlewrap #title,
+body.post-php.post-type-rts_subscriber #titlewrap #title {
+    line-height: 1.4 !important;
+    padding: 14px 18px !important;
+}
+
+body.post-new-php.post-type-rts_subscriber #titlewrap #title-prompt-text,
+body.post-php.post-type-rts_subscriber #titlewrap #title-prompt-text {
+    color: rgba(255,255,255,0.72) !important;
+    padding: 14px 18px !important;
 }

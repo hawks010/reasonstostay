@@ -73,24 +73,89 @@ class RTS_Security {
         if (!current_user_can('manage_options')) return;
         
         $logs = get_option('rts_security_log', []);
+        $log_count = count($logs);
         
-        echo '<div class="wrap"><h1>Security Logs</h1>';
-        echo '<table class="widefat fixed striped">';
-        echo '<thead><tr><th>Time</th><th>Event</th><th>Context</th></tr></thead><tbody>';
+        // Get some basic stats
+        $recent_blocks = 0;
+        $recent_attempts = 0;
+        $time_24h_ago = time() - (24 * 60 * 60);
         
-        if (empty($logs)) {
-             echo '<tr><td colspan="3">No logs found.</td></tr>';
-        } else {
-            foreach (array_reverse($logs) as $log) {
-                echo '<tr>';
-                echo '<td>' . date('Y-m-d H:i:s', $log['timestamp']) . '</td>';
-                echo '<td>' . esc_html($log['event']) . '</td>';
-                echo '<td><pre>' . esc_html(json_encode($log['context'], JSON_PRETTY_PRINT)) . '</pre></td>';
-                echo '</tr>';
+        foreach ($logs as $log) {
+            if (isset($log['timestamp']) && $log['timestamp'] > $time_24h_ago) {
+                $recent_attempts++;
+                if (strpos($log['event'], 'blocked') !== false || strpos($log['event'], 'rejected') !== false) {
+                    $recent_blocks++;
+                }
             }
         }
         
-        echo '</tbody></table></div>';
+        ?>
+        <div class="wrap">
+            <div class="rts-analytics-container">
+                <div class="rts-analytics-box">
+                    <div class="rts-analytics-header rts-letters-analytics">
+                        <div>
+                            <div class="rts-analytics-title">Security Logs</div>
+                            <div class="rts-analytics-subtitle">Powered by RTS Moderation Engine</div>
+                        </div>
+                        <div class="rts-analytics-actions">
+                            <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=rts-dashboard')); ?>">
+                                <span class="dashicons dashicons-dashboard" aria-hidden="true"></span>
+                                Open Dashboard
+                            </a>
+                            <a class="button button-primary" href="<?php echo esc_url(admin_url('admin.php?page=rts-security-logs')); ?>">
+                                <span class="dashicons dashicons-update" aria-hidden="true"></span>
+                                Refresh Status
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="rts-stats-grid">
+                        <a href="#" class="rts-stat-box" style="--stat-bg-start:rgba(255,255,255,0.02);--stat-border:rgba(255,255,255,0.1);--stat-value-color:#FCA311;">
+                            <div class="rts-stat-label">Total</div>
+                            <div class="rts-stat-value"><?php echo esc_html(number_format_i18n($log_count)); ?></div>
+                        </a>
+                        <a href="#" class="rts-stat-box" style="--stat-bg-start:rgba(255,255,255,0.02);--stat-border:rgba(255,255,255,0.1);--stat-value-color:#9BD1FF;">
+                            <div class="rts-stat-label">Last 24h</div>
+                            <div class="rts-stat-value"><?php echo esc_html(number_format_i18n($recent_attempts)); ?></div>
+                        </a>
+                        <a href="#" class="rts-stat-box" style="--stat-bg-start:rgba(255,255,255,0.02);--stat-border:rgba(255,255,255,0.1);--stat-value-color:#ff6b6b;">
+                            <div class="rts-stat-label">Blocked</div>
+                            <div class="rts-stat-value"><?php echo esc_html(number_format_i18n($recent_blocks)); ?></div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <table class="widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th style="width: 180px;">Time</th>
+                        <th style="width: 200px;">Event</th>
+                        <th>Context</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($logs)): ?>
+                        <tr>
+                            <td colspan="3" style="text-align: center; padding: 30px; color: rgba(241, 227, 211, 0.6);">
+                                <span class="dashicons dashicons-shield" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 10px;"></span>
+                                No logs found.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach (array_reverse($logs) as $log): ?>
+                            <tr>
+                                <td><?php echo esc_html(date('Y-m-d H:i:s', $log['timestamp'])); ?></td>
+                                <td><?php echo esc_html($log['event']); ?></td>
+                                <td><pre><?php echo esc_html(json_encode($log['context'], JSON_PRETTY_PRINT)); ?></pre></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
     }
 
     /**
@@ -125,7 +190,14 @@ class RTS_Security {
         if (!$index_exists) {
             // Standard index creation
             // Indexing meta_key and first 32 chars of value (MD5 hash length)
-            $wpdb->query("CREATE INDEX idx_content_fingerprint ON {$wpdb->postmeta}(meta_key, meta_value(32))");
+            $result = $wpdb->query("CREATE INDEX idx_content_fingerprint ON {$wpdb->postmeta}(meta_key, meta_value(32))");
+            if ($result === false) {
+                $this->log_event('index_create_failed', [
+                    'source' => 'security',
+                    'index'  => 'idx_content_fingerprint',
+                    'db_error' => $wpdb->last_error,
+                ], 'warning');
+            }
         }
 
         update_option('rts_security_indexes_installed', true);
@@ -221,6 +293,18 @@ class RTS_Security {
      * Validate letter submission
      */
     public function validate_submission($is_valid, $data) {
+        // Sanitize incoming payload defensively (do not trust external forms).
+        $data = is_array($data) ? $data : [];
+        $data = [
+            'letter_text'    => isset($data['letter_text']) ? (string) wp_unslash($data['letter_text']) : '',
+            'author_name'    => isset($data['author_name']) ? sanitize_text_field(wp_unslash($data['author_name'])) : '',
+            'email'          => isset($data['email']) ? sanitize_email(wp_unslash($data['email'])) : '',
+            'honeypot'       => isset($data['honeypot']) ? sanitize_text_field(wp_unslash($data['honeypot'])) : '',
+            'time_to_submit' => isset($data['time_to_submit']) ? absint($data['time_to_submit']) : 0,
+            'rts_token'      => isset($data['rts_token']) ? sanitize_text_field(wp_unslash($data['rts_token'])) : '',
+            'nonce'          => isset($data['nonce']) ? sanitize_text_field(wp_unslash($data['nonce'])) : '',
+        ];
+
         if (is_wp_error($is_valid)) return $is_valid;
 
         $ip = $this->get_client_ip();
@@ -331,7 +415,7 @@ class RTS_Security {
      * Consistent content cleaning for hashing
      */
     private function clean_content_for_hash($content) {
-        return md5(trim(strtolower(wp_strip_all_tags($content))));
+        return hash('sha256', trim(strtolower(wp_strip_all_tags($content))));
     }
 
     /**
@@ -394,11 +478,27 @@ class RTS_Security {
 
         // Use transients so it behaves correctly with external object caches
         // (Redis/Memcached). Using direct SQL writes can desync cached values.
-        $hourly = (int) get_transient($hourly_key);
-        set_transient($hourly_key, $hourly + 1, HOUR_IN_SECONDS);
+        // Increment with object cache atomic op when available (reduces race conditions).
+        if (function_exists('wp_cache_incr')) {
+            $count = wp_cache_incr($hourly_key, 1, 'rts', HOUR_IN_SECONDS);
+            if ($count === false) {
+                wp_cache_set($hourly_key, 1, 'rts', HOUR_IN_SECONDS);
+            }
+        } else {
+            $hourly = (int) get_transient($hourly_key);
+            set_transient($hourly_key, $hourly + 1, HOUR_IN_SECONDS);
+        }
 
-        $daily = (int) get_transient($daily_key);
-        set_transient($daily_key, $daily + 1, DAY_IN_SECONDS);
+        // Increment with object cache atomic op when available (reduces race conditions).
+        if (function_exists('wp_cache_incr')) {
+            $count = wp_cache_incr($daily_key, 1, 'rts', DAY_IN_SECONDS);
+            if ($count === false) {
+                wp_cache_set($daily_key, 1, 'rts', DAY_IN_SECONDS);
+            }
+        } else {
+            $daily = (int) get_transient($daily_key);
+            set_transient($daily_key, $daily + 1, DAY_IN_SECONDS);
+        }
     }
 
     /**
@@ -511,28 +611,49 @@ class RTS_Security {
     /**
      * Get client IP address (Secure with Validation & Entropy)
      */
-    private function get_client_ip() {
-        $ip = '';
-        
-        if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-            $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
-        } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-            $ip = trim($ips[0]);
-        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
-            $ip = $_SERVER['REMOTE_ADDR'];
+    private function get_client_ip(): string {
+        // Sanitize immediately. Never trust forwarded headers.
+        $cf_ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_CF_CONNECTING_IP'])) : '';
+        $xff   = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])) : '';
+        $xri   = isset($_SERVER['HTTP_X_REAL_IP']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_X_REAL_IP'])) : '';
+        $ra    = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+
+        $candidates = [];
+
+        if ($cf_ip) {
+            $candidates[] = $cf_ip;
         }
-        
-        $ip = filter_var($ip, FILTER_VALIDATE_IP);
-        
-        if (!$ip || $ip === '0.0.0.0') {
-            $entropy = ($_SERVER['HTTP_USER_AGENT'] ?? '') . 
-                       ($_SERVER['REMOTE_PORT'] ?? '') . 
-                       ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '');
-            return 'invalid_ip_' . md5($entropy);
+
+        if ($xff) {
+            // XFF can be a list. Prefer the first valid public IP.
+            foreach (explode(',', $xff) as $piece) {
+                $piece = trim($piece);
+                if ($piece !== '') {
+                    $candidates[] = $piece;
+                }
+            }
         }
-        
-        return $ip;
+
+        if ($xri) {
+            $candidates[] = $xri;
+        }
+
+        if ($ra) {
+            $candidates[] = $ra;
+        }
+
+        foreach ($candidates as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                return $candidate;
+            }
+        }
+
+        // Fallback: stable-ish hash when no valid IP can be established.
+        $entropy = (isset($_SERVER['HTTP_USER_AGENT']) ? (string) wp_unslash($_SERVER['HTTP_USER_AGENT']) : '')
+            . (isset($_SERVER['REMOTE_PORT']) ? (string) wp_unslash($_SERVER['REMOTE_PORT']) : '')
+            . (isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ? (string) wp_unslash($_SERVER['HTTP_ACCEPT_LANGUAGE']) : '');
+
+        return 'invalid_ip_' . md5($entropy);
     }
     
     /**
@@ -564,10 +685,12 @@ class RTS_Security {
             $admin_email = get_option('admin_email');
             $site_name = get_bloginfo('name');
             
+            $safe_event = sanitize_text_field($event);
+            $sanitized_context = $this->sanitize_log_context(is_array($context) ? $context : []);
             wp_mail(
                 $admin_email,
-                "[{$site_name}] Security Alert: {$event}",
-                json_encode($context, JSON_PRETTY_PRINT)
+                "[{$site_name}] Security Alert: {$safe_event}",
+                print_r($sanitized_context, true)
             );
         }
     }
@@ -605,11 +728,12 @@ class RTS_Security {
 
         // Clean up expired block transients
         global $wpdb;
+        $like = $wpdb->esc_like('_transient_timeout_rts_block_') . '%';
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->options} 
-             WHERE option_name LIKE %s 
+            "DELETE FROM {$wpdb->options}
+             WHERE option_name LIKE %s
              AND option_value < %d",
-            '_transient_timeout_rts_block_%',
+            $like,
             time()
         ));
     }

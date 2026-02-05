@@ -30,6 +30,9 @@ class RTS_CPT_Letters_System {
         add_action('init', [$this, 'register_post_type']);
         add_action('init', [$this, 'register_taxonomies']);
         
+        // Prevent auto-draft creation for letters (v2.0.18)
+        add_filter('wp_insert_post_data', [$this, 'prevent_auto_draft'], 10, 2);
+        
         // Meta boxes
         add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
         add_action('save_post_letter', [$this, 'save_meta_boxes']);
@@ -417,116 +420,6 @@ class RTS_CPT_Letters_System {
         $rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
 
         ?>
-        <style>
-            .rts-analytics-container {
-                margin: 16px 0 10px;
-            }
-            .rts-analytics-box {
-                background: #fff;
-                border: 1px solid #dcdcde;
-                border-radius: 12px;
-                padding: 20px;
-                max-width: 1400px;
-            }
-            .rts-analytics-header {
-                display: flex;
-                gap: 16px;
-                flex-wrap: wrap;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 20px;
-            }
-            .rts-analytics-title {
-                font-size: 18px;
-                font-weight: 700;
-                line-height: 1.2;
-                color: #1d2327;
-            }
-            .rts-analytics-subtitle {
-                color: #646970;
-                font-size: 12px;
-                margin-top: 4px;
-            }
-            .rts-analytics-actions {
-                display: flex;
-                gap: 10px;
-                flex-wrap: wrap;
-                align-items: center;
-            }
-            .rts-analytics-actions .button {
-                height: 36px;
-                line-height: 34px;
-                padding: 0 16px;
-                font-size: 13px;
-                font-weight: 500;
-                border-radius: 6px;
-                text-decoration: none;
-                transition: all 0.2s ease;
-            }
-            .rts-analytics-actions .button:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            .rts-analytics-actions .button-primary {
-                background: #2271b1;
-                border-color: #2271b1;
-                color: #fff;
-            }
-            .rts-analytics-actions .button-primary:hover {
-                background: #135e96;
-                border-color: #135e96;
-            }
-            .rts-analytics-actions .button-secondary {
-                background: #f6f7f7;
-                border-color: #dcdcde;
-                color: #2c3338;
-            }
-            .rts-analytics-actions .button-secondary:hover {
-                background: #f0f0f1;
-                border-color: #8c8f94;
-            }
-            .rts-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 14px;
-            }
-            @media (min-width: 1200px) {
-                .rts-stats-grid {
-                    grid-template-columns: repeat(5, 1fr);
-                }
-            }
-            .rts-stat-box {
-                background: linear-gradient(135deg, var(--stat-bg-start), var(--stat-bg-end));
-                border: 1px solid var(--stat-border);
-                border-radius: 10px;
-                padding: 18px 16px;
-                text-align: center;
-                transition: all 0.2s ease;
-                cursor: pointer;
-                display: block;
-                text-decoration: none;
-            }
-            .rts-stat-box:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            }
-            .rts-stat-label {
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                color: var(--stat-label-color);
-                margin-bottom: 8px;
-                opacity: 0.85;
-            }
-            .rts-stat-value {
-                font-size: 32px;
-                font-weight: 800;
-                line-height: 1;
-                color: var(--stat-value-color);
-                font-variant-numeric: tabular-nums;
-            }
-        </style>
         <div class="rts-analytics-container">
             <div class="rts-analytics-box">
                 <div class="rts-analytics-header rts-letters-analytics">
@@ -623,9 +516,13 @@ class RTS_CPT_Letters_System {
             return;
         }
 
-        // IMPORTANT: Do NOT enqueue the heavy rts-admin.css here.
-        // This list screen should keep WordPress' native table styles.
-        // The analytics header above already includes its own scoped inline CSS.
+        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+        if (file_exists($css_path)) {
+            $css_ver = (string) filemtime($css_path);
+            wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], $css_ver);
+        }
+
+        
 
         $js_path  = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
         if (file_exists($js_path)) {
@@ -1246,85 +1143,18 @@ class RTS_CPT_Letters_System {
         return add_query_arg('bulk_processed', 0, $redirect_to);
     }
 
-public function admin_css() {
-        $screen = get_current_screen();
-        // Fix #7: Screen restriction
-        if (!$screen || $screen->post_type !== 'letter' || $screen->base !== 'edit') return;
-        ?>
-        <style>
-        .rts-score {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-weight: 700;
-            font-size: 16px;
-        }
-        .rts-score-good { background: #d4edda; color: #155724; }
-        .rts-score-ok { background: #fff3cd; color: #856404; }
-        .rts-score-low { background: #f8d7da; color: #721c24; }
-        
-        .rts-unrated { color: #999; font-style: italic; font-size: 13px; }
-        
-        .rts-safety {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .rts-safety-ok { background: #d4edda; color: #155724; }
-        .rts-safety-flag { background: #fff3cd; color: #856404; }
-        
-        .rts-rating {
-            display: block;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-        .rts-rating-good { color: #00a32a; }
-        .rts-rating-ok { color: #f0b849; }
-        .rts-rating-low { color: #d63638; }
-        
-        .rts-votes { font-size: 11px; color: #999; }
-        .rts-no-rating { color: #999; font-size: 13px; }
-        
-        .rts-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-        .rts-tag {
-            display: inline-block;
-            padding: 2px 8px;
-            background: #f0f0f0;
-            border-radius: 3px;
-            font-size: 11px;
-            color: #555;
-        }
-        .rts-tag-more {
-            display: inline-block;
-            padding: 2px 8px;
-            background: #e0e0e0;
-            border-radius: 3px;
-            font-size: 11px;
-            color: #666;
-            font-weight: 600;
-        }
-        .rts-tone {
-            display: inline-block;
-            padding: 2px 8px;
-            background: #e3f2fd;
-            border-radius: 3px;
-            font-size: 11px;
-            color: #1565c0;
-            margin-top: 4px;
-        }
-        .rts-no-tags { color: #999; font-size: 12px; font-style: italic; }
-        
-        .wp-list-table .column-letter_quality { width: 100px; }
-        .wp-list-table .column-letter_safety { width: 100px; }
-        .wp-list-table .column-letter_rating { width: 120px; }
-        .wp-list-table .column-letter_tags { width: 200px; }
-        </style>
-        <?php
+public function admin_css(): void {
+        // Styles moved to assets/css/rts-admin.css
     }
 
+        
+
+    
+
+    /**
+     * Handle quick approve from letters list
+     * v2.0.18: Fixed to redirect back to referring page and prevent auto-draft creation
+     */
     public function handle_quick_approve() {
         if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'approve_' . $_GET['post'])) {
             wp_die('Invalid request');
@@ -1342,6 +1172,10 @@ public function admin_css() {
             wp_die('Permission denied.');
         }
         
+        // Remove save_post_letter hook temporarily to prevent unwanted side effects
+        remove_action('save_post_letter', [$this, 'save_meta_boxes']);
+        
+        // Update post status
         $result = wp_update_post([
             'ID' => $post_id,
             'post_status' => 'publish'
@@ -1351,16 +1185,45 @@ public function admin_css() {
             wp_die('Error approving post: ' . $result->get_error_message());
         }
         
+        // Clean up meta
         delete_post_meta($post_id, 'needs_review');
         delete_post_meta($post_id, 'rts_flagged');
         
-        wp_redirect(esc_url_raw(admin_url('edit.php?post_type=letter')));
+        // Re-add the hook
+        add_action('save_post_letter', [$this, 'save_meta_boxes']);
+        
+        // Redirect back to referring page if available, otherwise to flagged view
+        $redirect_url = admin_url('edit.php?post_type=letter');
+        
+        if (isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'edit.php') !== false) {
+            // Parse referer to preserve filters
+            $referer = wp_parse_url($_SERVER['HTTP_REFERER']);
+            if (isset($referer['query'])) {
+                parse_str($referer['query'], $query_args);
+                // If coming from flagged view, go back there
+                if (isset($query_args['letter_flagged']) || isset($query_args['needs_review'])) {
+                    $redirect_url = add_query_arg([
+                        'post_type' => 'letter',
+                        'letter_flagged' => '1'
+                    ], admin_url('edit.php'));
+                }
+            }
+        }
+        
+        $redirect_url = add_query_arg('message', 'approved', $redirect_url);
+        
+        wp_redirect(esc_url_raw($redirect_url));
         exit;
     }
     
     /**
      * Handle quick unflag from edit screen meta box
      * Clears quarantine flag, sets to pending, and queues for re-scan
+     */
+    /**
+     * Handle quick unflag from edit screen meta box
+     * Clears quarantine flag, sets to pending, and queues for re-scan
+     * v2.0.18: Added hook removal to prevent auto-draft creation
      */
     public function handle_quick_unflag() {
         if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'unflag_' . $_GET['post'])) {
@@ -1386,6 +1249,9 @@ public function admin_css() {
         delete_post_meta($post_id, 'rts_moderation_reasons');
         delete_post_meta($post_id, 'rts_flagged_keywords');
         
+        // Remove save_post_letter hook temporarily to prevent unwanted side effects
+        remove_action('save_post_letter', [$this, 'save_meta_boxes']);
+        
         // Set to pending so it goes to inbox
         $result = wp_update_post([
             'ID' => $post_id,
@@ -1396,14 +1262,46 @@ public function admin_css() {
             wp_die('Error updating post: ' . $result->get_error_message());
         }
         
+        // Re-add the hook
+        add_action('save_post_letter', [$this, 'save_meta_boxes']);
+        
         // Queue for fresh scan if Action Scheduler is available
         if (function_exists('as_schedule_single_action') && !as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
             as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
         }
         
         // Redirect back to the edit screen with success message
-        wp_redirect(esc_url_raw(add_query_arg('message', 'unflagger', admin_url('post.php?post=' . $post_id . '&action=edit'))));
+        wp_redirect(esc_url_raw(add_query_arg('message', 'unflagged', admin_url('post.php?post=' . $post_id . '&action=edit'))));
         exit;
+    }
+    
+    /**
+     * Prevent auto-draft creation for letters
+     * v2.0.18: WordPress sometimes creates auto-drafts automatically - prevent this for letters
+     */
+    public function prevent_auto_draft($data, $postarr) {
+        // Only affect letters
+        if ($data['post_type'] !== 'letter') {
+            return $data;
+        }
+        
+        // If this is trying to create an auto-draft with no content
+        if ($data['post_status'] === 'auto-draft' && empty($data['post_content']) && empty($data['post_title'])) {
+            // Check if this is a programmatic creation (not from user action)
+            if (!isset($_POST['post_title']) && !isset($_POST['content'])) {
+                // Prevent creation by setting to draft instead
+                $data['post_status'] = 'draft';
+                
+                // Or better yet, skip it entirely if we're in admin and not editing
+                if (is_admin() && !isset($_GET['action'])) {
+                    // This is an automatic creation, not a user edit
+                    // We can't truly prevent it here, but we can mark it for cleanup
+                    $data['post_title'] = '[Auto-draft - DELETE ME]';
+                }
+            }
+        }
+        
+        return $data;
     }
 }
 

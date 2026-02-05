@@ -16,6 +16,26 @@ class RTS_Shortcodes {
         add_shortcode('rts_onboarding', [$this, 'onboarding']);
         add_shortcode('rts_submit_form', [$this, 'submit_form']);
         add_shortcode('rts_site_stats_row', [$this, 'site_stats_row']);
+        
+        // Clear stats cache when letters are updated (v2.0.17)
+        add_action('save_post_letter', [$this, 'clear_stats_cache']);
+        add_action('transition_post_status', [$this, 'clear_stats_cache_on_transition'], 10, 3);
+    }
+    
+    /**
+     * Clear stats cache when letters are saved/updated
+     */
+    public function clear_stats_cache() {
+        delete_transient('rts_site_stats_v1');
+    }
+    
+    /**
+     * Clear stats cache on post status transitions
+     */
+    public function clear_stats_cache_on_transition($new_status, $old_status, $post) {
+        if ($post->post_type === 'letter') {
+            $this->clear_stats_cache();
+        }
     }
     
     /**
@@ -521,9 +541,15 @@ class RTS_Shortcodes {
      * Site Stats Row - [rts_site_stats_row]
      * Displays 3 stats: Letters delivered, Feel better %, Submitted letters
      * Pulls real data from database with manual override support
+     * v2.0.17: Optimized with external CSS/JS
      */
     public function site_stats_row($atts) {
-        // Get real stats from database
+        // Enqueue the stats styles (only when shortcode is used)
+        add_action('wp_footer', function() {
+            wp_enqueue_style('rts-stats-row', get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css', [], '2.0.17');
+        }, 5);
+        
+        // Get real stats from database (now with caching)
         $stats = $this->get_site_stats();
         
         ob_start();
@@ -531,7 +557,7 @@ class RTS_Shortcodes {
         <div class="rts-stats-row" role="group" aria-label="Site statistics">
             <div class="rts-stat">
                 <div class="rts-stat-number" id="rts-letters-delivered">
-                    <?php echo number_format($stats['letters_delivered']); ?>
+                    <?php echo esc_html(number_format($stats['letters_delivered'])); ?>
                 </div>
                 <div class="rts-stat-label">
                     letters delivered to site visitors.
@@ -540,7 +566,7 @@ class RTS_Shortcodes {
             
             <div class="rts-stat">
                 <div class="rts-stat-number" id="rts-feel-better">
-                    <?php echo $stats['feel_better_percent']; ?>%
+                    <?php echo esc_html($stats['feel_better_percent']); ?>%
                 </div>
                 <div class="rts-stat-label">
                     say reading a letter made them feel "much better".
@@ -549,97 +575,70 @@ class RTS_Shortcodes {
             
             <div class="rts-stat">
                 <div class="rts-stat-number" id="rts-letters-submitted">
-                    <?php echo number_format($stats['letters_submitted']); ?>
+                    <?php echo esc_html(number_format($stats['letters_submitted'])); ?>
                 </div>
                 <div class="rts-stat-label">
                     submitted letters to the site.
                 </div>
             </div>
         </div>
-        
-        <style>
-        .rts-stats-row {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 32px;
-            text-align: center;
-            padding: 20px 0;
-        }
-        
-        .rts-stat {
-            min-width: 200px;
-            max-width: 300px;
-        }
-        
-        .rts-stat-number {
-            font-family: 'Special Elite', 'Courier New', monospace;
-            font-size: 2.8rem;
-            line-height: 1;
-            font-weight: 700;
-            color: var(--rts-black, #2A2A2A);
-        }
-        
-        .rts-stat-label {
-            margin-top: 10px;
-            font-size: 1rem;
-            line-height: 1.5;
-            color: var(--rts-gray-mid, #666);
-        }
-        
-        @media (max-width: 768px) {
-            .rts-stats-row {
-                gap: 24px;
-            }
-            
-            .rts-stat {
-                min-width: 150px;
-            }
-            
-            .rts-stat-number {
-                font-size: 2.2rem;
-            }
-        }
-        </style>
-        
-        <script>
-        // Update stats dynamically via REST API
-        (function() {
-            function updateStats() {
-                fetch('<?php echo esc_url(rest_url('rts/v1/site-stats')); ?>')
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.letters_delivered !== undefined) {
-                            document.getElementById('rts-letters-delivered').textContent = 
-                                new Intl.NumberFormat().format(data.letters_delivered);
-                        }
-                        if (data.feel_better_percent !== undefined) {
-                            document.getElementById('rts-feel-better').textContent = 
-                                String(data.feel_better_percent) + '%';
-                        }
-                        if (data.letters_submitted !== undefined) {
-                            document.getElementById('rts-letters-submitted').textContent = 
-                                new Intl.NumberFormat().format(data.letters_submitted);
-                        }
-                    })
-                    .catch(() => {}); // Silent fail
-            }
-            
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', updateStats);
-            } else {
-                updateStats();
-            }
-        })();
-        </script>
         <?php
+        
+        // Add inline script in footer (lightweight, one-time execution)
+        add_action('wp_footer', function() {
+            ?>
+            <script>
+            // Update stats dynamically via REST API (cached on backend)
+            (function() {
+                function updateStats() {
+                    fetch('<?php echo esc_js(rest_url('rts/v1/site-stats')); ?>')
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.letters_delivered !== undefined) {
+                                var el = document.getElementById('rts-letters-delivered');
+                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_delivered);
+                            }
+                            if (data.feel_better_percent !== undefined) {
+                                var el = document.getElementById('rts-feel-better');
+                                if (el) el.textContent = String(data.feel_better_percent) + '%';
+                            }
+                            if (data.letters_submitted !== undefined) {
+                                var el = document.getElementById('rts-letters-submitted');
+                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_submitted);
+                            }
+                        })
+                        .catch(function() {}); // Silent fail - initial HTML values remain
+                }
+                
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', updateStats);
+                } else {
+                    updateStats();
+                }
+            })();
+            </script>
+            <?php
+        }, 20);
+        
         return ob_get_clean();
     }
     
     /**
      * Get real site stats from database
      */
+    /**
+     * Get real site stats from database
+     * Now with caching and security improvements (v2.0.17)
+     */
     private function get_site_stats() {
+        // Check cache first (5 minute cache)
+        $cache_key = 'rts_site_stats_v1';
+        $cached = get_transient($cache_key);
+        
+        if ($cached !== false && is_array($cached)) {
+            return $cached;
+        }
+        
         global $wpdb;
 
         // Optional additive offsets (keeps stats "live" while allowing a migration bump)
@@ -667,20 +666,20 @@ class RTS_Shortcodes {
         $offset_submitted  = max($offset_submitted, $legacy_submitted);
         $offset_helps      = $use_offsets ? max(0, intval($override['helps'])) : 0;
         
-        // Total letters delivered (sum of all view_count)
-        $letters_delivered = $wpdb->get_var("
+        // Total letters delivered (sum of all view_count) - With prepared statement
+        $letters_delivered = $wpdb->get_var($wpdb->prepare("
             SELECT SUM(CAST(meta_value AS UNSIGNED))
             FROM {$wpdb->postmeta}
-            WHERE meta_key = 'view_count'
-        ");
+            WHERE meta_key = %s
+        ", 'view_count'));
         $letters_delivered = intval($letters_delivered);
         
-        // Total helps (sum of all help_count)
-        $total_helps = $wpdb->get_var("
+        // Total helps (sum of all help_count) - With prepared statement
+        $total_helps = $wpdb->get_var($wpdb->prepare("
             SELECT SUM(CAST(meta_value AS UNSIGNED))
             FROM {$wpdb->postmeta}
-            WHERE meta_key = 'help_count'
-        ");
+            WHERE meta_key = %s
+        ", 'help_count'));
         $total_helps = intval($total_helps);
 
         // Apply offsets (migration bump) while keeping stats live
@@ -706,11 +705,16 @@ class RTS_Shortcodes {
 
         $total_submitted = $total_submitted + $offset_submitted;
         
-        return [
+        $stats = [
             'letters_delivered' => $letters_delivered_total,
             'feel_better_percent' => $feel_better_percent,
             'letters_submitted' => $total_submitted
         ];
+        
+        // Cache for 5 minutes
+        set_transient($cache_key, $stats, 5 * MINUTE_IN_SECONDS);
+        
+        return $stats;
     }
 }
 
@@ -719,18 +723,47 @@ new RTS_Shortcodes();
 
 /**
  * REST API endpoint for site stats
+ * v2.0.17: Added rate limiting and security improvements
  */
 add_action('rest_api_init', function() {
     register_rest_route('rts/v1', '/site-stats', [
         'methods' => 'GET',
-        'permission_callback' => '__return_true',
+        'permission_callback' => function($request) {
+            // Basic rate limiting: 60 requests per hour per IP
+            $ip = $request->get_header('x-forwarded-for');
+            if (empty($ip)) {
+                $ip = $_SERVER['REMOTE_ADDR'];
+            }
+            
+            $rate_key = 'rts_stats_rate_' . md5($ip . date('Y-m-d-H'));
+            $count = get_transient($rate_key);
+            
+            if ($count === false) {
+                $count = 0;
+            }
+            
+            if ($count >= 60) {
+                return new WP_Error('rate_limit_exceeded', 'Too many requests. Please try again later.', ['status' => 429]);
+            }
+            
+            set_transient($rate_key, $count + 1, HOUR_IN_SECONDS);
+            
+            return true;
+        },
         'callback' => function() {
             $shortcodes = new RTS_Shortcodes();
             // Use reflection to call private method
             $reflection = new ReflectionClass($shortcodes);
             $method = $reflection->getMethod('get_site_stats');
             $method->setAccessible(true);
-            return $method->invoke($shortcodes);
+            $stats = $method->invoke($shortcodes);
+            
+            // Ensure all values are integers
+            return [
+                'letters_delivered' => (int) $stats['letters_delivered'],
+                'feel_better_percent' => (int) $stats['feel_better_percent'],
+                'letters_submitted' => (int) $stats['letters_submitted']
+            ];
         }
     ]);
 });

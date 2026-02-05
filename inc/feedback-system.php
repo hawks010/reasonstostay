@@ -66,7 +66,14 @@ class RTS_Feedback_System {
         register_rest_route('rts/v1', '/feedback/submit', [
             'methods' => 'POST',
             'callback' => [$this, 'submit_feedback'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => function(\WP_REST_Request $request) {
+                $nonce = $request->get_header('x-wp-nonce');
+                if (!$nonce) {
+                    $nonce = (string) $request->get_param('_wpnonce');
+                }
+                $nonce = $nonce ? sanitize_text_field($nonce) : '';
+                return (bool) wp_verify_nonce($nonce, 'wp_rest');
+            },
         ]);
     }
 
@@ -130,12 +137,34 @@ class RTS_Feedback_System {
             $ls = RTS_Letter_System::get_instance();
             if ($rating === 'up') {
                 // reuse existing endpoint logic by directly updating meta
-                $ups = (int) get_post_meta($letter_id, 'rts_thumbs_up', true);
-                update_post_meta($letter_id, 'rts_thumbs_up', $ups + 1);
+                global $wpdb;
+            $pm = $wpdb->postmeta;
+            $updated = $wpdb->query($wpdb->prepare(
+                "UPDATE {$pm} SET meta_value = CAST(meta_value AS UNSIGNED) + 1 WHERE post_id = %d AND meta_key = %s",
+                $letter_id,
+                'rts_thumbs_up'
+            ));
+            if ($updated === false) {
+                $current = (int) get_post_meta($letter_id, 'rts_thumbs_up', true);
+                update_post_meta($letter_id, 'rts_thumbs_up', $current + 1);
+            } elseif ($updated === 0) {
+                add_post_meta($letter_id, 'rts_thumbs_up', 1, true);
+            }
             }
             if ($rating === 'down') {
-                $downs = (int) get_post_meta($letter_id, 'rts_thumbs_down', true);
-                update_post_meta($letter_id, 'rts_thumbs_down', $downs + 1);
+                global $wpdb;
+            $pm = $wpdb->postmeta;
+            $updated = $wpdb->query($wpdb->prepare(
+                "UPDATE {$pm} SET meta_value = CAST(meta_value AS UNSIGNED) + 1 WHERE post_id = %d AND meta_key = %s",
+                $letter_id,
+                'rts_thumbs_down'
+            ));
+            if ($updated === false) {
+                $current = (int) get_post_meta($letter_id, 'rts_thumbs_down', true);
+                update_post_meta($letter_id, 'rts_thumbs_down', $current + 1);
+            } elseif ($updated === 0) {
+                add_post_meta($letter_id, 'rts_thumbs_down', 1, true);
+            }
             }
             // Recompute helpful %
             $this->recalc_helpful_pct($letter_id);
@@ -267,8 +296,20 @@ class RTS_Feedback_System {
      * - payload: JSON string
      */
     public function ajax_submit_feedback() {
-        $raw = isset($_POST['payload']) ? wp_unslash($_POST['payload']) : '';
+        // CSRF protection.
+        $nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'rts_feedback_submit')) {
+            wp_send_json_error(['message' => 'Invalid security token'], 403);
+        }
+
+        $raw = isset($_POST['payload']) ? (string) wp_unslash($_POST['payload']) : '';
+        $raw = is_string($raw) ? $raw : '';
+        // Payload is JSON, so we validate after decoding rather than sanitize as plain text.
         $payload = json_decode((string) $raw, true);
+
+        if (!is_array($payload) || json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error(['message' => 'Invalid payload format'], 400);
+        }
         if (!is_array($payload)) {
             $payload = [];
         }
@@ -298,12 +339,31 @@ class RTS_Feedback_System {
         }
     }
 
-    private function get_client_ip() {
-        $ip = '';
-        if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
-        elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) $ip = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
-        elseif (!empty($_SERVER['REMOTE_ADDR'])) $ip = $_SERVER['REMOTE_ADDR'];
-        return trim($ip);
+    private function get_client_ip(): string {
+        $cf_ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_CF_CONNECTING_IP'])) : '';
+        $xff   = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])) : '';
+        $xri   = isset($_SERVER['HTTP_X_REAL_IP']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_X_REAL_IP'])) : '';
+        $ra    = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+
+        $candidates = [];
+
+        if ($cf_ip) { $candidates[] = $cf_ip; }
+        if ($xff) {
+            foreach (explode(',', $xff) as $piece) {
+                $piece = trim($piece);
+                if ($piece !== '') { $candidates[] = $piece; }
+            }
+        }
+        if ($xri) { $candidates[] = $xri; }
+        if ($ra)  { $candidates[] = $ra; }
+
+        foreach ($candidates as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                return $candidate;
+            }
+        }
+
+        return '0.0.0.0';
     }
 
     // -----------------------
@@ -325,7 +385,7 @@ class RTS_Feedback_System {
     public function admin_column_content($column, $post_id) {
         if ($column === 'letter') {
             $lid = (int) get_post_meta($post_id, 'letter_id', true);
-            if ($lid) {
+            if ($lid && get_post_status($lid) !== false) {
                 $url = get_edit_post_link($lid);
                 echo '<a href="' . esc_url($url) . '">Letter #' . (int) $lid . '</a>';
             } else {
