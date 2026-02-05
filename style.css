@@ -6,7 +6,7 @@ Author: Inkfire
 Author URI: https://inkfire.co.uk
 Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools.
 Tags: mental-health,accessibility-ready,flexible-header,custom-colors,custom-menu,custom-logo,featured-images,rtl-language-support,threaded-comments,translation-ready
-Version: 3.3.33
+Version: 2.0.39.12
 Updated: 2026-02-04 SUBSCRIBER LIST FIX: Complete styling for list table and Add New page, modern cards everywhere
 */
 
@@ -45,4 +45,9 @@ Updated: 2026-02-04 SUBSCRIBER LIST FIX: Complete styling for list table and Add
   .elementor-button {
     transition: none !important;
   }
+}
+/* A11y: visible focus for Elementor buttons */
+.elementor-button:focus-visible {
+  outline: 3px solid #FCA311;
+  outline-offset: 3px;
 }

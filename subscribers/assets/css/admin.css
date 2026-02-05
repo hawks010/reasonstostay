@@ -3,7 +3,36 @@
 /* ============================================
    BASE - ALL SUBSCRIBER PAGES
    ============================================ */
+/*
+  IMPORTANT: Scope all Subscriber CSS to Subscriber/Newsletter admin contexts only.
+  Unscoped rules will leak into global wp-admin.
+*/
 
+body.post-type-rts_subscriber .wp-core-ui .button,
+body.post-type-rts_subscriber .wp-core-ui .button-primary,
+body.post-type-rts_subscriber .wp-core-ui .button-secondary,
+body.post-type-rts_newsletter .wp-core-ui .button,
+body.post-type-rts_newsletter .wp-core-ui .button-primary,
+body.post-type-rts_newsletter .wp-core-ui .button-secondary,
+.rts-subscriber-page .wp-core-ui .button,
+.rts-subscriber-page .wp-core-ui .button-primary,
+.rts-subscriber-page .wp-core-ui .button-secondary,
+.rts-settings-page .wp-core-ui .button,
+.rts-settings-page .wp-core-ui .button-primary,
+.rts-settings-page .wp-core-ui .button-secondary,
+.rts-analytics-page .wp-core-ui .button,
+.rts-analytics-page .wp-core-ui .button-primary,
+.rts-analytics-page .wp-core-ui .button-secondary,
+.rts-templates-page .wp-core-ui .button,
+.rts-templates-page .wp-core-ui .button-primary,
+.rts-templates-page .wp-core-ui .button-secondary,
+.rts-import-page .wp-core-ui .button,
+.rts-import-page .wp-core-ui .button-primary,
+.rts-import-page .wp-core-ui .button-secondary {
+    min-height: 40px !important;
+    padding: 0 20px !important;
+    border-radius: 10px !important;
+}
 .post-type-rts_subscriber #wpbody-content,
 .post-type-rts_newsletter #wpbody-content,
 .rts-subscriber-page,
@@ -11,17 +40,17 @@
 .rts-analytics-page,
 .rts-templates-page,
 .rts-import-page {
-    background: #0f172a !important;
+    background: #070C13 !important;
     padding: 20px !important;
 }
 
 .post-type-rts_subscriber #wpbody-content .wrap,
+.post-type-rts_newsletter #wpbody-content .wrap,
 .rts-subscriber-page .wrap,
 .rts-settings-page .wrap,
 .rts-analytics-page .wrap,
 .rts-templates-page .wrap,
 .rts-import-page .wrap {
-    background: transparent !important;
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -92,8 +121,10 @@
 .post-type-rts_subscriber .search-box input[type="submit"]:hover {
     background: #2563eb !important;
 }
-.table.widefat {
-    background: #2563eb !important;
+/* Never force a light/blue background on core list tables */
+.post-type-rts_subscriber .wp-list-table,
+.post-type-rts_newsletter .wp-list-table {
+    background: rgba(15, 23, 42, 0.55) !important;
 }
 
 /* Table navigation (filters and bulk actions) */
@@ -738,11 +769,12 @@
 .post-type-rts_newsletter #wpbody-content > .wrap {
   max-width: 1400px;
   margin: 0 auto;
-  background: rgba(0,0,0,0.18);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 28px;
-  padding: 22px 22px 26px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%) !important;
+  border: 1px solid rgba(252, 163, 17, 0.15) !important;
+  border-radius: 35px !important;
+  padding: 35px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3) !important;
+  margin-bottom: 25px !important;
 }
 
 .post-type-rts_subscriber #wpbody-content > .wrap h1,
@@ -766,6 +798,12 @@
   opacity: 1 !important;
 }
 
+/* Remove duplicate header row (tfoot repeats columns and looks like a second table). */
+.post-type-rts_subscriber .wp-list-table tfoot,
+.post-type-rts_newsletter .wp-list-table tfoot {
+  display: none !important;
+}
+
 .post-type-rts_subscriber .wp-list-table td,
 .post-type-rts_newsletter .wp-list-table td {
   color: #ffffff !important;
@@ -780,6 +818,23 @@
 .post-type-rts_subscriber .subsubsub a.current,
 .post-type-rts_newsletter .subsubsub a.current {
   color: #F4C946 !important;
+}
+
+/* Count chips in the status tabs ("All (n)"). */
+.post-type-rts_subscriber .subsubsub a .count,
+.post-type-rts_newsletter .subsubsub a .count {
+  color: #ffffff !important;
+}
+.post-type-rts_subscriber .subsubsub a.current .count,
+.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+}
+
+/* Checkbox backgrounds shouldn't fight the row background in dark UI. */
+.post-type-rts_subscriber .wp-list-table input[type="checkbox"],
+.post-type-rts_newsletter .wp-list-table input[type="checkbox"] {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
 }
 
 /* Tablenav + filters row */
@@ -845,6 +900,121 @@
 .post-type-rts_subscriber .postbox .inside,
 .post-type-rts_newsletter .postbox .inside {
   color: #ffffff !important;
+  background: transparent !important;
+}
+
+/* ==========================================================
+   Newsletter editor metabox UX polish
+   (avoids white-on-white panels + improves clarity)
+   ========================================================== */
+
+.post-type-rts_newsletter .rts-nl-note {
+  margin: 0 0 12px 0;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+  color: #ffffff;
+}
+
+.post-type-rts_newsletter .rts-nl-note__sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.post-type-rts_newsletter .rts-nl-note__meta {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.post-type-rts_newsletter .rts-nl-note--success {
+  border-left: 4px solid rgba(131,190,86,0.9);
+}
+
+.post-type-rts_newsletter .rts-nl-note--info {
+  border-left: 4px solid rgba(23,154,214,0.9);
+}
+
+.post-type-rts_newsletter .rts-nl-note--warn {
+  border-left: 4px solid rgba(244,201,70,0.95);
+}
+
+.post-type-rts_newsletter .rts-nl-note--danger {
+  border-left: 4px solid rgba(223,21,124,0.95);
+}
+
+.post-type-rts_newsletter .rts-nl-card {
+  padding: 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.20);
+  margin-bottom: 12px;
+}
+
+.post-type-rts_newsletter .rts-nl-card__title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.post-type-rts_newsletter .rts-nl-help {
+  margin: 6px 0 10px 0;
+  font-size: 12px;
+  color: rgba(255,255,255,0.78) !important;
+}
+
+.post-type-rts_newsletter .rts-nl-label {
+  display: block;
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  color: rgba(255,255,255,0.88) !important;
+}
+
+.post-type-rts_newsletter .rts-nl-field {
+  margin: 0 0 10px 0;
+}
+
+.post-type-rts_newsletter .rts-nl-input {
+  width: 100%;
+  max-width: 100%;
+  background: rgba(0,0,0,0.35) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 12px !important;
+  padding: 10px 12px !important;
+}
+
+.post-type-rts_newsletter .rts-nl-input::placeholder {
+  color: rgba(255,255,255,0.68) !important;
+  opacity: 1 !important;
+}
+
+.post-type-rts_newsletter .rts-nl-sep {
+  border: 0;
+  height: 1px;
+  background: rgba(255,255,255,0.12);
+  margin: 14px 0;
+}
+
+.post-type-rts_newsletter .rts-nl-section-title {
+  margin: 0 0 6px 0;
+}
+
+.post-type-rts_newsletter .rts-nl-preview {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.25);
+}
+
+.post-type-rts_newsletter .rts-nl-preview__frame {
+  width: 100%;
+  height: 420px;
+  border: 0;
+  background: #ffffff;
 }
 
 .post-type-rts_subscriber .postbox a,
@@ -878,6 +1048,39 @@
   opacity: 1 !important;
 }
 
+/* Dashicons: do NOT override globally or you will break the entire wp-admin menu */
+body.post-type-rts_subscriber .dashicons,
+body.post-type-rts_subscriber .dashicons-before:before,
+body.post-type-rts_newsletter .dashicons,
+body.post-type-rts_newsletter .dashicons-before:before,
+.rts-subscriber-page .dashicons,
+.rts-subscriber-page .dashicons-before:before,
+.rts-settings-page .dashicons,
+.rts-settings-page .dashicons-before:before,
+.rts-analytics-page .dashicons,
+.rts-analytics-page .dashicons-before:before,
+.rts-templates-page .dashicons,
+.rts-templates-page .dashicons-before:before,
+.rts-import-page .dashicons,
+.rts-import-page .dashicons-before:before {
+    line-height: 1 !important;
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 20px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    margin-right: 8px !important;
+}
+
+/* Page title icons can be larger without breaking alignment */
+body.post-type-rts_subscriber .wrap .wp-heading-inline .dashicons,
+body.post-type-rts_newsletter .wrap .wp-heading-inline .dashicons {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 28px !important;
+    line-height: 1 !important;
+    margin-right: 10px !important;
+}
 /* Force all descriptive text in RTS cards to be readable */
 .post-type-rts_subscriber .rts-card,
 .post-type-rts_newsletter .rts-card,
@@ -934,7 +1137,8 @@
 
 .post-type-rts_subscriber .wp-list-table td.check-column,
 .post-type-rts_newsletter .wp-list-table td.check-column {
-  background: transparent !important;
+  /* Match the row background so the checkbox column doesn't look like a cut-out */
+  background: inherit !important;
 }
 
 .post-type-rts_subscriber .wp-list-table td.check-column input[type="checkbox"],
@@ -945,9 +1149,305 @@
   border: 1px solid rgba(148, 163, 184, 0.35) !important;
 }
 
+/* Subsubsub counts: force readable on dark backgrounds */
+.post-type-rts_subscriber .subsubsub a .count,
+.post-type-rts_newsletter .subsubsub a .count,
+.post-type-rts_subscriber .subsubsub a.current .count,
+.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* Table nav / misc WP chrome: remove low-contrast greys */
+.post-type-rts_subscriber .tablenav,
+.post-type-rts_newsletter .tablenav,
+.post-type-rts_subscriber .tablenav-pages,
+.post-type-rts_newsletter .tablenav-pages,
+.post-type-rts_subscriber .displaying-num,
+.post-type-rts_newsletter .displaying-num,
+.post-type-rts_subscriber .subsubsub,
+.post-type-rts_newsletter .subsubsub {
+  color: #ffffff !important;
+}
+
+/* Links on dark: keep them unmistakably clickable */
+.post-type-rts_subscriber #wpcontent a,
+.post-type-rts_newsletter #wpcontent a {
+  color: #ffffff !important;
+}
+.post-type-rts_subscriber a:hover,
+.post-type-rts_newsletter a:hover {
+  color: #ffffff !important;
+}
+
+/* Heading icons alignment */
+.post-type-rts_subscriber .wrap .wp-heading-inline .dashicons,
+.post-type-rts_newsletter .wrap .wp-heading-inline .dashicons {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
 /* Row actions: avoid low-contrast grey */
 .post-type-rts_subscriber .wp-list-table .row-actions,
 .post-type-rts_newsletter .wp-list-table .row-actions {
   color: #ffffff !important;
 }
 
+
+/* ===============================
+   NEWSLETTER LIST + EDIT: DARK MODE CONSISTENCY
+   Reuse the Letters dashboard feel across all subscriber endpoints.
+   =============================== */
+
+.post-type-rts_newsletter #wpcontent,
+.post-type-rts_newsletter #wpbody-content {
+  background: transparent !important;
+}
+
+.post-type-rts_newsletter .wrap h1,
+.post-type-rts_newsletter .wrap h2,
+.post-type-rts_newsletter .wrap h3,
+.post-type-rts_newsletter .wrap p,
+.post-type-rts_newsletter .wrap label,
+.post-type-rts_newsletter .wrap .description,
+.post-type-rts_newsletter .wrap .howto {
+  color: #fff !important;
+}
+
+/* Filters/tabs count visibility */
+.post-type-rts_subscriber .subsubsub a .count,
+.post-type-rts_subscriber .subsubsub a.current .count,
+.post-type-rts_newsletter .subsubsub a .count,
+.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+  opacity: 0.9;
+}
+
+/* Table: make sure background + text contrast is correct */
+.post-type-rts_newsletter .wp-list-table,
+.post-type-rts_newsletter .wp-list-table thead,
+.post-type-rts_newsletter .wp-list-table tfoot {
+  background: rgba(0, 0, 0, 0.55) !important;
+  color: #fff !important;
+}
+
+.post-type-rts_newsletter .wp-list-table th,
+.post-type-rts_newsletter .wp-list-table td {
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table tbody tr {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table tbody tr:hover {
+  background: rgba(23, 154, 214, 0.12) !important;
+}
+
+/* Checkbox backgrounds to match rows */
+.post-type-rts_subscriber .wp-list-table input[type="checkbox"],
+.post-type-rts_newsletter .wp-list-table input[type="checkbox"] {
+  background: rgba(0,0,0,0.35) !important;
+  border-color: rgba(255,255,255,0.25) !important;
+}
+
+/* Tablenav + actions */
+.post-type-rts_newsletter .tablenav,
+.post-type-rts_newsletter .tablenav .actions,
+.post-type-rts_newsletter .tablenav-pages {
+  color: #fff !important;
+}
+
+.post-type-rts_newsletter .tablenav select,
+.post-type-rts_newsletter .tablenav input[type="text"],
+.post-type-rts_newsletter .tablenav input[type="search"],
+.post-type-rts_newsletter .tablenav input[type="number"] {
+  background: rgba(0,0,0,0.35) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: #fff !important;
+}
+
+/* Buttons hover consistency */
+.post-type-rts_newsletter .button,
+.post-type-rts_subscriber .button {
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.post-type-rts_newsletter .button:hover,
+.post-type-rts_subscriber .button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+}
+
+/* Ensure icons/grey UI text doesn't vanish on dark */
+.post-type-rts_newsletter .dashicons,
+.post-type-rts_subscriber .dashicons {
+  color: rgba(255,255,255,0.92) !important;
+}
+
+.post-type-rts_newsletter .meta-box-sortables .inside,
+.post-type-rts_newsletter .postbox .inside,
+.post-type-rts_subscriber .meta-box-sortables .inside,
+.post-type-rts_subscriber .postbox .inside {
+  color: #fff !important;
+}
+
+/* ===============================
+   NEWSLETTER PAGES: DARK MODE POLISH
+   =============================== */
+
+.post-type-rts_newsletter .wrap h1,
+.post-type-rts_newsletter .wrap h1 a,
+.post-type-rts_newsletter .wrap h2,
+.post-type-rts_newsletter .wrap h3,
+.post-type-rts_newsletter .wrap p,
+.post-type-rts_newsletter .wrap li,
+.post-type-rts_newsletter .wrap label,
+.post-type-rts_newsletter .wrap .description {
+  color: #fff !important;
+}
+
+/* Subsubsub counts readable */
+.post-type-rts_subscriber .subsubsub a .count,
+.post-type-rts_subscriber .subsubsub a.current .count,
+.post-type-rts_newsletter .subsubsub a .count,
+.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+}
+
+/* Make list tables match the Letters dashboard */
+.post-type-rts_newsletter .wp-list-table,
+.post-type-rts_newsletter .widefat,
+.post-type-rts_newsletter .wp-list-table thead,
+.post-type-rts_newsletter .wp-list-table tfoot {
+  background: #0f172a !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table thead th,
+.post-type-rts_newsletter .wp-list-table tfoot th {
+  color: #f4c946 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table tbody td {
+  background: transparent !important;
+  color: #fff !important;
+  border-top: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table.striped > tbody > :nth-child(odd),
+.post-type-rts_newsletter .wp-list-table tbody tr:nth-child(odd) {
+  background: rgba(255,255,255,0.02) !important;
+}
+
+.post-type-rts_newsletter .wp-list-table tbody tr:hover td {
+  background: rgba(255,255,255,0.04) !important;
+}
+
+/* Checkbox/row controls should not show white blocks */
+.post-type-rts_newsletter input[type="checkbox"] {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.22) !important;
+}
+
+.post-type-rts_newsletter input[type="checkbox"]:checked {
+  background: #179AD6 !important;
+  border-color: #179AD6 !important;
+}
+
+/* Filters + pagination */
+.post-type-rts_newsletter .tablenav,
+.post-type-rts_newsletter .tablenav .actions,
+.post-type-rts_newsletter .tablenav .tablenav-pages {
+  color: #fff !important;
+}
+
+.post-type-rts_newsletter .tablenav .actions select,
+.post-type-rts_newsletter .tablenav .actions input[type="text"],
+.post-type-rts_newsletter .tablenav .actions input[type="search"],
+.post-type-rts_newsletter .tablenav-pages input[type="text"] {
+  background: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 999px !important;
+}
+
+.post-type-rts_newsletter .tablenav .actions .button,
+.post-type-rts_newsletter .tablenav-pages .button {
+  background: rgba(255,255,255,0.10) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 999px !important;
+}
+
+.post-type-rts_newsletter .tablenav .actions .button:hover,
+.post-type-rts_newsletter .tablenav-pages .button:hover {
+  background: rgba(255,255,255,0.16) !important;
+}
+
+/* Make metabox labels readable on editor screen */
+.post-type-rts_newsletter #poststuff .postbox {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-color: rgba(255,255,255,0.12) !important;
+  color: #fff !important;
+}
+
+.post-type-rts_newsletter #poststuff .postbox .hndle,
+.post-type-rts_newsletter #poststuff .postbox .handlediv {
+  color: #fff !important;
+}
+
+.post-type-rts_newsletter #poststuff .inside,
+.post-type-rts_newsletter #poststuff .inside p,
+.post-type-rts_newsletter #poststuff .inside label {
+  color: #fff !important;
+}
+
+/* === RTS Subscribers: scope link styles to content only (avoid leaking into wp-admin menus) === */
+.post-type-rts_subscriber #adminmenu a,
+.post-type-rts_newsletter #adminmenu a,
+.post-type-rts_subscriber #wpadminbar a,
+.post-type-rts_newsletter #wpadminbar a {
+  color: #f0f0f1 !important;
+}
+
+/* Remove extra left padding for RTS subscriber/newsletter admin screens */
+.post-type-rts_subscriber #wpcontent,
+.post-type-rts_newsletter #wpcontent {
+  padding-left: 0 !important;
+}
+
+/* Headings on dark backgrounds */
+.post-type-rts_subscriber #wpcontent h2,
+.post-type-rts_subscriber #wpcontent h3,
+.post-type-rts_newsletter #wpcontent h2,
+.post-type-rts_newsletter #wpcontent h3 {
+  color: #ffffff !important;
+}
+
+/* Apply card styling to other subscriber wrappers for consistency */
+.post-type-rts_subscriber .rts-form-section,
+.post-type-rts_subscriber .rts-info-box,
+.post-type-rts_subscriber .rts-card {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 35px !important;
+  padding: 35px !important;
+  margin-bottom: 25px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Ensure list counts stay readable */
+body.post-type-rts_subscriber .subsubsub a .count,
+body.post-type-rts_subscriber .subsubsub a.current .count,
+body.post-type-rts_newsletter .subsubsub a .count,
+body.post-type-rts_newsletter .subsubsub a.current .count {
+  color: #ffffff !important;
+}

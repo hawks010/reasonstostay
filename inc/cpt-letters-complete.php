@@ -105,7 +105,7 @@ class RTS_CPT_Letters_System {
             ],
             'public' => true,
             'show_ui' => true,
-            'menu_position' => 5,
+            'menu_position' => 3,
             'menu_icon' => 'dashicons-email-alt',
             'supports' => ['title', 'editor', 'author', 'custom-fields', 'thumbnail'],
             'capability_type' => 'post',

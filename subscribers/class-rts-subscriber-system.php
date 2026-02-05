@@ -2,7 +2,7 @@
 /**
  * Plugin Name: RTS Subscriber System
  * Description: A complete subscriber management, newsletter, and analytics system.
- * Version: 2.0.38
+ * Version: 2.0.39.12
  * Author: RTS
  * Text Domain: rts-subscriber-system
  */
@@ -12,14 +12,17 @@ if (!defined('ABSPATH')) {
 }
 
 // Define Constants
+// This system is bundled inside a THEME. Using plugin_dir_url()/plugin_dir_path()
+// can generate broken asset URLs (e.g. /wp-content/plugins/.../themes/...) which
+// then return HTML 404 pages and trigger strict MIME errors in the browser.
 if (!defined('RTS_PLUGIN_DIR')) {
-    define('RTS_PLUGIN_DIR', plugin_dir_path(__FILE__));
+    define('RTS_PLUGIN_DIR', trailingslashit(get_stylesheet_directory()) . 'subscribers/');
 }
 if (!defined('RTS_PLUGIN_URL')) {
-    define('RTS_PLUGIN_URL', plugin_dir_url(__FILE__));
+    define('RTS_PLUGIN_URL', trailingslashit(get_stylesheet_directory_uri()) . 'subscribers/');
 }
 if (!defined('RTS_VERSION')) {
-    define('RTS_VERSION', '2.0.38');
+    define('RTS_VERSION', '2.0.39.12');
 }
 
 class RTS_Subscriber_System {
@@ -27,7 +30,7 @@ class RTS_Subscriber_System {
     private static $instance = null;
     
     // Versioning
-    const VERSION = '2.0.38';
+    const VERSION = '2.0.39.12';
     const DB_VERSION = '2.0.0'; 
     
     private $plugin_path;
@@ -58,7 +61,6 @@ class RTS_Subscriber_System {
         $this->plugin_url = RTS_PLUGIN_URL;
         
         // Hooks
-        register_activation_hook(__FILE__, array($this, 'activate'));
         add_action('after_switch_theme', array($this, 'activate'));
         add_action('init', array($this, 'check_database_version'));
         
@@ -119,26 +121,47 @@ class RTS_Subscriber_System {
     private function init_components() {
         if (class_exists('RTS_Subscriber_CPT')) {
             $this->subscriber_cpt = new RTS_Subscriber_CPT();
+            if (method_exists($this->subscriber_cpt, 'init_hooks')) { $this->subscriber_cpt->init_hooks(); }
         }
         if (class_exists('RTS_Newsletter_CPT')) {
             $this->newsletter_cpt = new RTS_Newsletter_CPT();
+            if (method_exists($this->newsletter_cpt, 'init_hooks')) { $this->newsletter_cpt->init_hooks(); }
         }
         if (class_exists('RTS_Subscription_Form')) {
             $this->subscription_form = new RTS_Subscription_Form();
+            if (method_exists($this->subscription_form, 'init_hooks')) { $this->subscription_form->init_hooks(); }
         }
         if (class_exists('RTS_Email_Engine')) {
             $this->email_engine = new RTS_Email_Engine();
+            if (method_exists($this->email_engine, 'init_hooks')) { $this->email_engine->init_hooks(); }
         }
         if (class_exists('RTS_Email_Queue')) {
             $this->email_queue = new RTS_Email_Queue();
+            if (method_exists($this->email_queue, 'init_hooks')) { $this->email_queue->init_hooks(); }
         }
-        if (class_exists('RTS_Email_Templates')) $this->email_templates = new RTS_Email_Templates();
-        if (class_exists('RTS_SMTP_Settings')) $this->smtp_settings = new RTS_SMTP_Settings();
-        if (class_exists('RTS_Unsubscribe')) $this->unsubscribe = new RTS_Unsubscribe();
-        if (class_exists('RTS_Analytics')) $this->analytics = new RTS_Analytics();
-        if (class_exists('RTS_CSV_Importer')) $this->csv_importer = new RTS_CSV_Importer();
+        if (class_exists('RTS_Email_Templates')) {
+            $this->email_templates = new RTS_Email_Templates();
+            if (method_exists($this->email_templates, 'init_hooks')) { $this->email_templates->init_hooks(); }
+        }
+        if (class_exists('RTS_SMTP_Settings')) {
+            $this->smtp_settings = new RTS_SMTP_Settings();
+            if (method_exists($this->smtp_settings, 'init_hooks')) { $this->smtp_settings->init_hooks(); }
+        }
+        if (class_exists('RTS_Unsubscribe')) {
+            $this->unsubscribe = new RTS_Unsubscribe();
+            if (method_exists($this->unsubscribe, 'init_hooks')) { $this->unsubscribe->init_hooks(); }
+        }
+        if (class_exists('RTS_Analytics')) {
+            $this->analytics = new RTS_Analytics();
+            if (method_exists($this->analytics, 'init_hooks')) { $this->analytics->init_hooks(); }
+        }
+        if (class_exists('RTS_CSV_Importer')) {
+            $this->csv_importer = new RTS_CSV_Importer();
+            if (method_exists($this->csv_importer, 'init_hooks')) { $this->csv_importer->init_hooks(); }
+        }
         if (is_admin() && class_exists('RTS_Admin_Menu')) {
             $this->admin_menu = new RTS_Admin_Menu();
+            if (method_exists($this->admin_menu, 'init_hooks')) { $this->admin_menu->init_hooks(); }
         }
     }
     
@@ -147,10 +170,96 @@ class RTS_Subscriber_System {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_filter('cron_schedules', array($this, 'add_cron_schedules'));
         add_action('publish_letter', array($this, 'on_letter_published'), 10, 2);
-        add_action('init', array($this, 'register_letter_cpt'));
+        // CPT registration is handled by the dedicated CPT classes:
+        // - RTS_Subscriber_CPT
+        // - RTS_Newsletter_CPT
+        // (Avoid duplicate registrations / conflicting show_in_menu behavior.)
+        // NOTE: letter CPT is owned by the main theme, not the subscriber system.
+        // add_action('init', array($this, 'register_letter_cpt'));
     }
 
-    public function register_letter_cpt() {
+    
+    /**
+     * Register Subscriber CPT (admin-only)
+     * NOTE: This CPT is intentionally non-public and appears under Letters in the admin menu.
+     */
+    public function register_subscriber_cpt() {
+        if ( post_type_exists('rts_subscriber') ) {
+            return;
+        }
+
+        $labels = array(
+            'name'               => 'Subscribers',
+            'singular_name'      => 'Subscriber',
+            'menu_name'          => 'Subscribers',
+            'add_new'            => 'Add Subscriber',
+            'add_new_item'       => 'Add New Subscriber',
+            'edit_item'          => 'Edit Subscriber',
+            'new_item'           => 'New Subscriber',
+            'view_item'          => 'View Subscriber',
+            'search_items'       => 'Search Subscribers',
+            'not_found'          => 'No subscribers found',
+            'not_found_in_trash' => 'No subscribers found in Trash',
+        );
+
+        register_post_type('rts_subscriber', array(
+            'labels'             => $labels,
+            'public'             => false,
+            'show_ui'            => true,
+            'show_in_menu'       => 'edit.php?post_type=letter',
+            'show_in_admin_bar'  => false,
+            'show_in_nav_menus'  => false,
+            'exclude_from_search'=> true,
+            'capability_type'    => 'post',
+            'map_meta_cap'       => true,
+            'hierarchical'       => false,
+            'supports'           => array('title'),
+            'menu_position'      => null,
+            'menu_icon'          => 'dashicons-email',
+        ));
+    }
+
+    /**
+     * Register Newsletter CPT (admin-only)
+     * Appears under Letters in the admin menu.
+     */
+    public function register_newsletter_cpt() {
+        if ( post_type_exists('rts_newsletter') ) {
+            return;
+        }
+
+        $labels = array(
+            'name'               => 'Newsletters',
+            'singular_name'      => 'Newsletter',
+            'menu_name'          => 'Newsletters',
+            'add_new'            => 'Add Newsletter',
+            'add_new_item'       => 'Add New Newsletter',
+            'edit_item'          => 'Edit Newsletter',
+            'new_item'           => 'New Newsletter',
+            'view_item'          => 'View Newsletter',
+            'search_items'       => 'Search Newsletters',
+            'not_found'          => 'No newsletters found',
+            'not_found_in_trash' => 'No newsletters found in Trash',
+        );
+
+        register_post_type('rts_newsletter', array(
+            'labels'             => $labels,
+            'public'             => false,
+            'show_ui'            => true,
+            'show_in_menu'       => 'edit.php?post_type=letter',
+            'show_in_admin_bar'  => false,
+            'show_in_nav_menus'  => false,
+            'exclude_from_search'=> true,
+            'capability_type'    => 'post',
+            'map_meta_cap'       => true,
+            'hierarchical'       => false,
+            'supports'           => array('title','editor'),
+            'menu_position'      => null,
+            'menu_icon'          => 'dashicons-email-alt',
+        ));
+    }
+
+public function register_letter_cpt() {
         if (!post_type_exists('letter')) {
             register_post_type('letter', array(
                 'labels' => array(
@@ -235,17 +344,38 @@ class RTS_Subscriber_System {
     }
     
     public function enqueue_admin_assets($hook) {
-        if (strpos((string)$hook, 'rts-') !== false || (isset($_GET['post_type']) && strpos($_GET['post_type'], 'rts_') !== false)) {
-            if (file_exists($this->plugin_path . 'assets/css/admin.css')) {
-                wp_enqueue_style('rts-subscriber-admin', $this->plugin_url . 'assets/css/admin.css', array(), self::VERSION);
-            }
-            if (file_exists($this->plugin_path . 'assets/js/admin.js')) {
-                wp_enqueue_script('rts-subscriber-admin', $this->plugin_url . 'assets/js/admin.js', array('jquery'), self::VERSION, true);
-                wp_localize_script('rts-subscriber-admin', 'rtsAdmin', array(
-                    'ajax_url' => admin_url('admin-ajax.php'),
-                    'nonce' => wp_create_nonce('rts_admin_nonce'),
-                ));
-            }
+        // Only load subscriber admin assets on subscriber/newsletter screens.
+        // Avoid loading on Letters dashboard pages (they also use `rts-*` page slugs).
+        $post_type = isset($_GET['post_type']) ? (string) $_GET['post_type'] : '';
+        $page      = isset($_GET['page']) ? (string) $_GET['page'] : '';
+
+        $is_subscriber_context = (
+            strpos($post_type, 'rts_') === 0
+            || strpos($page, 'rts-subscriber') === 0
+            || in_array($page, array('rts-email-templates', 'rts-subscriber-analytics', 'rts-subscriber-settings', 'rts-subscriber-import'), true)
+        );
+
+        if (!$is_subscriber_context) {
+            return;
+        }
+
+        // Shared admin styling (Letters dashboard look) + subscriber-specific styling.
+        $shared_css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+        if (file_exists($shared_css_path)) {
+            wp_enqueue_style('rts-admin-shared', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', array(), self::VERSION);
+        }
+
+        if (file_exists($this->plugin_path . 'assets/css/admin.css')) {
+            $deps = wp_style_is('rts-admin-shared', 'enqueued') ? array('rts-admin-shared') : array();
+            wp_enqueue_style('rts-subscriber-admin', $this->plugin_url . 'assets/css/admin.css', $deps, self::VERSION);
+        }
+
+        if (file_exists($this->plugin_path . 'assets/js/admin.js')) {
+            wp_enqueue_script('rts-subscriber-admin', $this->plugin_url . 'assets/js/admin.js', array('jquery'), self::VERSION, true);
+            wp_localize_script('rts-subscriber-admin', 'rtsAdmin', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('rts_admin_nonce'),
+            ));
         }
     }
 

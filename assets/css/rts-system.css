@@ -18,7 +18,11 @@
 /* ==========================================
    LETTER VIEWER
    ========================================== */
-
+.rts-form-input {
+    background: #ffffff !important;
+    color: #182437 !important;
+    border-radius:10px;
+}
 .rts-letter-viewer {
     width: 100%;
     padding: 0;
@@ -141,11 +145,7 @@
 }
 
 /* Card footer keeps Next button visually attached to the letter */
-.rts-letter-card-footer{
-    margin-top: 26px;
-    display: flex;
-    justify-content: center;
-}
+
 
 /* Site stats row - [rts_site_stats_row] */
 .rts-stats-row{
@@ -520,9 +520,24 @@
     display: none;
     align-items: center!important;
     justify-content: center!important;
-    z-index: 10000!important;
-    padding: 20px!important;
+    /* Belt-and-braces: stay above any fixed widgets */
+    z-index: 2147483647!important;
+    padding: 16px!important;
+    overscroll-behavior: contain!important;
+    -webkit-overflow-scrolling: touch;
 }
+
+html.rts-onboarding-active #rts-quick-exit-wrap,
+html.rts-onboarding-active .rts-a11y-pill,
+html.rts-onboarding-active .rts-a11y-panel{
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: scale(0.98);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 1 !important;
+    display: none !important;
+}
+
 
 /*
   IMPORTANT:
@@ -545,6 +560,50 @@
     position: relative!important;
     overflow: visible !important; 
 }
+
+
+/* Topbar (contains Skip button) */
+.rts-onboarding-topbar{
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 16px 18px 0;
+    background: transparent;
+}
+
+.rts-btn-skip{
+    appearance: none;
+    border: 2px solid #D63031;
+    background: #D63031;
+    color: #fff;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 800;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.rts-btn-skip:hover{
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+}
+
+.rts-btn-skip:active{
+    transform: translateY(0);
+}
+
+.rts-btn-skip:focus-visible{
+    outline: 3px solid #FCA311;
+    outline-offset: 2px;
+}
+
+/* Legacy side-tag: keep defined but hide by default (markup no longer outputs it). */
+.rts-skip-tag{ display:none !important; }
 
 /* New inner wrapper for scrolling content */
 .rts-onboarding-scroll-wrapper {
@@ -615,9 +674,7 @@
 }
 
 .rts-checkbox-label:has(input:checked) {
-    background: var(--rts-black);
-    color: var(--rts-white);
-    border-color: var(--rts-black);
+    color: var(--rts-black);
 }
 
 /* Radio group */
@@ -930,27 +987,14 @@
         padding: 10px 16px;
     }
 
-    /* FIX: Mobile version of the skip tag */
-    .rts-skip-tag {
-        position: static;
-        width: 100%;
-        min-height: auto;
-        writing-mode: horizontal-tb;
-        border-radius: 4px;
-        margin-top: 30px;
-        padding: 15px;
-        border: none;
-        box-shadow: none;
-        background: #f8f8f8;
-        color: #d63031;
-        border: 2px solid #d63031;
-    }
-    
-    .rts-skip-tag:hover {
-        background: #d63031;
-        color: #fff;
-        right: auto;
-    }
+    /* Mobile: keep modal tidy and keep Skip button compact */
+    .rts-onboarding-overlay{ padding: 10px!important; }
+    .rts-onboarding-modal{ border-radius: 14px!important; }
+    .rts-onboarding-topbar{ padding: 12px 12px 0; }
+    .rts-btn-skip{ font-size: 13px; padding: 9px 12px; border-radius: 10px; }
+    .rts-onboarding-content{ padding: 22px 16px; }
+    .rts-onboarding-content h2{ font-size: 22px; }
+    .rts-onboarding-step h3{ font-size: 18px; }
 }
 
 /* ==========================================
@@ -1173,7 +1217,7 @@ body.rts-modal-open{overflow:hidden;}
 }
 
 /* Rating prompt stays hidden until JS reveals it */
-.rts-rate-prompt[hidden]{ display:none !important; }
+
 
 /* =========================================================
    Letter viewer refinements - tabs, padding, footer

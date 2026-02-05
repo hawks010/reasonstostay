@@ -38,17 +38,45 @@ class RTS_Multilingual {
 
 	private function __construct() {
 		$this->supported_languages = [
-			'en' => ['name' => 'English', 'native' => 'English', 'dir' => 'ltr', 'flag' => '🇺🇸'],
-			'es' => ['name' => 'Spanish', 'native' => 'Español', 'dir' => 'ltr', 'flag' => '🇪🇸'],
-			'fr' => ['name' => 'French', 'native' => 'Français', 'dir' => 'ltr', 'flag' => '🇫🇷'],
-			'zh' => ['name' => 'Chinese (Simplified)', 'native' => '简体中文', 'dir' => 'ltr', 'flag' => '🇨🇳'],
-			'zh-TW' => ['name' => 'Chinese (Traditional)', 'native' => '繁體中文', 'dir' => 'ltr', 'flag' => '🇹🇼'],
-			'hi' => ['name' => 'Hindi', 'native' => 'हिन्दी', 'dir' => 'ltr', 'flag' => '🇮🇳'],
-			'ru' => ['name' => 'Russian', 'native' => 'Русский', 'dir' => 'ltr', 'flag' => '🇷🇺'],
-			'pt' => ['name' => 'Portuguese', 'native' => 'Português', 'dir' => 'ltr', 'flag' => '🇵🇹'],
-			'ja' => ['name' => 'Japanese', 'native' => '日本語', 'dir' => 'ltr', 'flag' => '🇯🇵'],
-			'de' => ['name' => 'German', 'native' => 'Deutsch', 'dir' => 'ltr', 'flag' => '🇩🇪'],
-			'ar' => ['name' => 'Arabic', 'native' => 'العربية', 'dir' => 'rtl', 'flag' => '🇸🇦'],
+			// High-traffic / high-likelihood languages first
+			'en' => ['name' => 'English', 'flag' => '🇬🇧', 'google_code' => 'en', 'dir' => 'ltr'],
+			'es' => ['name' => 'Español', 'flag' => '🇪🇸', 'google_code' => 'es', 'dir' => 'ltr'],
+			'fr' => ['name' => 'Français', 'flag' => '🇫🇷', 'google_code' => 'fr', 'dir' => 'ltr'],
+			'de' => ['name' => 'Deutsch', 'flag' => '🇩🇪', 'google_code' => 'de', 'dir' => 'ltr'],
+			'it' => ['name' => 'Italiano', 'flag' => '🇮🇹', 'google_code' => 'it', 'dir' => 'ltr'],
+			'pt' => ['name' => 'Português', 'flag' => '🇵🇹', 'google_code' => 'pt', 'dir' => 'ltr'],
+
+			// Europe
+			'nl' => ['name' => 'Nederlands', 'flag' => '🇳🇱', 'google_code' => 'nl', 'dir' => 'ltr'],
+			'pl' => ['name' => 'Polski', 'flag' => '🇵🇱', 'google_code' => 'pl', 'dir' => 'ltr'],
+			'ro' => ['name' => 'Română', 'flag' => '🇷🇴', 'google_code' => 'ro', 'dir' => 'ltr'],
+			'hu' => ['name' => 'Magyar', 'flag' => '🇭🇺', 'google_code' => 'hu', 'dir' => 'ltr'],
+			'cs' => ['name' => 'Čeština', 'flag' => '🇨🇿', 'google_code' => 'cs', 'dir' => 'ltr'],
+			'sv' => ['name' => 'Svenska', 'flag' => '🇸🇪', 'google_code' => 'sv', 'dir' => 'ltr'],
+			'no' => ['name' => 'Norsk', 'flag' => '🇳🇴', 'google_code' => 'no', 'dir' => 'ltr'],
+			'da' => ['name' => 'Dansk', 'flag' => '🇩🇰', 'google_code' => 'da', 'dir' => 'ltr'],
+			'fi' => ['name' => 'Suomi', 'flag' => '🇫🇮', 'google_code' => 'fi', 'dir' => 'ltr'],
+			'el' => ['name' => 'Ελληνικά', 'flag' => '🇬🇷', 'google_code' => 'el', 'dir' => 'ltr'],
+
+			// Eastern Europe + wider
+			'ru' => ['name' => 'Русский', 'flag' => '🇷🇺', 'google_code' => 'ru', 'dir' => 'ltr'],
+			'uk' => ['name' => 'Українська', 'flag' => '🇺🇦', 'google_code' => 'uk', 'dir' => 'ltr'],
+
+			// Middle East
+			'ar' => ['name' => 'العربية', 'flag' => '🇸🇦', 'google_code' => 'ar', 'dir' => 'rtl'],
+			'he' => ['name' => 'עברית', 'flag' => '🇮🇱', 'google_code' => 'iw', 'dir' => 'rtl'],
+			'tr' => ['name' => 'Türkçe', 'flag' => '🇹🇷', 'google_code' => 'tr', 'dir' => 'ltr'],
+
+			// South Asia
+			'hi' => ['name' => 'हिन्दी', 'flag' => '🇮🇳', 'google_code' => 'hi', 'dir' => 'ltr'],
+
+			// East + SE Asia
+			'zh' => ['name' => '中文', 'flag' => '🇨🇳', 'google_code' => 'zh-CN', 'dir' => 'ltr'],
+			'ja' => ['name' => '日本語', 'flag' => '🇯🇵', 'google_code' => 'ja', 'dir' => 'ltr'],
+			'ko' => ['name' => '한국어', 'flag' => '🇰🇷', 'google_code' => 'ko', 'dir' => 'ltr'],
+			'vi' => ['name' => 'Tiếng Việt', 'flag' => '🇻🇳', 'google_code' => 'vi', 'dir' => 'ltr'],
+			'th' => ['name' => 'ไทย', 'flag' => '🇹🇭', 'google_code' => 'th', 'dir' => 'ltr'],
+			'id' => ['name' => 'Bahasa Indonesia', 'flag' => '🇮🇩', 'google_code' => 'id', 'dir' => 'ltr'],
 		];
 
 		$this->current_language = $this->detect_language();
@@ -362,7 +390,7 @@ class RTS_Multilingual {
 			e.stopPropagation();
 			const isExpanded = button.getAttribute("aria-expanded") === "true";
 			button.setAttribute("aria-expanded", !isExpanded);
-			menu.style.display = isExpanded ? "none" : "block";
+			menu.style.display = isExpanded ? "none" : "grid";
 		});
 
 		document.addEventListener("click", function() {
@@ -463,7 +491,7 @@ class RTS_Multilingual {
 			e.stopPropagation();
 			const isExpanded = button.getAttribute("aria-expanded") === "true";
 			button.setAttribute("aria-expanded", !isExpanded);
-			menu.style.display = isExpanded ? "none" : "block";
+			menu.style.display = isExpanded ? "none" : "grid";
 		});
 
 		document.addEventListener("click", function() {
@@ -626,21 +654,24 @@ class RTS_Multilingual {
 	letter-spacing: 0.5px;
 }
 
-.rts-lang-compact-menu {
+ .rts-lang-compact-menu {
 	position: absolute;
 	top: calc(100% + 6px);
 	right: 0;
-	min-width: 220px;
+	min-width: 360px;
 	background: #182437;
 	border: 2px solid #FCA311;
-	border-radius: 8px;
+	border-radius: 12px;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 	list-style: none;
 	margin: 0;
-	padding: 8px 0;
+	padding: 10px;
 	z-index: 9999;
-	max-height: 400px;
+	max-height: 420px;
 	overflow-y: auto;
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
 }
 
 .rts-lang-compact-menu li {
@@ -650,28 +681,45 @@ class RTS_Multilingual {
 
 .rts-lang-compact-option {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 10px;
-	padding: 10px 16px;
+	justify-content: center;
+	gap: 6px;
+	padding: 10px 8px;
 	color: #F1E3D3;
 	text-decoration: none;
-	transition: background 0.15s ease;
-	font-size: 0.95rem;
+	transition: background 0.15s ease, transform 0.15s ease;
+	font-size: 0.85rem;
+	text-align: center;
+	border-radius: 10px;
+	line-height: 1.1;
+}
+
+.rts-lang-compact-option .rts-lang-flag {
+	font-size: 1.25rem;
 }
 
 .rts-lang-compact-option:hover {
 	background: #1f2d45;
+	transform: translateY(-1px);
 }
 
 .rts-lang-compact-option:focus {
 	background: #1f2d45;
 	outline: 2px solid #FCA311;
-	outline-offset: -2px;
+	outline-offset: 2px;
 }
 
 .rts-lang-compact-menu li[aria-selected="true"] .rts-lang-compact-option {
-	background: rgba(252, 163, 17, 0.15);
-	font-weight: 600;
+	background: rgba(252, 163, 17, 0.18);
+	font-weight: 700;
+}
+
+@media (max-width: 520px) {
+	.rts-lang-compact-menu {
+		min-width: 280px;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 }
 
 /* Light mode for compact */

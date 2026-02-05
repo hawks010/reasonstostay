@@ -13,9 +13,7 @@
     transition: transform 0.3s ease;
 }
 
-.rts-collapsible-toggle.expanded {
-    transform: rotate(180deg);
-}
+
 
 /* Toast notifications */
 #rts-toast-container {
@@ -734,10 +732,22 @@ body.wp-admin .rts-system {
     background: #0f172a !important;
 }
 
-/* Ensure all text is visible */
-body.wp-admin .wrap h1,
-body.wp-admin .wrap h2,
-body.wp-admin .wrap h3,
-body.wp-admin .wrap p {
+/* Ensure RTS admin text is visible (scoped; do not repaint global wp-admin) */
+body.wp-admin .rts-dashboard .wrap h1,
+body.wp-admin .rts-dashboard .wrap h2,
+body.wp-admin .rts-dashboard .wrap h3,
+body.wp-admin .rts-dashboard .wrap p,
+body.wp-admin .rts-settings .wrap h1,
+body.wp-admin .rts-settings .wrap h2,
+body.wp-admin .rts-settings .wrap h3,
+body.wp-admin .rts-settings .wrap p,
+body.wp-admin .rts-letter-management .wrap h1,
+body.wp-admin .rts-letter-management .wrap h2,
+body.wp-admin .rts-letter-management .wrap h3,
+body.wp-admin .rts-letter-management .wrap p,
+body.wp-admin .rts-system .wrap h1,
+body.wp-admin .rts-system .wrap h2,
+body.wp-admin .rts-system .wrap h3,
+body.wp-admin .rts-system .wrap p {
     color: #f1f5f9 !important;
 }

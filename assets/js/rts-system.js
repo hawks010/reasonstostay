@@ -210,6 +210,15 @@
       MAX_VIEWED_IDS: 100,
       eventListeners: [],
 
+      // Lightweight a11y state for the onboarding dialog
+      onboardingA11y: {
+        active: false,
+        lastFocus: null,
+        keyHandler: null,
+        hiddenNodes: [],
+        inertSupported: (typeof HTMLElement !== 'undefined') && ('inert' in HTMLElement.prototype)
+      },
+
       init() {
         if (window.location.hostname === 'localhost') {
         }
@@ -950,6 +959,129 @@ getCacheKey() {
         }
       },
 
+      // =============================
+      // Onboarding dialog a11y helpers (WCAG 2.2 AA where possible)
+      // =============================
+      openOnboardingDialog(onboardingEl) {
+        try {
+          if (!onboardingEl || this.onboardingA11y.active) return;
+          const modal = onboardingEl.querySelector('.rts-onboarding-modal');
+          if (!modal) return;
+
+          this.onboardingA11y.active = true;
+          this.onboardingA11y.lastFocus = document.activeElement;
+
+          onboardingEl.setAttribute('aria-hidden', 'false');
+          onboardingEl.style.display = 'flex';
+          document.documentElement.classList.add('rts-onboarding-active');
+          document.body.classList.add('rts-modal-open');
+
+          // Hide the rest of the page from assistive tech while the dialog is open.
+          // Use inert where available, otherwise fall back to aria-hidden.
+          const bodyChildren = Array.from(document.body.children);
+          this.onboardingA11y.hiddenNodes = [];
+          bodyChildren.forEach((node) => {
+            if (node === onboardingEl) return;
+            if (!node || node.nodeType !== 1) return;
+            const prevAria = node.getAttribute('aria-hidden');
+            this.onboardingA11y.hiddenNodes.push({ node, prevAria, prevInert: node.inert === true });
+            node.setAttribute('aria-hidden', 'true');
+            if (this.onboardingA11y.inertSupported) {
+              try { node.inert = true; } catch (e) {}
+            }
+          });
+
+          // Focus: prefer Skip, otherwise first focusable element.
+          const focusTarget = modal.querySelector('.rts-btn-skip') || modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          setTimeout(() => {
+            try {
+              (focusTarget || modal).focus({ preventScroll: true });
+            } catch (e) {}
+          }, 10);
+
+          // Focus trap + Escape-to-close
+          this.onboardingA11y.keyHandler = (e) => {
+            if (!this.onboardingA11y.active) return;
+
+            if (e.key === 'Escape') {
+              if (e.cancelable) e.preventDefault();
+              this.skipOnboarding();
+              return;
+            }
+
+            if (e.key !== 'Tab') return;
+            const focusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+              .filter(el => !el.disabled && el.getAttribute('aria-hidden') !== 'true' && el.offsetParent !== null);
+            if (!focusables.length) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            const active = document.activeElement;
+
+            if (e.shiftKey) {
+              if (active === first || !modal.contains(active)) {
+                if (e.cancelable) e.preventDefault();
+                last.focus();
+              }
+            } else {
+              if (active === last) {
+                if (e.cancelable) e.preventDefault();
+                first.focus();
+              }
+            }
+          };
+
+          document.addEventListener('keydown', this.onboardingA11y.keyHandler, true);
+        } catch (e) {
+          // Fail open visually, but avoid crashing letter viewer.
+          try { onboardingEl && (onboardingEl.style.display = 'flex'); } catch (err) {}
+        }
+      },
+
+      closeOnboardingDialog(onboardingEl) {
+        try {
+          if (!onboardingEl) onboardingEl = document.querySelector('.rts-onboarding-overlay');
+          if (!onboardingEl) return;
+
+          onboardingEl.setAttribute('aria-hidden', 'true');
+
+          // Restore page nodes
+          if (Array.isArray(this.onboardingA11y.hiddenNodes)) {
+            this.onboardingA11y.hiddenNodes.forEach(({ node, prevAria, prevInert }) => {
+              try {
+                if (prevAria === null || typeof prevAria === 'undefined') node.removeAttribute('aria-hidden');
+                else node.setAttribute('aria-hidden', prevAria);
+              } catch (e) {}
+              if (this.onboardingA11y.inertSupported) {
+                try { node.inert = !!prevInert; } catch (e) {}
+              }
+            });
+          }
+          this.onboardingA11y.hiddenNodes = [];
+
+          // Remove listeners
+          if (this.onboardingA11y.keyHandler) {
+            document.removeEventListener('keydown', this.onboardingA11y.keyHandler, true);
+            this.onboardingA11y.keyHandler = null;
+          }
+
+          this.onboardingA11y.active = false;
+          document.body.classList.remove('rts-modal-open');
+          document.documentElement.classList.remove('rts-onboarding_active');
+          document.documentElement.classList.remove('rts-onboarding-active');
+
+          // Restore focus
+          const last = this.onboardingA11y.lastFocus;
+          this.onboardingA11y.lastFocus = null;
+          if (last && typeof last.focus === 'function') {
+            setTimeout(() => {
+              try { last.focus({ preventScroll: true }); } catch (e) {}
+            }, 10);
+          }
+        } catch (e) {
+          // ignore
+        }
+      },
+
       checkOnboarding() {
         const onboardingEl = document.querySelector('.rts-onboarding-overlay');
         const viewerEl = document.querySelector('.rts-letter-viewer');
@@ -959,10 +1091,11 @@ getCacheKey() {
 
         if (onboardingEl) {
           if (!hasOnboarded && !this.preferences.skipOnboarding) {
-            onboardingEl.style.display = 'flex';
+            this.openOnboardingDialog(onboardingEl);
             return; 
           } else {
-            onboardingEl.style.display = 'none'; 
+            onboardingEl.style.display = 'none';
+            this.closeOnboardingDialog(onboardingEl);
           }
         }
         
@@ -981,6 +1114,7 @@ getCacheKey() {
         const onboardingEl = document.querySelector('.rts-onboarding-overlay');
         if (onboardingEl && sessionStorage.getItem('rts_onboarded')) {
             onboardingEl.style.display = 'none';
+            this.closeOnboardingDialog(onboardingEl);
         }
 
         return this.queueRequest(async () => {
@@ -1031,34 +1165,53 @@ getCacheKey() {
 
           let loadedOk = false;
           try {
+                // Keep payload compact (helps mobile + slow networks)
                 const payload = {
                   preferences: this.preferences,
-                  viewed: this.viewedLetterIds,
+                  viewed: (Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : []),
                   timestamp: Date.now()
                 };
 
-                let data = {};
-                if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
-                  const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
-                    method: 'POST',
-                    headers: this.getHeaders(),
-                    credentials: 'same-origin',
-                    body: JSON.stringify(payload)
-                  });
+                const fetchLetterData = async () => {
+                  if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
+                    const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
+                      method: 'POST',
+                      headers: this.getHeaders(),
+                      credentials: 'same-origin',
+                      body: JSON.stringify(payload)
+                    });
 
-                  if (response && response.ok) {
+                    if (response && response.ok) {
                       try {
-                          data = await this.parseJson(response);
+                        return await this.parseJson(response);
                       } catch (e) {
-                          data = { success: false, message: 'Invalid response format' };
+                        return { success: false, message: 'Invalid response format' };
                       }
-                  } else if (response && (response.status === 403 || response.status === 404)) {
-                      data = await this.ajaxPost('rts_get_next_letter', payload);
-                  } else {
-                      data = { success: false, message: `HTTP ${response.status}` };
+                    }
+
+                    if (response && (response.status === 403 || response.status === 404)) {
+                      return await this.ajaxPost('rts_get_next_letter', payload);
+                    }
+
+                    return { success: false, message: `HTTP ${response ? response.status : '0'}` };
                   }
-                } else {
-                  data = await this.ajaxPost('rts_get_next_letter', payload);
+
+                  return await this.ajaxPost('rts_get_next_letter', payload);
+                };
+
+                // Retry once for transient network hiccups (mobile connections can be spiky)
+                let data = null;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                  try {
+                    data = await fetchLetterData();
+                    break;
+                  } catch (e) {
+                    if (attempt === 0) {
+                      await new Promise(r => setTimeout(r, 250));
+                      continue;
+                    }
+                    throw e;
+                  }
                 }
 
             // Normalize response shapes from REST and admin-ajax.
@@ -1660,6 +1813,8 @@ getCacheKey() {
         // Save to sessionStorage
         this.saveState();
         sessionStorage.setItem('rts_onboarded', 'true');
+        document.documentElement.classList.remove('rts-onboarding_active');
+        document.documentElement.classList.remove('rts-onboarding-active');
         
         // Force Hide ALL onboarding overlays (Specificity War)
         const overlays = document.querySelectorAll('.rts-onboarding-overlay');
@@ -1693,6 +1848,11 @@ getCacheKey() {
           el.style.setProperty('visibility', 'hidden', 'important');
           el.style.setProperty('pointer-events', 'none', 'important');
         });
+
+        // Restore a11y state and focus handling
+        if (overlays && overlays[0]) {
+          this.closeOnboardingDialog(overlays[0]);
+        }
         
         // Load first personalized letter
         this.loadFirstLetter();
@@ -1702,6 +1862,8 @@ getCacheKey() {
         
         this.preferences.skipOnboarding = true;
         sessionStorage.setItem('rts_onboarded', 'true');
+        document.documentElement.classList.remove('rts-onboarding_active');
+        document.documentElement.classList.remove('rts-onboarding-active');
         
         // Force Hide ALL onboarding overlays
         const overlays = document.querySelectorAll('.rts-onboarding-overlay');
@@ -1734,6 +1896,11 @@ getCacheKey() {
           el.style.setProperty('visibility', 'hidden', 'important');
           el.style.setProperty('pointer-events', 'none', 'important');
         });
+
+        // Restore a11y state and focus handling
+        if (overlays && overlays[0]) {
+          this.closeOnboardingDialog(overlays[0]);
+        }
         
         this.loadFirstLetter();
       },
@@ -1937,7 +2104,7 @@ bindEvents() {
         const clickHandler = (e) => {
           // 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
 
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
@@ -1952,10 +2119,10 @@ bindEvents() {
           }
 
           // 2. Rating prompt buttons
-          if (e.target.closest('.rts-rate-up')) { e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-rate-down')) { e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
           if (e.target.closest('.rts-rate-skip')) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
             this.hideRatePrompt();
             if (this.pendingNextAfterRate) { this.pendingNextAfterRate = false; this.getNextLetter(true); }
@@ -1963,13 +2130,13 @@ bindEvents() {
           }
 
           // 3. Backwards compatible helpful buttons
-          if (e.target.closest('.rts-btn-helpful')) { e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-btn-unhelpful')) { e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
 
           // 4. Share buttons
           const shareBtn = e.target.closest('.rts-share-btn');
           if (shareBtn) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
             const platform = shareBtn.dataset.platform;
             if (platform) {
@@ -1981,7 +2148,7 @@ bindEvents() {
 
           // 5. Onboarding: Exit/Skip
           if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
             this.skipOnboarding();
             return;
@@ -1990,7 +2157,7 @@ bindEvents() {
           // 6. Onboarding: Next Step (Scoped)
           const nextStepBtn = e.target.closest('.rts-btn-next-step');
           if (nextStepBtn) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
 
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
@@ -2011,7 +2178,7 @@ bindEvents() {
 
           // 7. Onboarding: Complete
           if (e.target.closest('.rts-btn-complete')) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
             this.completeOnboarding();
             return;
@@ -2020,7 +2187,7 @@ bindEvents() {
           // 8. Feedback Modal Triggers
           const openBtn = e.target.closest('.rts-feedback-open');
           if (openBtn) {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
             let defaultRating = 'neutral';
             if (document.querySelector('.rts-btn-helpful.rts-helped')) defaultRating = 'up';
@@ -2030,12 +2197,12 @@ bindEvents() {
           }
 
           const triggerBtn = e.target.closest('.rts-trigger-open');
-          if (triggerBtn) { e.preventDefault(); e.stopPropagation(); this.openFeedbackModal('down', true); return; }
+          if (triggerBtn) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.openFeedbackModal('down', true); return; }
 
-          if (e.target.closest('[data-rts-close]')) { e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
+          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
         };
 
-        document.addEventListener('click', clickHandler, { passive: true });
+        document.addEventListener('click', clickHandler, { passive: false });
         this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
 
         // Keydown handler (Escape handling)
@@ -2049,7 +2216,7 @@ bindEvents() {
             const isHidden = onboarding.classList.contains('rts-hidden-force') || onboarding.getAttribute('aria-hidden') === 'true';
             const display = window.getComputedStyle(onboarding).display;
             if (!isHidden && display !== 'none') {
-              e.preventDefault();
+              if (e.cancelable) e.preventDefault();
               e.stopPropagation();
               this.skipOnboarding();
               return;
@@ -2063,7 +2230,7 @@ bindEvents() {
         const submitHandler = (e) => {
           const form = e.target.closest('.rts-feedback-form');
           if (!form) return;
-          e.preventDefault();
+          if (e.cancelable) e.preventDefault();
           this.submitFeedback(form);
         };
         document.addEventListener('submit', submitHandler);
@@ -2089,7 +2256,7 @@ bindEvents() {
           }
 
           const formSubmitHandler = (e) => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             const fd = new FormData(submitForm);
             this.submitLetter(fd);
           };

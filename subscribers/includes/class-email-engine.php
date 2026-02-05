@@ -34,9 +34,8 @@ class RTS_Email_Engine {
         add_action('rts_monthly_digest', array($this, 'run_monthly_digest'));
 
         // Table initialization (runs once per version update)
-        add_action('admin_init', array($this, 'maybe_create_tables'));
-
-        // Tracking Handler (Listens for pixel/link clicks)
+        // Table creation is centralized in RTS_Database_Installer.
+// Tracking Handler (Listens for pixel/link clicks)
         add_action('init', array($this, 'handle_tracking_request'));
     }
 
@@ -133,6 +132,9 @@ class RTS_Email_Engine {
      * Ensure required database tables exist.
      */
     public function maybe_create_tables() {
+        // Deprecated: table creation is centralized in RTS_Database_Installer.
+        return;
+
         // Skip if centralized installer is handling tables
         if (get_option('rts_centralized_tables') || class_exists('RTS_Database_Installer')) {
             return;
@@ -149,6 +151,9 @@ class RTS_Email_Engine {
 
     // Fallback table creation (only runs if centralized installer is missing)
     private function create_tables() {
+        // Deprecated: table creation is centralized in RTS_Database_Installer.
+        return;
+
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -195,15 +200,39 @@ class RTS_Email_Engine {
 
         $subscriber_id = intval($queue_item->subscriber_id);
 
-        // Validation: Require verified + active
+        // Validation: Require active. For most templates require verified as well.
+        // Verification emails must be allowed for unverified subscribers.
+        $template_key = sanitize_key($queue_item->template);
+
         if (!isset($this->subscriber_status_cache[$subscriber_id])) {
             $verified = (bool) get_post_meta($subscriber_id, '_rts_subscriber_verified', true);
-            $status   = get_post_meta($subscriber_id, '_rts_subscriber_status', true);
-            $this->subscriber_status_cache[$subscriber_id] = ($verified && $status === 'active');
+            $status   = (string) get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+
+            // Cache as an array so different templates can make safe decisions.
+            $this->subscriber_status_cache[$subscriber_id] = array(
+                'verified' => $verified,
+                'status'   => $status,
+                'active'   => ($status === 'active'),
+            );
         }
 
-        if (!$this->subscriber_status_cache[$subscriber_id]) {
-            $queue->mark_failed(intval($queue_item->id), 'Subscriber not active or not verified');
+        $state = $this->subscriber_status_cache[$subscriber_id];
+
+        // Status gate: verification emails are allowed for pending_verification.
+        if ($template_key === 'verification') {
+            if (empty($state['status']) || !in_array($state['status'], array('active', 'pending_verification'), true)) {
+                $queue->mark_failed(intval($queue_item->id), 'Subscriber not eligible for verification email');
+                return;
+            }
+        } else {
+            if (empty($state['active'])) {
+                $queue->mark_failed(intval($queue_item->id), 'Subscriber not active');
+                return;
+            }
+        }
+
+        if ($template_key !== 'verification' && empty($state['verified'])) {
+            $queue->mark_failed(intval($queue_item->id), 'Subscriber not verified');
             return;
         }
 
@@ -250,6 +279,68 @@ class RTS_Email_Engine {
             do_action('rts_email_sent', intval($queue_item->id), 'failed');
             return false;
         }
+    }
+
+    /**
+     * Send a verification email for a newly created subscriber.
+     *
+     * This is used by the frontend subscription form when email verification is enabled.
+     * It enqueues an email into the RTS queue and schedules near-term processing.
+     *
+     * @param int $subscriber_id
+     * @return int|WP_Error Queue ID or error
+     */
+    public function send_verification_email($subscriber_id) {
+        $subscriber_id = intval($subscriber_id);
+        if ($subscriber_id <= 0) {
+            return new WP_Error('invalid_subscriber', 'Invalid subscriber id');
+        }
+
+        if (!$this->load_dependencies()) {
+            return new WP_Error('missing_dependencies', 'Email engine dependencies missing');
+        }
+
+        $templates = new RTS_Email_Templates();
+        $rendered  = $templates->render('verification', $subscriber_id);
+
+        $queue = new RTS_Email_Queue();
+        $queued_id = $queue->enqueue_email($subscriber_id, 'verification', $rendered['subject'], $rendered['body'], null, 10);
+
+        // Ensure queue runner kicks in quickly (without requiring a full cron wait).
+        if (!wp_next_scheduled('rts_process_email_queue')) {
+            wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
+        }
+
+        return $queued_id;
+    }
+
+    /**
+     * Send a welcome email for a subscriber.
+     *
+     * @param int $subscriber_id
+     * @return int|WP_Error Queue ID or error
+     */
+    public function send_welcome_email($subscriber_id) {
+        $subscriber_id = intval($subscriber_id);
+        if ($subscriber_id <= 0) {
+            return new WP_Error('invalid_subscriber', 'Invalid subscriber id');
+        }
+
+        if (!$this->load_dependencies()) {
+            return new WP_Error('missing_dependencies', 'Email engine dependencies missing');
+        }
+
+        $templates = new RTS_Email_Templates();
+        $rendered  = $templates->render('welcome', $subscriber_id);
+
+        $queue = new RTS_Email_Queue();
+        $queued_id = $queue->enqueue_email($subscriber_id, 'welcome', $rendered['subject'], $rendered['body'], null, 9);
+
+        if (!wp_next_scheduled('rts_process_email_queue')) {
+            wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
+        }
+
+        return $queued_id;
     }
 
     /**

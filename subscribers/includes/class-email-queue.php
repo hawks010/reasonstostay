@@ -19,6 +19,20 @@ class RTS_Email_Queue {
     const QUEUE_TABLE = 'rts_email_queue';
     const DLQ_TABLE   = 'rts_dead_letter_queue';
 
+    /**
+     * Prevent duplicate hook wiring if this class is instantiated more than once.
+     * (Some components may construct queue helpers for utility purposes.)
+     */
+    private static $hooks_wired = false;
+
+    public function __construct() {
+        if (self::$hooks_wired) {
+            return;
+        }
+        self::$hooks_wired = true;
+        $this->init_hooks();
+    }
+
     // Hooks separated so class can be instantiated for utility
     public function init_hooks() {
         add_action('rts_queue_cleanup', array($this, 'cleanup_old_queue_items'));

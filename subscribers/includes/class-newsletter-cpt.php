@@ -120,6 +120,15 @@ class RTS_Newsletter_CPT {
         );
 
         add_meta_box(
+            'rts_newsletter_help_box',
+            'Writing tips',
+            array($this, 'render_help_metabox'),
+            'rts_newsletter',
+            'side',
+            'default'
+        );
+
+        add_meta_box(
             'rts_newsletter_variants',
             'Content Variants (A/B Testing)',
             array($this, 'render_variants_metabox'),
@@ -127,6 +136,26 @@ class RTS_Newsletter_CPT {
             'normal',
             'high'
         );
+    }
+
+    /**
+     * Help + starter guidance for writing newsletters.
+     * Kept short, scannable, and safe for non-technical admins.
+     */
+    public function render_help_metabox($post) {
+        echo '<div class="rts-nl-help">';
+        echo '<p><strong>Subject</strong> comes from the newsletter title.</p>';
+        echo '<p><strong>Body</strong> is whatever you write in the main editor. If you switch to Text/HTML mode, you can paste HTML too.</p>';
+        echo '<p><strong>Links</strong> are fine. Buttons work best as a normal link styled in your template.</p>';
+        echo '<hr class="rts-nl-sep">';
+        echo '<p class="rts-nl-section-title"><strong>Handy tokens</strong></p>';
+        echo '<p class="rts-nl-help">These are added automatically in the footer:</p>';
+        echo '<code style="display:block;white-space:pre-wrap;word-break:break-word;">{manage_url}\n{unsubscribe_url}</code>';
+        echo '<hr class="rts-nl-sep">';
+        echo '<p class="rts-nl-section-title"><strong>Starter HTML</strong></p>';
+        echo '<p class="rts-nl-help">Paste into Text/HTML mode if you want a quick structure:</p>';
+        echo '<code style="display:block;white-space:pre-wrap;word-break:break-word;">&lt;h2&gt;Hello&lt;/h2&gt;\n&lt;p&gt;A short intro goes here.&lt;/p&gt;\n&lt;p&gt;&lt;a href=\"https://example.com\"&gt;Read more&lt;/a&gt;&lt;/p&gt;</code>';
+        echo '</div>';
     }
 
     public function render_variants_metabox($post) {
@@ -170,14 +199,14 @@ class RTS_Newsletter_CPT {
 
         // --- Status Display ---
         if ($status === 'sending') {
-            echo '<div style="background:#fff8e5; padding:10px; border-left:4px solid #ffba00; margin-bottom:15px;">';
-            echo '<strong><span class="dashicons dashicons-hourglass" style="margin-top:2px;"></span> Sending in progress...</strong><br>';
-            echo '<span style="display:block; margin-top:5px;">Queued so far: <strong>' . intval($queued_count) . '</strong></span>';
+            echo '<div class="rts-nl-note rts-nl-note--warn">';
+            echo '<strong><span class="dashicons dashicons-hourglass" aria-hidden="true"></span> Sending in progress...</strong><br>';
+            echo '<span class="rts-nl-note__sub">Queued so far: <strong>' . intval($queued_count) . '</strong></span>';
             
             // Show estimates if we can calculate them
             $progress = $this->get_send_progress($post->ID);
             if ($progress['total'] > 0) {
-                echo '<div style="margin-top:5px; font-size:12px;">';
+                echo '<div class="rts-nl-note__meta">';
                 echo 'Progress: ' . esc_html($progress['percent']) . '%<br>';
                 echo 'Est. Time: ' . human_time_diff(0, $progress['estimated_time']);
                 echo '</div>';
@@ -196,23 +225,23 @@ class RTS_Newsletter_CPT {
         } 
         
         if ($status === 'sent') {
-            echo '<div style="background:#e7f7d3; padding:10px; border-left:4px solid #5b841b; margin-bottom:15px;">';
-            echo '<strong><span class="dashicons dashicons-yes" style="margin-top:2px;"></span> Sent!</strong><br>';
+            echo '<div class="rts-nl-note rts-nl-note--success">';
+            echo '<strong><span class="dashicons dashicons-yes" aria-hidden="true"></span> Sent!</strong><br>';
             echo 'Completed: ' . esc_html($sent_at) . '<br>';
             echo 'Total Queued: ' . intval($queued_count);
             echo '</div>';
             
             $stats = $this->get_newsletter_stats($post->ID);
             if ($stats['sent'] > 0) {
-                echo '<div style="margin-top:10px; font-size:12px; background:#fff; padding:8px; border:1px solid #ddd;">';
-                echo '<strong>Quick Stats:</strong><br>';
+                echo '<div class="rts-nl-note rts-nl-note--neutral">';
+                echo '<strong>Quick stats</strong><br>';
                 echo 'Sent: ' . intval($stats['sent']) . '<br>';
-                echo 'Unique Opens: ' . intval($stats['opens']);
+                echo 'Unique opens: ' . intval($stats['opens']);
                 echo '</div>';
             }
         } elseif ($status === 'scheduled') {
-             echo '<div style="background:#e5f5fa; padding:10px; border-left:4px solid #00a0d2; margin-bottom:15px;">';
-             echo '<strong><span class="dashicons dashicons-calendar-alt" style="margin-top:2px;"></span> Scheduled</strong><br>';
+             echo '<div class="rts-nl-note rts-nl-note--info">';
+             echo '<strong><span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span> Scheduled</strong><br>';
              echo 'Will send at: ' . esc_html(get_post_meta($post->ID, '_rts_scheduled_time', true));
              echo '</div>';
              
@@ -227,23 +256,24 @@ class RTS_Newsletter_CPT {
         }
 
         // --- Test Send Section ---
-        echo '<div style="background:#f0f0f1; padding:10px; border-radius:4px; margin-bottom:15px;">';
-        echo '<strong style="display:block; margin-bottom:10px;">Send Test Preview</strong>';
+        echo '<div class="rts-nl-card">';
+        echo '<strong class="rts-nl-card__title">Send a test</strong>';
+        echo '<p class="rts-nl-help">This sends a preview to your email address only. It won\'t send to subscribers.</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="rts_test_newsletter_send">';
         echo '<input type="hidden" name="newsletter_id" value="' . intval($post->ID) . '">';
         wp_nonce_field('rts_test_newsletter_send_' . $post->ID);
         
-        echo '<label for="test_email" class="screen-reader-text">Test Email</label>';
-        echo '<input type="email" id="test_email" name="test_email" value="' . esc_attr($current_user->user_email) . '" style="width:100%; margin-bottom:10px;" placeholder="Email address" required>';
-        submit_button('Send Test', 'secondary', 'submit', false);
+        echo '<label for="test_email" class="screen-reader-text">Test email</label>';
+        echo '<input type="email" id="test_email" name="test_email" value="' . esc_attr($current_user->user_email) . '" class="rts-nl-input" placeholder="name@example.com" required>';
+        submit_button('Send test', 'secondary', 'submit', false);
         echo '</form>';
         echo '</div>';
 
         // --- Bulk Send Section ---
-        echo '<hr>';
-        echo '<p style="margin-top:10px;"><strong>Bulk Send / Schedule</strong></p>';
-        echo '<p style="font-size:12px; color:#666; margin-bottom:10px;">Queues email for all active subscribers who opted into newsletters.</p>';
+        echo '<hr class="rts-nl-sep">';
+        echo '<p class="rts-nl-section-title"><strong>Queue or schedule</strong></p>';
+        echo '<p class="rts-nl-help">Queues email for all active, verified subscribers who opted into project updates.</p>';
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="rts_queue_newsletter_send">';
@@ -251,12 +281,13 @@ class RTS_Newsletter_CPT {
         wp_nonce_field('rts_queue_newsletter_send_' . $post->ID);
         
         if (get_option('rts_email_demo_mode')) {
-            echo '<div style="color:#d63638; margin-bottom:10px; font-size:12px;"><strong>⚠ Demo Mode Enabled</strong><br>Emails will be queued but marked as "Cancelled" instead of sending.</div>';
+            echo '<div class="rts-nl-note rts-nl-note--danger"><strong>Demo mode enabled</strong><br>Emails will be queued but marked as “Cancelled” instead of sending.</div>';
         }
 
-        echo '<div style="margin-bottom:10px;">';
-        echo '<label for="rts_schedule_time" style="display:block; margin-bottom:4px; font-size:12px;">Schedule for later (optional):</label>';
-        echo '<input type="datetime-local" id="rts_schedule_time" name="rts_schedule_time" style="width:100%;">';
+        echo '<div class="rts-nl-field">';
+        echo '<label for="rts_schedule_time" class="rts-nl-label">Schedule for later (optional)</label>';
+        echo '<input type="datetime-local" id="rts_schedule_time" name="rts_schedule_time" class="rts-nl-input">';
+        echo '<p class="rts-nl-help">Leave blank to queue immediately.</p>';
         echo '</div>';
 
         $btn_attrs = array('onclick' => "return confirm('Ready to send to ALL subscribers?');");
@@ -264,8 +295,54 @@ class RTS_Newsletter_CPT {
             $btn_attrs['disabled'] = 'disabled';
         }
 
-        submit_button('Queue / Schedule Send', 'primary', 'submit', false, $btn_attrs);
+        submit_button('Queue / schedule send', 'primary', 'submit', false, $btn_attrs);
         echo '</form>';
+
+        // --- Preview ---
+        $preview = $this->render_admin_preview($post->ID);
+        if ($preview) {
+            echo '<hr class="rts-nl-sep">';
+            echo '<p class="rts-nl-section-title"><strong>Preview</strong></p>';
+            echo '<p class="rts-nl-help">This is a safe preview of how the email will render using your current template settings.</p>';
+            echo '<div class="rts-nl-preview" aria-label="Newsletter preview">';
+            echo '<iframe class="rts-nl-preview__frame" title="Newsletter preview" sandbox="allow-same-origin" srcdoc="' . esc_attr($preview) . '"></iframe>';
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Render a safe admin preview of the newsletter using the email templates wrapper.
+     *
+     * @param int $newsletter_id
+     * @return string
+     */
+    private function render_admin_preview($newsletter_id) {
+        if (!$this->load_dependencies() || !class_exists('RTS_Email_Templates')) {
+            return '';
+        }
+
+        $sample_subscriber = get_posts(array(
+            'post_type'      => 'rts_subscriber',
+            'post_status'    => 'publish',
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+        ));
+        $subscriber_id = !empty($sample_subscriber) ? (int) $sample_subscriber[0] : 0;
+        if (!$subscriber_id) {
+            return '';
+        }
+
+        $subject     = get_the_title($newsletter_id);
+        $raw_content = $this->get_variant_content($newsletter_id, 'a');
+        $body_html   = wp_kses_post(apply_filters('the_content', $raw_content));
+
+        $templates = new RTS_Email_Templates();
+        $rendered  = $templates->render('newsletter_custom', $subscriber_id, array(), array(
+            'newsletter_subject' => $subject,
+            'newsletter_body'    => $body_html,
+        ));
+
+        return is_array($rendered) && !empty($rendered['body']) ? (string) $rendered['body'] : '';
     }
 
     /**

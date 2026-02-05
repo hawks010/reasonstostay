@@ -19,7 +19,9 @@ class RTS_Admin_Menu {
     
     public function add_menus() {
         // Replace the default "Add New" subscriber screen with a simple, purpose-built form.
+        // IMPORTANT: Subscribers is a top-level menu (CPT), so all subpages live under that.
         remove_submenu_page('edit.php?post_type=rts_subscriber', 'post-new.php?post_type=rts_subscriber');
+        remove_submenu_page('edit.php?post_type=rts_subscriber', 'post-new.php?post_type=rts_newsletter');
 
         add_submenu_page(
             'edit.php?post_type=rts_subscriber',

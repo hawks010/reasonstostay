@@ -487,12 +487,7 @@
     padding: 20px;
 }
 
-.rts-progress-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
+
 
 .rts-progress-header h4 {
     margin: 0;
@@ -729,26 +724,39 @@
 @media (max-width: 782px) {
     .rts-header-modern { flex-direction: column; align-items: flex-start; gap: 10px; }
     .rts-stats-grid { grid-template-columns: 1fr; }
-    .rts-progress-section { grid-template-columns: 1fr; }
+    
     .rts-action-buttons { flex-direction: column; width: 100%; }
-    .rts-action-btn { width: 100%; justify-content: center; }
+    
 }
 /* =========================================================
    RTS Engine Dark Mode (admin pages only)
    Toggle: Settings -> "Use dark mode for RTS admin pages"
    ========================================================= */
 
-.wp-die-message, p {
-    color: #fda310 !important;
+/*
+  IMPORTANT: Dark-mode overrides must be scoped to RTS admin wrappers only.
+  Unscoped selectors will leak into unrelated wp-admin screens.
+*/
+
+.rts-dashboard.rts-darkmode .wp-die-message,
+.rts-dashboard.rts-darkmode p {
+    color: var(--rts-text, #e8eefc) !important;
 }
-.widefat td, .widefat th {
-    color: #ffffff !important;
+
+.rts-dashboard.rts-darkmode .widefat td,
+.rts-dashboard.rts-darkmode .widefat th {
+    color: var(--rts-text, #e8eefc) !important;
 }
-.form-table th, .form-wrap label {
-    color: #fda310 !important;
+
+.rts-dashboard.rts-darkmode .form-table th,
+.rts-dashboard.rts-darkmode .form-wrap label {
+    color: var(--rts-text, #e8eefc) !important;
 }
-.alternate, .striped>tbody>:nth-child(odd), ul.striped>:nth-child(odd) {
-    background-color: #0f1626!important;
+
+.rts-dashboard.rts-darkmode .alternate,
+.rts-dashboard.rts-darkmode .striped > tbody > :nth-child(odd),
+.rts-dashboard.rts-darkmode ul.striped > :nth-child(odd) {
+    background-color: #0f1626 !important;
 }
 
 .rts-dashboard.rts-darkmode{
@@ -2351,9 +2359,7 @@ body.edit-php.post-type-letter .wp-list-table th{
 body.edit-php.post-type-letter .wp-list-table a{
   color:#9bd1ff;
 }
-body.edit-php.post-type-letter .wp-list-table a:hover{
-  color:#ffffff;
-}
+
 
 body.edit-php.post-type-letter .wp-list-table.striped > tbody > :nth-child(odd),
 body.edit-php.post-type-letter .wp-list-table tbody tr:nth-child(odd){

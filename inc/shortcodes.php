@@ -243,29 +243,21 @@ class RTS_Shortcodes {
 
         ob_start();
         ?>
-        <div class="rts-onboarding-overlay" style="display:none;">
-            <div class="rts-onboarding-modal">
-                <!-- Side Tag for exiting immediately (Hangs outside modal) -->
-                <button class="rts-skip-tag" type="button" aria-label="Exit onboarding">
-                    EXIT / SKIP
-                </button>
+        <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true">
+            <div class="rts-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="rts-onboarding-title" aria-describedby="rts-onboarding-desc" tabindex="-1">
+                <!-- Topbar Skip button (mobile-first, stays inside modal) -->
+                <div class="rts-onboarding-topbar">
+                    <button class="rts-btn-skip" type="button" aria-label="Skip onboarding">
+                        Skip
+                    </button>
+                </div>
             
                 <!-- NEW: Inner wrapper handles scrolling so tag is not clipped -->
                 <div class="rts-onboarding-scroll-wrapper">
                     <div class="rts-onboarding-content">
-                        <h2>Would you like a letter chosen just for you?</h2>
-                        <p>Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
-                        <!-- Debug logging for localhost -->
-                        <script>
-                        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                            console.log('RTS Onboarding Modal Loaded');
-                            document.addEventListener('DOMContentLoaded', function() {
-                                console.log('Steps found:', document.querySelectorAll('.rts-onboarding-step').length);
-                            });
-                        }
-                        </script>
-                        
-                        <!-- Step 1: Feelings -->
+                        <h2 id="rts-onboarding-title">Would you like a letter chosen just for you?</h2>
+                        <p id="rts-onboarding-desc">Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
+<!-- Step 1: Feelings -->
                         <div class="rts-onboarding-step" data-step="1">
                             <h3>What are you feeling right now?</h3>
                             <p class="rts-step-subtitle">Select all that apply</p>

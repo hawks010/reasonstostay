@@ -595,13 +595,10 @@ function rts_enqueue_frontend_assets() {
     // Main CSS
     $css_file = get_stylesheet_directory() . '/assets/css/rts-system.css';
     $css_ver  = file_exists($css_file) ? (string) filemtime($css_file) : $ver;
+    $css_ver .= '-v4';
 
     // Dev-friendly cache busting (admin only): lets you iterate on CSS/JS without
     // touching theme version numbers, even if a proxy/CDN is being sticky.
-    if (is_user_logged_in() && current_user_can('manage_options')) {
-        $css_ver .= '-' . (string) time();
-    }
-
     wp_enqueue_style(
         'rts-system',
         get_stylesheet_directory_uri() . '/assets/css/rts-system.css',
@@ -612,11 +609,7 @@ function rts_enqueue_frontend_assets() {
     // Main JavaScript
     $js_file = get_stylesheet_directory() . '/assets/js/rts-system.js';
     $js_ver  = file_exists($js_file) ? (string) filemtime($js_file) : $ver;
-
-    if (is_user_logged_in() && current_user_can('manage_options')) {
-        $js_ver .= '-' . (string) time();
-    }
-
+    $js_ver .= '-v4';
     wp_enqueue_script(
         'rts-system',
         get_stylesheet_directory_uri() . '/assets/js/rts-system.js',
@@ -624,6 +617,11 @@ function rts_enqueue_frontend_assets() {
         $js_ver,
         true
     );
+
+    // LiteSpeed-friendly: allow defer without breaking DOM-ready usage
+    wp_script_add_data('rts-system', 'defer', true);
+
+    
     
     // Provide REST base URL (fixes viewer failures on subdirectory installs / language prefixes)
     // and a sensible request timeout to avoid infinite loading states.
@@ -971,4 +969,35 @@ function rts_show_activation_notice() {
         </div>
         <?php
     }
+}
+
+/**
+ * Admin menu order
+ * Put Letters and Subscribers at the very top, just under Dashboard/Updates.
+ */
+add_filter('custom_menu_order', 'rts_custom_menu_order');
+add_filter('menu_order', 'rts_menu_order');
+
+function rts_custom_menu_order() {
+    return true;
+}
+
+function rts_menu_order($menu_order) {
+    if (!is_array($menu_order)) {
+        return $menu_order;
+    }
+
+    $priority = array(
+        'index.php',
+        'separator1',
+        'edit.php?post_type=letter',
+        'edit.php?post_type=rts_subscriber',
+    );
+
+    // Keep only items that actually exist in current menu.
+    $priority = array_values(array_intersect($priority, $menu_order));
+
+    // Append the rest in original order.
+    $rest = array_values(array_diff($menu_order, $priority));
+    return array_merge($priority, $rest);
 }

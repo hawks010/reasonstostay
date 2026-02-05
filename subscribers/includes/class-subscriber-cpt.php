@@ -13,6 +13,22 @@ if (!defined('ABSPATH')) {
 }
 
 class RTS_Subscriber_CPT {
+
+    /**
+     * Subscriber post type slug.
+     */
+    public const CPT = 'rts_subscriber';
+
+/**
+     * Constructor
+     *
+     * During refactors we separated hook wiring into init_hooks().
+     * The subscriber CPT MUST always register its hooks when instantiated,
+     * otherwise WordPress will report "Invalid post type" in wp-admin.
+     */
+    public function __construct() {
+        $this->init_hooks();
+    }
     
     // Hooks are now separated so this class can be instantiated for utility without duplication
     public function init_hooks() {
@@ -28,7 +44,71 @@ class RTS_Subscriber_CPT {
             add_filter('bulk_actions-edit-rts_subscriber', array($this, 'register_bulk_actions'));
             add_filter('handle_bulk_actions-edit-rts_subscriber', array($this, 'handle_bulk_actions'), 10, 3);
             add_action('admin_notices', array($this, 'bulk_action_admin_notices'));
+
+            // Add/Edit Subscriber: email-first meta box flow
+            add_filter('enter_title_here', array($this, 'filter_title_placeholder'), 10, 2);
+            add_action('add_meta_boxes', array($this, 'register_metaboxes'));
+            add_action('save_post_rts_subscriber', array($this, 'save_metaboxes'), 10, 2);
+            add_action('admin_enqueue_scripts', array($this, 'enqueue_editor_ui_assets'));
         }
+    }
+
+    /**
+     * Enqueue admin/editor UI assets for the Subscriber CPT only.
+     *
+     * A refactor wired this method via admin_enqueue_scripts, but the
+     * method was not included in the class, causing a fatal error in
+     * wp-admin. Keep this lightweight and scoped.
+     */
+    public function enqueue_editor_ui_assets($hook_suffix) {
+        if (!is_admin()) {
+            return;
+        }
+
+        // Only load on Subscriber add/edit screens.
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen) {
+            return;
+        }
+
+        $is_subscriber_editor = (
+            $screen->post_type === self::CPT &&
+            in_array($screen->base, array('post', 'post-new', 'edit'), true)
+        );
+
+        if (!$is_subscriber_editor) {
+            return;
+        }
+
+        $ver = defined('RTS_THEME_VERSION') ? RTS_THEME_VERSION : (string) time();
+
+        // Admin UI styling for the subscriber CPT.
+        wp_enqueue_style(
+            'rts-subscriber-admin',
+            RTS_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            $ver
+        );
+
+        // Optional admin JS (safe even if it only contains enhancements).
+        wp_enqueue_script(
+            'rts-subscriber-admin',
+            RTS_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery'),
+            $ver,
+            true
+        );
+
+        // Provide basic context for admin.js enhancements.
+        wp_localize_script(
+            'rts-subscriber-admin',
+            'RTSSubscriberAdmin',
+            array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce('rts_subscriber_admin'),
+                'post_type'=> self::CPT,
+            )
+        );
     }
 
     /**
@@ -56,9 +136,12 @@ class RTS_Subscriber_CPT {
             ),
             'public'              => false,
             'show_ui'             => true,
+            // Subscribers MUST be a top-level admin menu item.
+            // We use the CPT menu as the anchor and attach Settings/Templates/Analytics/Import as submenus.
             'show_in_menu'        => true,
-            'menu_position'       => 6,
-            'menu_icon'           => 'dashicons-email',
+            'show_in_admin_bar'   => false,
+            // Data-only CPT: we keep `title` for search/listing, but we hide the title UI
+            // and treat it as the subscriber's email (set automatically on save).
             'supports'            => array('title'),
             'capabilities'        => array(
                 'edit_post'          => 'manage_options',
@@ -789,5 +872,177 @@ class RTS_Subscriber_CPT {
                 }
             }
         }
+    }
+
+    /**
+     * Title placeholder (we treat post title as the subscriber email).
+     */
+    public function filter_title_placeholder($text, $post) {
+        if (!($post instanceof WP_Post)) {
+            return $text;
+        }
+        if ($post->post_type !== 'rts_subscriber') {
+            return $text;
+        }
+        return 'Email address (this will become the subscriber record title)';
+    }
+
+    /**
+     * Register meta boxes for Add/Edit Subscriber.
+     */
+    public function register_metaboxes() {
+        $screen = get_current_screen();
+        if (!$screen || $screen->post_type !== 'rts_subscriber') {
+            return;
+        }
+
+        add_meta_box(
+            'rts_subscriber_details',
+            'Subscriber Details',
+            array($this, 'render_subscriber_details_metabox'),
+            'rts_subscriber',
+            'normal',
+            'high'
+        );
+
+        // Keep core submit box (so saving stays native) but make it feel like a form,
+        // not a “publish a post” flow.
+        add_action('admin_head', array($this, 'admin_ui_css_tweaks'));
+    }
+
+    public function render_subscriber_details_metabox($post) {
+        wp_nonce_field('rts_subscriber_details_save', 'rts_subscriber_details_nonce');
+
+        $email = get_post_meta($post->ID, '_rts_subscriber_email', true);
+        if (!$email) {
+            // Back-compat: many imports store email as the title.
+            $email = $post->post_title;
+        }
+
+        $freq = get_post_meta($post->ID, '_rts_subscriber_frequency', true);
+        if (!$freq) {
+            $freq = 'weekly';
+        }
+        $pref_letters = (int) get_post_meta($post->ID, '_rts_pref_letters', true);
+        $pref_news    = (int) get_post_meta($post->ID, '_rts_pref_newsletters', true);
+        $status = get_post_meta($post->ID, '_rts_subscriber_status', true);
+        if (!$status) {
+            $status = 'active';
+        }
+
+        echo '<div class="rts-subscriber-metabox">';
+        echo '<p class="description" style="margin-top:0;">Create a subscriber record. The title is automatically set to the email address.</p>';
+
+        echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;">';
+
+        echo '<div>';
+        echo '<label for="rts_subscriber_email" style="display:block;font-weight:600;margin-bottom:6px;">Email address</label>';
+        echo '<input type="email" id="rts_subscriber_email" name="rts_subscriber_email" value="' . esc_attr($email) . '" class="regular-text" style="width:100%;max-width:100%;" placeholder="name@example.com" required />';
+        echo '</div>';
+
+        echo '<div>';
+        echo '<label for="rts_subscriber_frequency" style="display:block;font-weight:600;margin-bottom:6px;">Letter digest frequency</label>';
+        echo '<select id="rts_subscriber_frequency" name="rts_subscriber_frequency" style="width:100%;max-width:100%;">';
+        foreach (array('daily' => 'Daily', 'weekly' => 'Weekly', 'monthly' => 'Monthly') as $k => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($k), selected($freq, $k, false), esc_html($label));
+        }
+        echo '</select>';
+        echo '</div>';
+
+        echo '<div>';
+        echo '<label style="display:block;font-weight:600;margin-bottom:6px;">Subscriptions</label>';
+        echo '<label style="display:flex;gap:10px;align-items:center;margin:8px 0;">'
+            . '<input type="checkbox" name="rts_pref_letters" value="1" ' . checked(1, $pref_letters, false) . ' />'
+            . '<span>Letters digest</span>'
+            . '</label>';
+        echo '<label style="display:flex;gap:10px;align-items:center;margin:8px 0;">'
+            . '<input type="checkbox" name="rts_pref_newsletters" value="1" ' . checked(1, $pref_news, false) . ' />'
+            . '<span>Newsletters</span>'
+            . '</label>';
+        echo '</div>';
+
+        echo '<div>';
+        echo '<label for="rts_subscriber_status" style="display:block;font-weight:600;margin-bottom:6px;">Status</label>';
+        echo '<select id="rts_subscriber_status" name="rts_subscriber_status" style="width:100%;max-width:100%;">';
+        foreach (array('active' => 'Active', 'paused' => 'Paused', 'unsubscribed' => 'Unsubscribed') as $k => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr($k), selected($status, $k, false), esc_html($label));
+        }
+        echo '</select>';
+        echo '</div>';
+
+        echo '</div>'; // grid
+        echo '</div>'; // wrapper
+    }
+
+    /**
+     * Save meta box values and keep title synced to email.
+     */
+    public function save_subscriber_details($post_id, $post) {
+        if (!isset($_POST['rts_subscriber_details_nonce']) || !wp_verify_nonce($_POST['rts_subscriber_details_nonce'], 'rts_subscriber_details_save')) {
+            return;
+        }
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+
+        $email = isset($_POST['rts_subscriber_email']) ? sanitize_email(wp_unslash($_POST['rts_subscriber_email'])) : '';
+        if ($email && is_email($email)) {
+            update_post_meta($post_id, '_rts_subscriber_email', $email);
+
+            // Always keep title as email for search + list display.
+            if ($post->post_title !== $email) {
+                remove_action('save_post_rts_subscriber', array($this, 'save_subscriber_details'), 10);
+                wp_update_post(array(
+                    'ID'         => $post_id,
+                    'post_title' => $email,
+                    'post_name'  => sanitize_title($email),
+                ));
+                add_action('save_post_rts_subscriber', array($this, 'save_subscriber_details'), 10, 2);
+            }
+        }
+
+        $freq = isset($_POST['rts_subscriber_frequency']) ? sanitize_text_field(wp_unslash($_POST['rts_subscriber_frequency'])) : 'weekly';
+        if (!in_array($freq, array('daily','weekly','monthly'), true)) {
+            $freq = 'weekly';
+        }
+        update_post_meta($post_id, '_rts_subscriber_frequency', $freq);
+
+        $status = isset($_POST['rts_subscriber_status']) ? sanitize_text_field(wp_unslash($_POST['rts_subscriber_status'])) : 'active';
+        if (!in_array($status, array('active','paused','unsubscribed'), true)) {
+            $status = 'active';
+        }
+        update_post_meta($post_id, '_rts_subscriber_status', $status);
+
+        update_post_meta($post_id, '_rts_pref_letters', isset($_POST['rts_pref_letters']) ? 1 : 0);
+        update_post_meta($post_id, '_rts_pref_newsletters', isset($_POST['rts_pref_newsletters']) ? 1 : 0);
+
+        // This is a data record, not editorial content.
+        if ($post->post_status !== 'publish') {
+            remove_action('save_post_rts_subscriber', array($this, 'save_subscriber_details'), 10);
+            wp_update_post(array('ID' => $post_id, 'post_status' => 'publish'));
+            add_action('save_post_rts_subscriber', array($this, 'save_subscriber_details'), 10, 2);
+        }
+    }
+
+    /**
+     * Inline admin CSS tweaks to make Add/Edit Subscriber feel like a form.
+     */
+    public function admin_ui_css_tweaks() {
+        $screen = get_current_screen();
+        if (!$screen || $screen->post_type !== 'rts_subscriber') {
+            return;
+        }
+        echo '<style>
+            /* Hide the core title UI (we use our meta box email field instead) */
+            #titlediv { display:none !important; }
+            /* Make the sidebar look like a form action box */
+            #submitdiv .hndle, #submitdiv h2 { font-size:14px; }
+            #minor-publishing, #misc-publishing-actions, #minor-publishing-actions { display:none !important; }
+            #submitdiv .button.button-primary { width:100%; font-size:14px; padding:10px 14px; }
+            #submitdiv .edit-post-status, #submitdiv .edit-visibility, #submitdiv .edit-timestamp { display:none !important; }
+        </style>';
     }
 }

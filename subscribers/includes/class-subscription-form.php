@@ -5,7 +5,7 @@
  *
  * @package    RTS_Subscriber_System
  * @subpackage Frontend
- * @version    1.0.6
+ * @version    1.0.7
  */
 
 if (!defined('ABSPATH')) {
@@ -109,109 +109,56 @@ class RTS_Subscription_Form {
      * Enqueue scripts and styles.
      */
     public function enqueue_scripts() {
-        // Enqueue Google reCAPTCHA if enabled
-        if (get_option('rts_recaptcha_enabled') && get_option('rts_recaptcha_site_key')) {
-            wp_enqueue_script('google-recaptcha', 'https://www.google.com/recaptcha/api.js', array(), null, true);
+        // Enqueue only when the form is present on the current rendered content.
+        // Elementor templates store content in _elementor_data, not post_content.
+        $post = get_post();
+        $has_form = false;
+
+        if (is_object($post)) {
+            $content = (string) $post->post_content;
+            if ($content && has_shortcode($content, 'rts_subscribe')) {
+                $has_form = true;
+            }
+
+            if (!$has_form) {
+                $elementor_data = get_post_meta($post->ID, '_elementor_data', true);
+                if (is_string($elementor_data) && strpos($elementor_data, '[rts_subscribe') !== false) {
+                    $has_form = true;
+                }
+            }
         }
 
-        // Register dummy handle for our inline script
-        wp_register_script('rts-subscription', false, array('jquery'), '1.0.5', true);
-        
-        // Localize data for JS - Securely passing strings
-        wp_localize_script('rts-subscription', 'rts_subscription', array(
+        // Fallback: if rendering happens outside the main post loop, the shortcode itself will enqueue assets.
+        if (!$has_form) {
+            return;
+        }
+
+        // Cache-bust using file mtime so changes are visible immediately (CDN/NitroPack safe).
+        $js_ver  = @filemtime(RTS_PLUGIN_DIR . 'assets/js/subscription-form.js') ?: RTS_VERSION;
+        $css_ver = @filemtime(RTS_PLUGIN_DIR . 'assets/css/frontend.css') ?: RTS_VERSION;
+
+        // Front-end JS for the subscription form (AJAX).
+        wp_enqueue_script(
+            'rts-subscription-form',
+            RTS_PLUGIN_URL . 'assets/js/subscription-form.js',
+            array('jquery'),
+            $js_ver,
+            true
+        );
+
+        wp_localize_script('rts-subscription-form', 'rtsSubscribe', array(
             'ajax_url' => admin_url('admin-ajax.php'),
+            // Must match check_ajax_referer() action in handle_subscription().
             'nonce'    => wp_create_nonce('rts_subscribe_action'),
-            'messages' => array(
-                'invalid_email' => __('Please enter a valid email address.', 'rts-subscriber-system'),
-                'success'       => __('Thank you for subscribing!', 'rts-subscriber-system'),
-                'error'         => __('An error occurred. Please try again.', 'rts-subscriber-system'),
-                'rate_limited'  => __('Too many attempts. Please try again later.', 'rts-subscriber-system'),
-                'loading'       => __('Subscribing...', 'rts-subscriber-system'),
-                'privacy'       => __('You must agree to the privacy policy.', 'rts-subscriber-system')
-            )
         ));
-        
-        // Inline JS logic
-        $js = "
-        jQuery(document).ready(function($) {
-            // Enhanced Browser Fingerprinting
-            var fpField = $('#rts-client-fingerprint');
-            if(fpField.length) {
-                var components = {
-                    screen: window.screen.width + 'x' + window.screen.height + 'x' + window.screen.colorDepth,
-                    timezone: new Date().getTimezoneOffset(),
-                    language: navigator.language || navigator.userLanguage,
-                    platform: navigator.platform
-                };
-                // Base64 encode safely (handle Unicode)
-                fpField.val(window.btoa(encodeURIComponent(JSON.stringify(components))));
-            }
 
-            $('.rts-subscribe-form').on('submit', function(e) {
-                e.preventDefault();
-                var form = $(this);
-                var btn = form.find('.rts-form-submit');
-                var msg = form.find('.rts-form-message');
-                var originalText = btn.text();
-                
-                // Basic client-side validation
-                var email = form.find('input[name=\"email\"]').val();
-                if (!email || email.indexOf('@') === -1) {
-                    showMessage(msg, rts_subscription.messages.invalid_email, 'error');
-                    return;
-                }
-
-                // Check privacy checkbox if present
-                var privacy = form.find('input[name=\"privacy_consent\"]');
-                if (privacy.length > 0 && !privacy.is(':checked')) {
-                    showMessage(msg, rts_subscription.messages.privacy, 'error');
-                    return;
-                }
-                
-                // Disable UI
-                btn.prop('disabled', true).text(rts_subscription.messages.loading);
-                msg.html('').removeClass('rts-success rts-error').css('display', 'none');
-                
-                // Collect data
-                var data = form.serialize();
-                data += '&action=rts_subscribe&nonce=' + rts_subscription.nonce;
-                
-                $.post(rts_subscription.ajax_url, data, function(response) {
-                    if (response.success) {
-                        showMessage(msg, response.data.message, 'success');
-                        form[0].reset();
-                    } else {
-                        showMessage(msg, response.data.message || rts_subscription.messages.error, 'error');
-                    }
-                }).fail(function() {
-                    showMessage(msg, rts_subscription.messages.error, 'error');
-                }).always(function() {
-                    btn.prop('disabled', false).text(originalText);
-                });
-            });
-            
-            function showMessage(el, text, type) {
-                el.html(text).removeClass('rts-success rts-error').addClass('rts-' + type).css('display', 'block');
-            }
-        });
-        ";
-        
-        wp_add_inline_script('rts-subscription', $js);
-
-        // Register and enqueue CSS handle for inline styles
-        wp_register_style('rts-subscription-css', false);
-        wp_enqueue_style('rts-subscription-css');
-
-        // Add Inline CSS (CSP Safe)
-        $css = "
-            .rts-honeypot { display:none !important; visibility:hidden !important; height:0; opacity:0; pointer-events:none; }
-            .rts-form-message { display:none; margin-top: 10px; padding: 10px; border-radius: 4px; }
-            .rts-error { color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; }
-            .rts-success { color: #155724; background-color: #d4edda; border: 1px solid #c3e6cb; }
-        ";
-        wp_add_inline_style('rts-subscription-css', $css);
-
-        wp_enqueue_script('rts-subscription');
+        // Front-end styles (kept lightweight; the admin dashboard styling is separate).
+        wp_enqueue_style(
+            'rts-subscription-form',
+            RTS_PLUGIN_URL . 'assets/css/frontend.css',
+            array(),
+            $css_ver
+        );
     }
     
     /**
@@ -225,13 +172,48 @@ class RTS_Subscription_Form {
             'show_preferences' => true,
             'require_privacy'  => true,
         ), $atts);
+
+        // Ensure assets are enqueued even when the shortcode is rendered inside Elementor templates (e.g. footer),
+        // where wp_enqueue_scripts cannot reliably detect shortcode presence from the main post content.
+        static $rts_subscribe_assets_enqueued = false;
+        if (!$rts_subscribe_assets_enqueued) {
+            // Cache-bust using file mtime so changes are visible immediately (CDN/NitroPack safe).
+            $js_ver  = @filemtime(RTS_PLUGIN_DIR . 'assets/js/subscription-form.js') ?: RTS_VERSION;
+            $css_ver = @filemtime(RTS_PLUGIN_DIR . 'assets/css/frontend.css') ?: RTS_VERSION;
+
+            wp_enqueue_script(
+                'rts-subscription-form',
+                RTS_PLUGIN_URL . 'assets/js/subscription-form.js',
+                array('jquery'),
+                $js_ver,
+                true
+            );
+
+            wp_localize_script('rts-subscription-form', 'rtsSubscribe', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                // Must match check_ajax_referer() action in handle_subscription().
+                'nonce'    => wp_create_nonce('rts_subscribe_action'),
+            ));
+
+            wp_enqueue_style(
+                'rts-subscription-form',
+                RTS_PLUGIN_URL . 'assets/css/frontend.css',
+                array(),
+                $css_ver
+            );
+
+            $rts_subscribe_assets_enqueued = true;
+        }
+
         
         // Generate Transient Token for CSRF protection (Session-less)
         $form_token = $this->generate_form_token();
         
+        $uid = uniqid('rts-subscribe-');
+
         ob_start();
         ?>
-        <div class="rts-subscribe-wrapper" id="rts-subscribe-<?php echo esc_attr(uniqid()); ?>">
+        <div class="rts-subscribe-wrapper" id="<?php echo esc_attr($uid); ?>">
             <form class="rts-subscribe-form" method="post" novalidate>
                 <input type="hidden" name="form_token" value="<?php echo esc_attr($form_token); ?>">
                 <!-- Fingerprint Field -->
@@ -240,47 +222,62 @@ class RTS_Subscription_Form {
                 <?php if ($atts['title']): ?>
                     <h3 class="rts-subscribe-title"><?php echo esc_html($atts['title']); ?></h3>
                 <?php endif; ?>
+
+                <p class="rts-subscribe-intro">
+                    <?php _e('Get supportive letters delivered to your inbox, plus occasional project updates. You can change your preferences or unsubscribe at any time.', 'rts-subscriber-system'); ?>
+                </p>
                 
                 <div class="rts-form-group">
-                    <label for="rts-email" class="rts-form-label"><?php _e('Email Address', 'rts-subscriber-system'); ?></label>
-                    <input type="email" id="rts-email" name="email" class="rts-form-input" required 
-                           placeholder="<?php esc_attr_e('your@email.com', 'rts-subscriber-system'); ?>"
-                           style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                    <label for="<?php echo esc_attr($uid); ?>-email" class="rts-form-label"><?php _e('Email Address', 'rts-subscriber-system'); ?></label>
+                    <input
+                        type="email"
+                        id="<?php echo esc_attr($uid); ?>-email"
+                        name="email"
+                        class="rts-form-input"
+                        required
+                        aria-required="true"
+                        autocomplete="email"
+                        placeholder="<?php esc_attr_e('your@email.com', 'rts-subscriber-system'); ?>"
+                    >
                 </div>
                 
                 <?php if ($atts['show_frequency']): ?>
-                <div class="rts-form-group" style="margin-bottom: 15px;">
-                    <label for="rts-frequency" class="rts-form-label" style="display:block; margin-bottom:5px;"><?php _e('How often?', 'rts-subscriber-system'); ?></label>
-                    <select id="rts-frequency" name="frequency" class="rts-form-select" style="width: 100%; padding: 8px;">
+                <div class="rts-form-group">
+                    <label for="<?php echo esc_attr($uid); ?>-frequency" class="rts-form-label"><?php _e('How often should we email you?', 'rts-subscriber-system'); ?></label>
+                    <p id="<?php echo esc_attr($uid); ?>-frequency-help" class="rts-form-help"><?php _e('Choose how frequently you want to receive emails. You can change this later.', 'rts-subscriber-system'); ?></p>
+                    <select id="<?php echo esc_attr($uid); ?>-frequency" name="frequency" class="rts-form-select" aria-describedby="<?php echo esc_attr($uid); ?>-frequency-help">
                         <option value="weekly" selected><?php _e('Weekly (recommended)', 'rts-subscriber-system'); ?></option>
                         <option value="daily"><?php _e('Daily', 'rts-subscriber-system'); ?></option>
-                        <option value="monthly"><?php _e('Monthly', 'rts-subscriber-system'); ?></option>
+                        <option value="monthly"><?php _e('Monthly (light touch)', 'rts-subscriber-system'); ?></option>
                     </select>
                 </div>
                 <?php endif; ?>
                 
                 <?php if ($atts['show_preferences']): ?>
-                <div class="rts-form-group" style="margin-bottom: 15px;">
-                    <p class="rts-form-label" style="margin-bottom:5px; font-weight:bold;"><?php _e('What would you like to receive?', 'rts-subscriber-system'); ?></p>
-                    <label class="rts-checkbox-label" style="display:block; margin-bottom:5px;">
+                <div class="rts-form-group">
+                    <p class="rts-form-label rts-form-label-inline"><?php _e('What would you like to receive?', 'rts-subscriber-system'); ?></p>
+                    <p class="rts-form-help"><?php _e('Select one or both. If you leave both unticked, we will default to sending both.', 'rts-subscriber-system'); ?></p>
+                    <div class="rts-checkbox-grid" role="group" aria-label="<?php esc_attr_e('Subscription preferences', 'rts-subscriber-system'); ?>">
+                    <label class="rts-checkbox-label">
                         <input type="checkbox" name="prefs[]" value="letters" checked>
-                        <span><?php _e('Letters', 'rts-subscriber-system'); ?></span>
+                        <span><?php _e('Letters by email', 'rts-subscriber-system'); ?></span>
                     </label>
-                    <label class="rts-checkbox-label" style="display:block;">
+                    <label class="rts-checkbox-label">
                         <input type="checkbox" name="prefs[]" value="newsletters" checked>
-                        <span><?php _e('Newsletters', 'rts-subscriber-system'); ?></span>
+                        <span><?php _e('Project updates (occasional)', 'rts-subscriber-system'); ?></span>
                     </label>
+                    </div>
                 </div>
                 <?php endif; ?>
                 
                 <?php if ($atts['require_privacy']): ?>
-                <div class="rts-form-group" style="margin-bottom: 15px;">
+                <div class="rts-form-group">
                     <label class="rts-checkbox-label">
-                        <input type="checkbox" name="privacy_consent" required>
-                        <span style="font-size: 0.9em;"><?php 
+                        <input type="checkbox" name="privacy_consent" required aria-required="true">
+                        <span class="rts-privacy-consent-text"><?php 
                             printf(
                                 __('I agree to the %sPrivacy Policy%s and consent to receive emails.', 'rts-subscriber-system'),
-                                '<a href="' . esc_url(get_privacy_policy_url()) . '" target="_blank">',
+                                '<a href="' . esc_url(get_privacy_policy_url()) . '" target="_blank" rel="noopener noreferrer">',
                                 '</a>'
                             ); 
                         ?></span>
@@ -294,18 +291,18 @@ class RTS_Subscription_Form {
                 </div>
                 
                 <?php if (get_option('rts_recaptcha_enabled') && get_option('rts_recaptcha_site_key')): ?>
-                <div class="rts-form-group" style="margin-bottom: 15px;">
+                <div class="rts-form-group">
                     <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(get_option('rts_recaptcha_site_key')); ?>"></div>
                 </div>
                 <?php endif; ?>
                 
-                <button type="submit" class="rts-form-submit button" style="width:100%; padding: 10px;">
+                <button type="submit" class="rts-form-submit button">
                     <?php echo esc_html($atts['button_text']); ?>
                 </button>
                 
                 <div class="rts-form-message" role="alert" aria-live="polite"></div>
                 
-                <p class="rts-privacy-notice" style="margin-top: 10px; font-size: 0.8em; text-align: center; color: #666;">
+                <p class="rts-privacy-notice">
                     <?php _e('We respect your privacy. Unsubscribe anytime.', 'rts-subscriber-system'); ?>
                 </p>
             </form>
