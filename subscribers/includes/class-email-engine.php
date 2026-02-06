@@ -198,6 +198,12 @@ class RTS_Email_Engine {
             return false;
         }
 
+        // Pause switch (Command Center)
+        if (get_option('rts_pause_all_sending')) {
+            return false;
+        }
+
+
         $subscriber_id = intval($queue_item->subscriber_id);
 
         // Validation: Require active. For most templates require verified as well.
@@ -261,7 +267,7 @@ class RTS_Email_Engine {
         // Demo mode
         if (get_option('rts_email_demo_mode')) {
             $queue->mark_cancelled(intval($queue_item->id), 'Demo mode enabled - email not sent');
-            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'cancelled', 'Demo mode enabled');
+            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'cancelled', 'Demo mode enabled', array('queue_id' => intval($queue_item->id)), intval($queue_item->letter_id));
             return true;
         }
 
@@ -270,7 +276,7 @@ class RTS_Email_Engine {
 
         if ($sent) {
             $queue->mark_sent(intval($queue_item->id));
-            $this->log_email($subscriber_id, $to, $queue_item->template, $subject, 'sent', null, array('queue_id' => intval($queue_item->id)));
+            $this->log_email_granular($subscriber_id, $to, $queue_item->template, $subject, 'sent', null, array('queue_id' => intval($queue_item->id)), $body, intval($queue_item->letter_id));
             do_action('rts_email_sent', intval($queue_item->id), 'sent');
             return true;
         } else {
@@ -438,7 +444,46 @@ class RTS_Email_Engine {
         $wpdb->insert($table, $data);
     }
 
-    private function log_email($subscriber_id, $email, $template, $subject, $status = 'sent', $error = null, $metadata = array()) {
+    /**
+     * Granular log helper.
+     *
+     * Digests may contain multiple letters. To support "no duplicates" we log each
+     * letter ID that was actually included in the email.
+     *
+     * The body may include a marker like: <!--RTS_LETTER_IDS:123,456-->
+     */
+    private function log_email_granular($subscriber_id, $email, $template, $subject, $status = 'sent', $error = null, $metadata = array(), $body = '', $fallback_letter_id = null) {
+        $ids = array();
+
+        if ($fallback_letter_id) {
+            $ids[] = intval($fallback_letter_id);
+        }
+
+        if (is_string($body) && $body) {
+            if (preg_match('/RTS_LETTER_IDS:([0-9,]+)/', $body, $m)) {
+                $parts = array_filter(array_map('trim', explode(',', $m[1])));
+                foreach ($parts as $p) {
+                    $p = intval($p);
+                    if ($p > 0) {
+                        $ids[] = $p;
+                    }
+                }
+            }
+        }
+
+        $ids = array_values(array_unique(array_filter($ids)));
+
+        if (empty($ids)) {
+            $this->log_email($subscriber_id, $email, $template, $subject, $status, $error, $metadata, null);
+            return;
+        }
+
+        foreach ($ids as $letter_id) {
+            $this->log_email($subscriber_id, $email, $template, $subject, $status, $error, $metadata, $letter_id);
+        }
+    }
+
+    private function log_email($subscriber_id, $email, $template, $subject, $status = 'sent', $error = null, $metadata = array(), $letter_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'rts_email_logs';
 
@@ -448,13 +493,14 @@ class RTS_Email_Engine {
                 'subscriber_id' => intval($subscriber_id),
                 'email'         => sanitize_email($email),
                 'template'      => sanitize_key($template),
+                'letter_id'     => $letter_id ? intval($letter_id) : null,
                 'subject'       => sanitize_text_field($subject),
                 'status'        => $status,
                 'sent_at'       => current_time('mysql'),
                 'error'         => $error ? sanitize_textarea_field($error) : null,
                 'metadata'      => !empty($metadata) ? wp_json_encode($metadata) : null,
             ),
-            array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+            array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s')
         );
 
         if ($status === 'sent') {
@@ -557,9 +603,6 @@ class RTS_Email_Engine {
             );
         }
 
-        $letters = $this->get_letters_for_digest($frequency);
-        if (empty($letters)) return; // Don't send empty digests
-
         $templates = new RTS_Email_Templates();
         $queue     = new RTS_Email_Queue();
 
@@ -578,8 +621,34 @@ class RTS_Email_Engine {
 
             if (!empty($subscriber_query->posts)) {
                 foreach ($subscriber_query->posts as $subscriber_id) {
+                    $subscriber_id = intval($subscriber_id);
+
+                    $letters = $this->get_letters_for_subscriber($subscriber_id, $frequency);
+
+                    // If subscriber has seen everything, send the "all caught up" template.
+                    if (empty($letters)) {
+                        $tpl = $templates->render('all_caught_up', $subscriber_id);
+                        $queue->enqueue_email($subscriber_id, 'all_caught_up', $tpl['subject'], $tpl['body'], current_time('mysql'), 5, null);
+                        continue;
+                    }
+
                     $tpl = $templates->render($template_slug, $subscriber_id, $letters);
-                    $queue->enqueue_email($subscriber_id, $template_slug, $tpl['subject'], $tpl['body'], current_time('mysql'), 5);
+
+                    // Embed letter ids for granular logging after send.
+                    $ids = array();
+                    foreach ($letters as $p) {
+                        if ($p instanceof WP_Post) {
+                            $ids[] = intval($p->ID);
+                        }
+                    }
+                    $ids = array_values(array_unique(array_filter($ids)));
+                    $marker = !empty($ids) ? '<!--RTS_LETTER_IDS:' . implode(',', $ids) . '-->' : '';
+                    $body_with_marker = $tpl['body'] . $marker;
+
+                    // Store first id in queue. Full list remains in marker for logs.
+                    $queue_letter_id = !empty($ids) ? intval($ids[0]) : null;
+
+                    $queue->enqueue_email($subscriber_id, $template_slug, $tpl['subject'], $body_with_marker, current_time('mysql'), 5, $queue_letter_id);
                 }
             }
 
@@ -609,6 +678,52 @@ class RTS_Email_Engine {
 
         $posts = get_posts($args);
         return $posts ?: array();
+    }
+
+    /**
+     * Per-subscriber letter selection with "no duplicates" logic.
+     *
+     * Pulls already-sent letter IDs from rts_email_logs and excludes them.
+     * Returns an array of WP_Post objects.
+     */
+    private function get_letters_for_subscriber($subscriber_id, $frequency) {
+        $subscriber_id = intval($subscriber_id);
+        $limit = ($frequency === 'daily') ? 1 : (($frequency === 'weekly') ? 5 : 10);
+
+        global $wpdb;
+        $log_table = $wpdb->prefix . 'rts_email_logs';
+
+        $sent_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT letter_id FROM {$log_table} WHERE subscriber_id = %d AND status = 'sent' AND letter_id IS NOT NULL",
+            $subscriber_id
+        ));
+
+        $sent_ids = array_values(array_unique(array_filter(array_map('intval', (array) $sent_ids))));
+
+        $args = array(
+            'post_type'      => 'letter',
+            'post_status'    => 'publish',
+            'posts_per_page' => $limit,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'no_found_rows'  => true,
+            'post__not_in'   => $sent_ids,
+            'meta_query'     => array(
+                array(
+                    'key'   => '_rts_email_ready',
+                    'value' => 1,
+                ),
+            ),
+        );
+
+        $posts = get_posts($args);
+        if (!empty($posts)) {
+            return $posts;
+        }
+
+        // Fallback: subscriber has read everything "email ready".
+        // Return empty to allow caller to use the all_caught_up template.
+        return array();
     }
 
     /**

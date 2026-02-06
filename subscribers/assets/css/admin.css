@@ -767,14 +767,13 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 
 .post-type-rts_subscriber #wpbody-content > .wrap,
 .post-type-rts_newsletter #wpbody-content > .wrap {
-  max-width: 1400px;
-  margin: 0 auto;
-  background: linear-gradient(135deg, #0b1220 0%, #0f1626 100%) !important;
-  border: 1px solid rgba(252, 163, 17, 0.15) !important;
-  border-radius: 35px !important;
-  padding: 35px !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3) !important;
-  margin-bottom: 25px !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
 .post-type-rts_subscriber #wpbody-content > .wrap h1,
@@ -1450,4 +1449,254 @@ body.post-type-rts_subscriber .subsubsub a.current .count,
 body.post-type-rts_newsletter .subsubsub a .count,
 body.post-type-rts_newsletter .subsubsub a.current .count {
   color: #ffffff !important;
+}
+
+/* Full-width wrap on Subscriber + Newsletter CPT screens */
+.post-type-rts_subscriber #wpbody-content > .wrap,
+.post-type-rts_newsletter #wpbody-content > .wrap {
+  max-width: 100% !important;
+}
+
+/* Dashboard readability: avoid low-contrast helper text */
+body.post-type-rts_subscriber .rts-dashboard-page .rts-form-description,
+body.post-type-rts_subscriber .rts-dashboard-page .rts-page-description,
+body.post-type-rts_subscriber .rts-dashboard-page .rts-metric-subtitle {
+  color: #ffffff !important;
+  opacity: 0.95 !important;
+}
+
+
+
+/* ============================================
+   2026 DASHBOARD-STYLE THEME (SUBSCRIBERS)
+   Matches RTS dark dashboard panels & cards
+   ============================================ */
+
+/* Page background */
+body.post-type-rts_subscriber,
+body.post-type-rts_newsletter,
+body.toplevel_page_rts-subscribers-dashboard,
+body.rts-subscriber-admin {
+    background: #0b1220 !important;
+}
+
+/* Ensure WP core wrappers don't force light backgrounds */
+body.post-type-rts_subscriber #wpcontent,
+body.post-type-rts_newsletter #wpcontent,
+body.toplevel_page_rts-subscribers-dashboard #wpcontent,
+body.post-type-rts_subscriber #wpwrap,
+body.post-type-rts_newsletter #wpwrap,
+body.toplevel_page_rts-subscribers-dashboard #wpwrap {
+    background: transparent !important;
+}
+
+/* Shell panel (big rounded container like Letters Analytics) */
+.rts-dashboard-page,
+.rts-subscriber-page,
+.rts-templates-page,
+.rts-settings-page,
+.rts-analytics-page,
+.rts-import-page {
+    max-width: 1600px;
+    margin: 20px 20px 20px 0;
+    padding: 0 !important;
+}
+
+.rts-dashboard-page > .rts-shell,
+.rts-subscriber-page > .rts-shell,
+.rts-templates-page > .rts-shell,
+.rts-settings-page > .rts-shell,
+.rts-analytics-page > .rts-shell,
+.rts-import-page > .rts-shell {
+    padding: 0;
+}
+
+/* Make existing .wrap act like our shell if no extra wrapper exists */
+.wrap.rts-dashboard-page,
+.wrap.rts-subscriber-page,
+.wrap.rts-templates-page,
+.wrap.rts-settings-page,
+.wrap.rts-analytics-page,
+.wrap.rts-import-page {
+    background: radial-gradient(1200px 600px at 20% 0%, rgba(59,130,246,0.10), transparent 60%),
+                radial-gradient(900px 500px at 80% 20%, rgba(245,158,11,0.10), transparent 60%),
+                linear-gradient(180deg, rgba(15,23,42,0.95), rgba(2,6,23,0.95));
+    border: 1px solid rgba(148,163,184,0.15);
+    border-radius: 50px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 25px 60px rgba(0,0,0,0.35);
+    padding: 35px !important;
+}
+
+/* Header */
+.rts-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 25px;
+    margin: 0 0 25px 0;
+    padding: 0 0 20px 0;
+    border-bottom: 1px solid rgba(148,163,184,0.18);
+}
+
+.rts-page-header h1 {
+    margin: 0;
+    color: #f59e0b !important;
+    font-weight: 800;
+    font-size: 26px;
+    letter-spacing: 0.2px;
+}
+
+.rts-page-description {
+    margin: 6px 0 0 0;
+    color: rgba(226,232,240,0.85) !important;
+    font-size: 14px;
+}
+
+/* Action buttons cluster */
+.rts-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* Buttons match dashboard look */
+.rts-btn,
+.rts-btn-secondary,
+.rts-btn-outline,
+.wrap.rts-dashboard-page .button,
+.wrap.rts-subscriber-page .button,
+.wrap.rts-templates-page .button,
+.wrap.rts-settings-page .button,
+.wrap.rts-analytics-page .button,
+.wrap.rts-import-page .button {
+    background: rgba(30,41,59,0.75) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(148,163,184,0.25) !important;
+    border-radius: 14px !important;
+    padding: 10px 16px !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    text-decoration: none !important;
+}
+
+.rts-btn:hover,
+.rts-btn-secondary:hover,
+.rts-btn-outline:hover,
+.wrap.rts-dashboard-page .button:hover,
+.wrap.rts-subscriber-page .button:hover,
+.wrap.rts-templates-page .button:hover,
+.wrap.rts-settings-page .button:hover,
+.wrap.rts-analytics-page .button:hover,
+.wrap.rts-import-page .button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+/* Primary button */
+.rts-btn-primary,
+.wrap.rts-dashboard-page .button-primary,
+.wrap.rts-subscriber-page .button-primary,
+.wrap.rts-templates-page .button-primary,
+.wrap.rts-settings-page .button-primary,
+.wrap.rts-analytics-page .button-primary,
+.wrap.rts-import-page .button-primary {
+    background: #f59e0b !important;
+    border-color: rgba(245,158,11,0.55) !important;
+    color: #0b1220 !important;
+    font-weight: 800;
+}
+
+/* Cards and sections */
+.rts-form-section,
+.rts-card,
+.rts-stat-card,
+.rts-panel,
+.rts-table-wrap {
+    background: rgba(15,23,42,0.55) !important;
+    border: 1px solid rgba(148,163,184,0.18) !important;
+    border-radius: 35px !important;
+    padding: 25px !important;
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.25);
+}
+
+.rts-form-section h2,
+.rts-form-section h3,
+.rts-card h2,
+.rts-card h3,
+.rts-panel h2,
+.rts-panel h3 {
+    color: #ffffff !important;
+}
+
+/* Inputs */
+.rts-form-input,
+.rts-form-textarea,
+.rts-form-select,
+.wrap.rts-dashboard-page input[type="text"],
+.wrap.rts-dashboard-page input[type="email"],
+.wrap.rts-dashboard-page input[type="number"],
+.wrap.rts-dashboard-page input[type="password"],
+.wrap.rts-dashboard-page textarea,
+.wrap.rts-dashboard-page select,
+.wrap.rts-settings-page input[type="text"],
+.wrap.rts-settings-page input[type="email"],
+.wrap.rts-settings-page input[type="number"],
+.wrap.rts-settings-page input[type="password"],
+.wrap.rts-settings-page textarea,
+.wrap.rts-settings-page select {
+    background: rgba(2,6,23,0.55) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(148,163,184,0.22) !important;
+    border-radius: 16px !important;
+}
+
+.rts-form-description {
+    color: rgba(226,232,240,0.75) !important;
+}
+
+/* Tables */
+.wrap.rts-dashboard-page .wp-list-table,
+.wrap.rts-subscriber-page .wp-list-table,
+.wrap.rts-templates-page .wp-list-table,
+.wrap.rts-settings-page .wp-list-table,
+.wrap.rts-analytics-page .wp-list-table,
+.wrap.rts-import-page .wp-list-table {
+    background: rgba(15,23,42,0.35) !important;
+    border-radius: 25px !important;
+    overflow: hidden;
+    border: 1px solid rgba(148,163,184,0.16) !important;
+}
+
+.wrap.rts-dashboard-page .wp-list-table th,
+.wrap.rts-dashboard-page .wp-list-table td,
+.wrap.rts-subscriber-page .wp-list-table th,
+.wrap.rts-subscriber-page .wp-list-table td,
+.wrap.rts-templates-page .wp-list-table th,
+.wrap.rts-templates-page .wp-list-table td {
+    color: rgba(226,232,240,0.92) !important;
+    border-bottom-color: rgba(148,163,184,0.10) !important;
+}
+
+.wrap.rts-dashboard-page .wp-list-table thead th,
+.wrap.rts-subscriber-page .wp-list-table thead th,
+.wrap.rts-templates-page .wp-list-table thead th {
+    background: rgba(2,6,23,0.45) !important;
+}
+
+/* Notices */
+.wrap.rts-dashboard-page .notice,
+.wrap.rts-subscriber-page .notice,
+.wrap.rts-templates-page .notice,
+.wrap.rts-settings-page .notice,
+.wrap.rts-analytics-page .notice,
+.wrap.rts-import-page .notice {
+    border-radius: 20px;
+}
+
+/* Reduce sidebar padding bleed in subscriber contexts */
+body.post-type-rts_subscriber #wpcontent,
+body.post-type-rts_newsletter #wpcontent,
+body.toplevel_page_rts-subscribers-dashboard #wpcontent {
+    padding-left: 0 !important;
 }

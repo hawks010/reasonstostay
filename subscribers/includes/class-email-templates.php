@@ -35,7 +35,8 @@ class RTS_Email_Templates {
             'weekly_digest', 
             'monthly_digest', 
             'reconsent', 
-            'newsletter_custom'
+            'newsletter_custom',
+            'all_caught_up'
         );
 
         if (!in_array($template, $valid_templates, true)) {
@@ -120,6 +121,8 @@ class RTS_Email_Templates {
                 return 'Please confirm what you want to receive from {site_name}';
             case 'newsletter_custom':
                 return '{newsletter_subject}';
+            case 'all_caught_up':
+                return "{$site} - All caught up";
             default:
                 return "{$site} Updates";
         }
@@ -150,7 +153,11 @@ class RTS_Email_Templates {
                 return '<p>Hello,</p><p>We\'ve recently moved our subscriber system and we want to make sure we only email you what you\'ve asked for.</p><p><strong>Please confirm your preferences here:</strong></p><p><a href="{manage_url}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#179AD6;color:#fff;text-decoration:none;">Manage my email preferences</a></p><p>If you take no action, we\'ll pause emails until you confirm.</p>';
             case 'newsletter_custom':
                 return '{newsletter_body}<p style="font-size:12px;opacity:0.8;">Manage preferences: <a href="{manage_url}">manage</a> | Unsubscribe: <a href="{unsubscribe_url}">unsubscribe</a></p>';
-            default:
+            
+case 'all_caught_up':
+    return '<h2>You\'re all caught up</h2>'
+        . '<p>We\'ve already sent you every email-ready letter we have right now. We\'ll email you as soon as there\'s something new.</p>';
+default:
                 return "<p>Updates from {$site}.</p>";
         }
     }
@@ -229,14 +236,14 @@ class RTS_Email_Templates {
 
     private function unsubscribe_url($token) {
         if (!$token) return home_url('/');
-        $sig = hash_hmac('sha256', $token . '|unsubscribe', wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . date('Y-m-d'), wp_salt('auth'));
         return add_query_arg(array('rts_unsubscribe' => $token, 'sig' => $sig), home_url('/'));
     }
 
     private function verification_url($subscriber_id) {
         $token = get_post_meta($subscriber_id, '_rts_subscriber_verification_token', true);
         if (!$token) return home_url('/');
-        $sig = hash_hmac('sha256', $token . '|verify', wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|verify|' . date('Y-m-d'), wp_salt('auth'));
         return add_query_arg(array('rts_verify' => $token, 'sig' => $sig), home_url('/'));
     }
 }

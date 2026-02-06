@@ -1,43 +1,73 @@
 <?php
-/**
- * Reasons to Stay - Shortcodes
- * Main shortcodes for letter system
- */
-
-if (!defined('ABSPATH')) exit;
 
 class RTS_Shortcodes {
-    
-    // Flag to prevent duplicate onboarding modals on the same page
+
+    // Track if onboarding has been rendered to prevent duplicates
     private static $onboarding_rendered = false;
-    
+
+    /**
+     * Constructor: Registers all shortcodes
+     */
     public function __construct() {
+        add_shortcode('rts_share_buttons', [$this, 'share_buttons']);
         add_shortcode('rts_letter_viewer', [$this, 'letter_viewer']);
         add_shortcode('rts_onboarding', [$this, 'onboarding']);
         add_shortcode('rts_submit_form', [$this, 'submit_form']);
         add_shortcode('rts_site_stats_row', [$this, 'site_stats_row']);
-        
-        // Clear stats cache when letters are updated (v2.0.17)
-        add_action('save_post_letter', [$this, 'clear_stats_cache']);
-        add_action('transition_post_status', [$this, 'clear_stats_cache_on_transition'], 10, 3);
     }
-    
+
     /**
-     * Clear stats cache when letters are saved/updated
+     * [rts_share_buttons] - Share buttons block (standalone)
+     * Keeps the same classes/data-attributes as the letter viewer so existing JS continues to work.
+     *
+     * Usage:
+     * [rts_share_buttons label="Help us reach more people by sharing this site:"]
      */
-    public function clear_stats_cache() {
-        delete_transient('rts_site_stats_v1');
+    public function share_buttons($atts) {
+        $atts = shortcode_atts([
+            'label' => 'Help us reach more people by sharing this site:'
+        ], $atts);
+
+        ob_start();
+        ?>
+        <div class="rts-letter-share">
+            <p class="rts-share-label"><?php echo esc_html($atts['label']); ?></p>
+            <div class="rts-share-buttons">
+                <a href="#" class="share-btn rts-share-btn" data-platform="facebook" target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook (opens in new tab)">
+                    <i class="fab fa-facebook-f" aria-hidden="true"></i>
+                    <span>Facebook</span>
+                </a>
+                <a href="#" class="share-btn rts-share-btn" data-platform="x" target="_blank" rel="noopener noreferrer" aria-label="Share on X (opens in new tab)">
+                    <i class="fab fa-x-twitter" aria-hidden="true"></i>
+                    <span>X</span>
+                </a>
+                <a href="#" class="share-btn rts-share-btn" data-platform="whatsapp" target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp (opens in new tab)">
+                    <i class="fab fa-whatsapp" aria-hidden="true"></i>
+                    <span>WhatsApp</span>
+                </a>
+                <a href="#" class="share-btn rts-share-btn" data-platform="reddit" target="_blank" rel="noopener noreferrer" aria-label="Share on Reddit (opens in new tab)">
+                    <i class="fab fa-reddit-alien" aria-hidden="true"></i>
+                    <span>Reddit</span>
+                </a>
+                <a href="#" class="share-btn rts-share-btn" data-platform="threads" target="_blank" rel="noopener noreferrer" aria-label="Share on Threads (opens in new tab)">
+                    <i class="fab fa-threads" aria-hidden="true"></i>
+                    <span>Threads</span>
+                </a>
+
+                <button class="share-btn rts-share-btn" type="button" data-platform="copy" aria-label="Copy link">
+                    <i class="fas fa-link" aria-hidden="true"></i>
+                    <span>Copy link</span>
+                </button>
+                <a href="#" class="share-btn rts-share-btn" data-platform="email" aria-label="Share via email">
+                    <i class="fas fa-envelope" aria-hidden="true"></i>
+                    <span>Email</span>
+                </a>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
     }
-    
-    /**
-     * Clear stats cache on post status transitions
-     */
-    public function clear_stats_cache_on_transition($new_status, $old_status, $post) {
-        if ($post->post_type === 'letter') {
-            $this->clear_stats_cache();
-        }
-    }
-    
+
     /**
      * [rts_letter_viewer] - Main letter display
      */
@@ -46,8 +76,7 @@ class RTS_Shortcodes {
             'show_helpful' => 'yes',
             'show_share' => 'yes',
             'show_next' => 'yes',
-            'show_onboarding' => 'yes'
-        ], $atts);
+            'show_onboarding' => 'yes'], $atts);
         
         ob_start();
         
@@ -120,7 +149,7 @@ class RTS_Shortcodes {
                     </div>
                     <?php endif; ?>
                 </div>
-</div>
+            </div>
                 
                 
                 <!-- Feedback modal (subtle, internal, letter-linked) -->
@@ -184,42 +213,8 @@ class RTS_Shortcodes {
                 </div>
 
 <?php if ($atts['show_share'] === 'yes') : ?>
-                <!-- Share section -->
-                <div class="rts-letter-share">
-                    <p class="rts-share-label">Help us reach more people by sharing this site:</p>
-                    <div class="rts-share-buttons">
-                        <a href="#" class="share-btn rts-share-btn" data-platform="facebook" target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook (opens in new tab)">
-                            <i class="fab fa-facebook-f" aria-hidden="true"></i>
-                            <span>Facebook</span>
-                        </a>
-                        <a href="#" class="share-btn rts-share-btn" data-platform="x" target="_blank" rel="noopener noreferrer" aria-label="Share on X (opens in new tab)">
-                            <i class="fab fa-x-twitter" aria-hidden="true"></i>
-                            <span>X</span>
-                        </a>
-                        <a href="#" class="share-btn rts-share-btn" data-platform="whatsapp" target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp (opens in new tab)">
-                            <i class="fab fa-whatsapp" aria-hidden="true"></i>
-                            <span>WhatsApp</span>
-                        </a>
-                        <a href="#" class="share-btn rts-share-btn" data-platform="reddit" target="_blank" rel="noopener noreferrer" aria-label="Share on Reddit (opens in new tab)">
-                            <i class="fab fa-reddit-alien" aria-hidden="true"></i>
-                            <span>Reddit</span>
-                        </a>
-                        <a href="#" class="share-btn rts-share-btn" data-platform="threads" target="_blank" rel="noopener noreferrer" aria-label="Share on Threads (opens in new tab)">
-                            <i class="fab fa-threads" aria-hidden="true"></i>
-                            <span>Threads</span>
-                        </a>
-
-                        <button class="share-btn rts-share-btn" type="button" data-platform="copy" aria-label="Copy link">
-                            <i class="fas fa-link" aria-hidden="true"></i>
-                            <span>Copy link</span>
-                        </button>
-                        <a href="#" class="share-btn rts-share-btn" data-platform="email" aria-label="Share via email">
-                            <i class="fas fa-envelope" aria-hidden="true"></i>
-                            <span>Email</span>
-                        </a>
-                    </div>
-                </div>
-                <?php endif; ?>
+                <?php echo do_shortcode('[rts_share_buttons]'); ?>
+<?php endif; ?>
             </div>
             
             <!-- Helpful confirmation toast -->
@@ -351,6 +346,8 @@ class RTS_Shortcodes {
      * [rts_submit_form] - Letter submission form
      */
     public function submit_form($atts) {
+        $atts = shortcode_atts([], $atts);
+
         ob_start();
         ?>
         <div class="rts-submit-form-wrapper">
@@ -554,125 +551,9 @@ class RTS_Shortcodes {
                 <div class="rts-stat-label">
                     letters delivered to site visitors.
                 </div>
-            </div>
-            
-            <div class="rts-stat">
-                <div class="rts-stat-number" id="rts-feel-better">
-                    <?php echo esc_html($stats['feel_better_percent']); ?>%
-                </div>
-                <div class="rts-stat-label">
-                    say reading a letter made them feel "much better".
-                </div>
-            </div>
-            
-            <div class="rts-stat">
-                <div class="rts-stat-number" id="rts-letters-submitted">
-                    <?php echo esc_html(number_format($stats['letters_submitted'])); ?>
-                </div>
-                <div class="rts-stat-label">
-                    submitted letters to the site.
-                </div>
-            </div>
-        </div>
-        <?php
-        
-        // Add inline script in footer (lightweight, one-time execution)
-        add_action('wp_footer', function() {
-            ?>
-            <script>
-            // Update stats dynamically via REST API (cached on backend)
-            (function() {
-                function updateStats() {
-                    fetch('<?php echo esc_js(rest_url('rts/v1/site-stats')); ?>')
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            if (data.letters_delivered !== undefined) {
-                                var el = document.getElementById('rts-letters-delivered');
-                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_delivered);
-                            }
-                            if (data.feel_better_percent !== undefined) {
-                                var el = document.getElementById('rts-feel-better');
-                                if (el) el.textContent = String(data.feel_better_percent) + '%';
-                            }
-                            if (data.letters_submitted !== undefined) {
-                                var el = document.getElementById('rts-letters-submitted');
-                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_submitted);
-                            }
-                        })
-                        .catch(function() {}); // Silent fail - initial HTML values remain
-                }
-                
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', updateStats);
-                } else {
-                    updateStats();
-                }
-            })();
-            </script>
-            <?php
-        }, 20);
-        
-        return ob_get_clean();
-    }
-    
-    /**
-     * Get real site stats from database
-     */
-    /**
-     * Get real site stats from database
-     * Now with caching and security improvements (v2.0.17)
-     */
-    private function get_site_stats() {
-        // Check cache first (5 minute cache)
-        $cache_key = 'rts_site_stats_v1';
-        $cached = get_transient($cache_key);
-        
-        if ($cached !== false && is_array($cached)) {
-            return $cached;
-        }
-        
-        global $wpdb;
-
-        // Optional additive offsets (keeps stats "live" while allowing a migration bump)
-        $override_raw = get_option('rts_stats_override', []);
-        if (!is_array($override_raw)) {
-            $override_raw = [];
-        }
-        $override = wp_parse_args($override_raw, [
-            'enabled' => 0,
-            // Interpreted as additive offsets when enabled
-            'letters_delivered' => 0,
-            'letters_submitted' => 0,
-            // Optional: add to helpful/"feel better" numerator
-            'helps' => 0,
-            // Optional: if set (0-100), override computed percentage
-            'feel_better_percent' => '',
-            // Legacy key from earlier UI versions (treated as letters_submitted offset)
-            'total_letters' => 0,
-        ]);
-
-        $use_offsets = !empty($override['enabled']);
-        $offset_delivered = $use_offsets ? max(0, intval($override['letters_delivered'])) : 0;
-        $legacy_submitted  = $use_offsets ? max(0, intval($override['total_letters'])) : 0;
-        $offset_submitted  = $use_offsets ? max(0, intval($override['letters_submitted'])) : 0;
-        $offset_submitted  = max($offset_submitted, $legacy_submitted);
-        $offset_helps      = $use_offsets ? max(0, intval($override['helps'])) : 0;
-        
-        // Total letters delivered (sum of all view_count) - With prepared statement
-        $letters_delivered = $wpdb->get_var($wpdb->prepare("
-            SELECT SUM(CAST(meta_value AS UNSIGNED))
-            FROM {$wpdb->postmeta}
-            WHERE meta_key = %s
-        ", 'view_count'));
-        $letters_delivered = intval($letters_delivered);
-        
-        // Total helps (sum of all help_count) - With prepared statement
-        $total_helps = $wpdb->get_var($wpdb->prepare("
-            SELECT SUM(CAST(meta_value AS UNSIGNED))
-            FROM {$wpdb->postmeta}
-            WHERE meta_key = %s
-        ", 'help_count'));
-        $total_helps = intval($total_helps);
+        // Inline CSS/JS (avoid relying on wp_footer/wp_head timing)
+        $out .= '<style id="rts-stats-row-inline">.rts-stats-row{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}.rts-stats-card{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:14px 16px;min-width:160px}.rts-stats-card .label{color:#cbd5e1;font-size:12px}.rts-stats-card .val{color:#fff;font-size:20px;font-weight:700}</style>';
+        $out .= '<script id="rts-stats-row-js">(function(){try{var row=document.querySelector(".rts-stats-row");if(!row)return;var api="'. esc_js(rest_url('rts/v1/site-stats')) .'";fetch(api,{credentials:"same-origin"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d)return;var m={letters_delivered:"[data-stat=delivered]",avg_quality_score:"[data-stat=quality]",flagged:"[data-stat=flagged]",pending:"[data-stat=pending]"};Object.keys(m).forEach(function(k){var el=row.querySelector(m[k]+" .val");if(el&&d[k]!==undefined)el.textContent=d[k];});}).catch(function(){});}catch(e){}}</script>';
 
         // Apply offsets (migration bump) while keeping stats live
         $letters_delivered_total = $letters_delivered + $offset_delivered;

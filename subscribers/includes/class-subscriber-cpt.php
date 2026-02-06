@@ -646,9 +646,20 @@ class RTS_Subscriber_CPT {
                 }
                 break;
             case 'last_sent':
-                $last = isset($meta['_rts_subscriber_last_sent'][0]) ? $meta['_rts_subscriber_last_sent'][0] : '';
-                echo $last ? esc_html(date('M j, Y', strtotime($last))) : '—';
-                break;
+    $last = '';
+    $logs_table = $wpdb->prefix . 'rts_email_logs';
+    if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
+        $last = $wpdb->get_var($wpdb->prepare(
+            "SELECT sent_at FROM {$logs_table} WHERE subscriber_id = %d AND status = 'sent' ORDER BY sent_at DESC LIMIT 1",
+            intval($post_id)
+        ));
+    }
+    // Fallback to meta if logs table unavailable
+    if (!$last) {
+        $last = isset($meta['_rts_subscriber_last_sent'][0]) ? $meta['_rts_subscriber_last_sent'][0] : '';
+    }
+    echo $last ? esc_html(date('M j, Y', strtotime($last))) : '—';
+    break;
             case 'total_sent':
                 $total = isset($meta['_rts_subscriber_total_sent'][0]) ? $meta['_rts_subscriber_total_sent'][0] : '0';
                 echo esc_html($total);
@@ -684,7 +695,23 @@ class RTS_Subscriber_CPT {
         }
         echo '</select>';
         
-        // Frequency filter
+        
+
+// Smart segment filter
+$segment = isset($_GET['subscriber_segment']) ? sanitize_text_field($_GET['subscriber_segment']) : '';
+echo '<select name="subscriber_segment">';
+echo '<option value="">Smart Segments</option>';
+$segments = array(
+    'bounced' => 'Bounced',
+    'highly_engaged' => 'Highly Engaged (50+)',
+    'new' => 'New (last 7 days)',
+);
+foreach ($segments as $key => $label) {
+    echo '<option value="' . esc_attr($key) . '"' . selected($segment, $key, false) . '>' . esc_html($label) . '</option>';
+}
+echo '</select>';
+
+// Frequency filter
         $freq = isset($_GET['subscriber_frequency']) ? sanitize_text_field($_GET['subscriber_frequency']) : '';
         echo '<select name="subscriber_frequency">';
         echo '<option value="">All Frequencies</option>';
@@ -718,7 +745,7 @@ class RTS_Subscriber_CPT {
             $meta_query = array();
             
             // Check if any filter is active, if so, reset page to 1
-            if (!empty($_GET['subscriber_status']) || !empty($_GET['subscriber_frequency']) || !empty($_GET['subscriber_prefs'])) {
+            if (!empty($_GET['subscriber_status']) || !empty($_GET['subscriber_frequency']) || !empty($_GET['subscriber_prefs']) || !empty($_GET['subscriber_segment'])) {
                 $query->set('paged', 1);
             }
 
@@ -770,6 +797,30 @@ class RTS_Subscriber_CPT {
                     );
                 }
             }
+
+// Smart segment filters
+if (!empty($_GET['subscriber_segment'])) {
+    $seg = sanitize_text_field($_GET['subscriber_segment']);
+    if ($seg === 'bounced') {
+        $meta_query[] = array('key' => '_rts_subscriber_status', 'value' => 'bounced');
+    } elseif ($seg === 'highly_engaged') {
+        $meta_query[] = array(
+            'key'     => '_rts_subscriber_total_sent',
+            'value'   => 50,
+            'compare' => '>=',
+            'type'    => 'NUMERIC',
+        );
+    } elseif ($seg === 'new') {
+        $meta_query[] = array(
+            'key'     => '_rts_subscriber_created_at',
+            'value'   => date('Y-m-d H:i:s', time() - (7 * DAY_IN_SECONDS)),
+            'compare' => '>=',
+            'type'    => 'DATETIME',
+        );
+    }
+}
+
+
             
             if (!empty($meta_query)) {
                 $query->set('meta_query', $meta_query);

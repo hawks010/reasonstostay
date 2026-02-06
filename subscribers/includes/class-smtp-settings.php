@@ -23,6 +23,7 @@ class RTS_SMTP_Settings {
         if (is_admin()) {
             add_action('admin_menu', array($this, 'add_admin_menu'));
             add_action('admin_init', array($this, 'register_settings'));
+            add_action('admin_init', array($this, 'maybe_redirect_legacy_smtp_page'), 1);
             add_action('wp_ajax_rts_test_smtp', array($this, 'ajax_test_smtp'));
             add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
             
@@ -32,6 +33,19 @@ class RTS_SMTP_Settings {
 
         // Core Mail Hook
         add_action('phpmailer_init', array($this, 'configure_smtp'));
+    }
+
+    /**
+     * Legacy page slug redirect (SMTP now lives inside the Subscribers Dashboard).
+     */
+    public function maybe_redirect_legacy_smtp_page() {
+        if (!is_admin()) return;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
+        if ($page !== self::PAGE_SLUG) return;
+        if (!current_user_can('manage_options')) return;
+        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard#rts-smtp-card'));
+        exit;
     }
 
     /**
@@ -98,14 +112,8 @@ class RTS_SMTP_Settings {
      * Register Admin Menu
      */
     public function add_admin_menu() {
-        add_submenu_page(
-            'edit.php?post_type=rts_subscriber',
-            'SMTP Settings',
-            'SMTP Settings',
-            'manage_options',
-            self::PAGE_SLUG,
-            array($this, 'render_settings_page')
-        );
+        // Menu removed: SMTP now lives on the Subscribers Dashboard for client clarity.
+        // Keep settings + hooks active.
     }
 
     /**
@@ -165,7 +173,13 @@ class RTS_SMTP_Settings {
             'default' => '',
             'sanitize_callback' => 'sanitize_email'
         ));
-        
+
+        // Optional CC on outgoing subscriber emails
+        register_setting(self::OPTION_GROUP, 'rts_smtp_cc_email', array(
+            'type' => 'string',
+            'default' => '',
+            'sanitize_callback' => 'sanitize_email'
+        ));
         // Debug
         register_setting(self::OPTION_GROUP, 'rts_smtp_debug', array(
             'type' => 'boolean',
@@ -200,39 +214,10 @@ class RTS_SMTP_Settings {
      */
     public function render_settings_page() {
         if (!current_user_can('manage_options')) return;
-        ?>
-        <div class="wrap">
-            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-            
-            <?php if (!extension_loaded('openssl')) : ?>
-                <div class="notice notice-warning inline">
-                    <p><strong>Warning:</strong> The OpenSSL PHP extension is missing. SMTP passwords will be stored in plain text. Please enable OpenSSL on your server.</p>
-                </div>
-            <?php endif; ?>
-
-            <form action="options.php" method="post">
-                <?php
-                settings_fields(self::OPTION_GROUP);
-                do_settings_sections(self::PAGE_SLUG);
-                submit_button();
-                ?>
-            </form>
-            
-            <hr style="margin-top: 40px;">
-            <h2>Test Configuration</h2>
-            <p>Save your settings above, then enter an email address to verify connectivity.</p>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">To Email</th>
-                    <td>
-                        <input type="email" id="rts_test_email" class="regular-text" value="<?php echo esc_attr(wp_get_current_user()->user_email); ?>">
-                        <button type="button" id="rts_test_smtp_btn" class="button button-secondary">Send Test Email</button>
-                    </td>
-                </tr>
-            </table>
-            <div id="rts_test_message" style="margin-top: 15px; max-width: 600px;"></div>
-        </div>
-        <?php
+        // SMTP configuration is consolidated into the Subscribers Dashboard.
+        // Keep this endpoint for backwards compatibility, but redirect for clarity.
+        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard#rts-smtp-card'));
+        exit;
     }
 
     // --- Render Helpers ---
@@ -353,6 +338,11 @@ class RTS_SMTP_Settings {
             $phpmailer->addReplyTo($reply_to);
         }
 
+        $cc = get_option('rts_smtp_cc_email');
+        if ($cc && is_email($cc)) {
+            // CC all outgoing subscriber emails (use sparingly)
+            $phpmailer->addCC($cc);
+        }
         // Debug Logging - Check WP_DEBUG to prevent log spam in production
         if (get_option('rts_smtp_debug') && defined('WP_DEBUG') && WP_DEBUG) {
             $phpmailer->SMTPDebug = 2; // 2 = Client and Server messages
@@ -365,30 +355,43 @@ class RTS_SMTP_Settings {
     /**
      * AJAX Handler for Test Email.
      */
+
     public function ajax_test_smtp() {
         if (!check_ajax_referer('rts_test_smtp', 'nonce', false) || !current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => 'Unauthorized'));
+            wp_send_json_error(array('message' => 'Security check failed.'));
         }
 
-        $to = sanitize_email($_POST['test_email']);
-        if (!$to) {
-            wp_send_json_error(array('message' => 'Invalid email address.'));
+        $settings = get_option('rts_smtp_settings', array());
+        $to = isset($_POST['to']) ? sanitize_email(wp_unslash($_POST['to'])) : '';
+
+        if (empty($to) || !is_email($to)) {
+            wp_send_json_error(array('message' => 'Please provide a valid email address.'));
         }
 
-        // Ensure HTML content type is respected by PHPMailer for the test
-        add_action('phpmailer_init', function($phpmailer) {
+        // Temporarily add a high priority phpmailer_init hook to ensure HTML and configured SMTP is used
+        add_action('phpmailer_init', function($phpmailer) use ($settings) {
+            if (!empty($settings['host'])) {
+                $phpmailer->isSMTP();
+                $phpmailer->Host = $settings['host'];
+                $phpmailer->SMTPAuth = true;
+                $phpmailer->Port = !empty($settings['port']) ? intval($settings['port']) : 587;
+                $phpmailer->Username = !empty($settings['username']) ? $settings['username'] : '';
+                $phpmailer->Password = !empty($settings['password']) ? $settings['password'] : '';
+                $phpmailer->SMTPSecure = !empty($settings['encryption']) ? $settings['encryption'] : '';
+                $phpmailer->From = !empty($settings['from_email']) ? $settings['from_email'] : get_option('admin_email');
+                $phpmailer->FromName = !empty($settings['from_name']) ? $settings['from_name'] : get_bloginfo('name');
+            }
             $phpmailer->isHTML(true);
-        }, 999); 
+        }, 999);
 
         $subject = 'RTS SMTP Test: ' . get_bloginfo('name');
         $message = "<strong>SMTP Configuration Test</strong><br><br>";
         $message .= "This is a test email from the RTS Subscriber System.<br>";
         $message .= "If you are reading this, your SMTP settings are configured correctly.<br><br>";
         $message .= "Time: " . current_time('mysql');
-        
+
         $headers = array('Content-Type: text/html; charset=UTF-8');
 
-        // Capture errors explicitly for the response
         $result = false;
         try {
             $result = wp_mail($to, $subject, $message, $headers);
@@ -398,10 +401,34 @@ class RTS_SMTP_Settings {
 
         if ($result) {
             wp_send_json_success(array('message' => 'Test email sent successfully! Check your inbox.'));
-        } else {
-            global $phpmailer;
-            $error_info = isset($phpmailer->ErrorInfo) ? $phpmailer->ErrorInfo : 'Unknown error';
-            wp_send_json_error(array('message' => 'Sending failed. Error Info: ' . esc_html($error_info)));
         }
+
+        global $phpmailer;
+        $error_info = isset($phpmailer->ErrorInfo) ? $phpmailer->ErrorInfo : 'Unknown error';
+        wp_send_json_error(array('message' => 'Sending failed. Error Info: ' . esc_html($error_info)));
+    }
+
+    /**
+     * Lightweight health check (no email sent).
+     * Attempts a socket connection to mail.smtp2go.com:2525.
+     *
+     * @return array { ok: bool, message: string }
+     */
+    public function test_smtp_connection() {
+        $host = 'mail.smtp2go.com';
+        $port = 2525;
+
+        $timeout = 3;
+        $errno = 0;
+        $errstr = '';
+
+        $fp = @fsockopen($host, $port, $errno, $errstr, $timeout);
+        if ($fp) {
+            fclose($fp);
+            return array('ok' => true, 'message' => 'Socket connection OK');
+        }
+
+        $msg = $errstr ? $errstr : 'Unable to connect';
+        return array('ok' => false, 'message' => $msg . ' (errno ' . intval($errno) . ')');
     }
 }

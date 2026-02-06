@@ -27,7 +27,10 @@ class RTS_Database_Installer {
         foreach ($tables as $sql) {
             dbDelta($sql);
         }
-        
+
+        // Apply additive upgrades for existing installs (no drops).
+        self::maybe_upgrade_schema();
+
         // Update version
         update_option('rts_database_version', self::VERSION);
         
@@ -47,6 +50,7 @@ class RTS_Database_Installer {
             subscriber_id bigint(20) unsigned NOT NULL,
             email varchar(250) NOT NULL,
             template varchar(50) NOT NULL,
+            letter_id bigint(20) unsigned DEFAULT NULL,
             subject text NOT NULL,
             status varchar(20) NOT NULL,
             sent_at datetime NOT NULL,
@@ -181,18 +185,54 @@ class RTS_Database_Installer {
         return true;
     }
 
+
     /**
      * Helper to migrate schemas from individual classes to centralized.
      * dbDelta in install() handles the heavy lifting, this just ensures it runs.
      */
     public static function migrate_from_individual() {
         global $wpdb;
-        
+
         // Check if main tables exist (indicating old install might be present)
         $full_name = $wpdb->prefix . 'rts_email_logs';
         if ($wpdb->get_var("SHOW TABLES LIKE '$full_name'") === $full_name) {
             // Re-run install to ensure schema updates (like adding new columns)
             self::install();
+        }
+    }
+
+    /**
+     * Apply additive schema upgrades without dropping legacy tables.
+     * - Adds rts_email_logs.letter_id if missing (to prevent duplicates).
+     * - Ensures rts_email_queue has index on (status, scheduled_at) for scalability.
+     */
+    private static function maybe_upgrade_schema() {
+        global $wpdb;
+
+        $logs  = $wpdb->prefix . 'rts_email_logs';
+        $queue = $wpdb->prefix . 'rts_email_queue';
+
+        // 1) Email logs: add letter_id column if missing.
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs)) === $logs) {
+            $has_letter = $wpdb->get_var("SHOW COLUMNS FROM {$logs} LIKE 'letter_id'");
+            if (empty($has_letter)) {
+                // Add AFTER template for readability (non-breaking).
+                $wpdb->query("ALTER TABLE {$logs} ADD COLUMN letter_id bigint(20) unsigned DEFAULT NULL AFTER template");
+
+                // Optional index to speed up exclusion queries.
+                $has_index = $wpdb->get_var("SHOW INDEX FROM {$logs} WHERE Key_name = 'letter_id'");
+                if (empty($has_index)) {
+                    $wpdb->query("ALTER TABLE {$logs} ADD KEY letter_id (letter_id)");
+                }
+            }
+        }
+
+        // 2) Queue: ensure composite index on (status, scheduled_at) exists.
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $queue)) === $queue) {
+            $has_status_scheduled = $wpdb->get_var("SHOW INDEX FROM {$queue} WHERE Key_name = 'status_scheduled'");
+            if (empty($has_status_scheduled)) {
+                $wpdb->query("ALTER TABLE {$queue} ADD KEY status_scheduled (status, scheduled_at)");
+            }
         }
     }
 }

@@ -66,15 +66,10 @@
 
 /* Letter card with paper effect */
 .rts-letter-card {
-    background: var(--rts-white);
+    background: transparent;
     /* Extra top padding to make room for top-left tag icons */
     padding: 100px 100px 50px;
     position: relative;
-    box-shadow: 
-        0 1px 3px rgba(0,0,0,0.26),
-        0 4px 8px rgba(0,0,0,0.24),
-        0 0 0 1px rgba(0,0,0,0.22);
-    border-radius: 2px;
     margin-bottom: 0px;
 }
 
@@ -208,6 +203,8 @@
 
 .rts-letter-content p {
     margin-bottom: 1.2em;
+    font-size: 1.1rem;
+    line-height: 1.6rem;
 }
 
 .rts-letter-content p:last-child {
@@ -978,6 +975,12 @@ html.rts-onboarding-active .rts-a11y-panel{
         width: 100%;
     }
     
+    .rts-letter-content p {
+    margin-bottom: 1.2em;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    }
+    
     .rts-share-buttons {
         gap: 10px;
     }
@@ -1290,7 +1293,7 @@ body.rts-modal-open{overflow:hidden;}
 .rts-letter-tabs{
   position: absolute;
   z-index: 6;
-  top: 50px;
+  top: -50px;
   left: -22px;
   transform: translateY(-50%);
 }
@@ -1328,10 +1331,11 @@ body.rts-modal-open{overflow:hidden;}
 /* Mobile: move Feedback tab inside top-right and make horizontal + slim */
 @media (max-width: 768px){
   .rts-letter-tabs{
-    top: 12px;
-    right: 12px;
-    left: auto;
-    transform: none;
+    top: -150px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: max-content;
   }
   .rts-feedback-tab{
     writing-mode: horizontal-tb;
@@ -1357,4 +1361,132 @@ body.rts-modal-open{overflow:hidden;}
 .rts-letter-card::after{
   content: none !important;
   display: none !important;
+}
+
+
+/* ==========================================
+   ONBOARDING MOBILE TIGHTENING (Touch + Small Screens)
+   ========================================== */
+@media (max-width: 600px) {
+  .rts-onboarding-overlay{
+    align-items: flex-start !important;
+    padding: 10px !important;
+    overflow-y: auto !important;
+  }
+
+  .rts-onboarding-modal{
+    max-height: calc(100vh - 20px) !important;
+    overflow: auto !important;
+    border-radius: 10px !important;
+  }
+
+  .rts-onboarding-topbar{
+    padding: 12px 12px 0 !important;
+  }
+
+  .rts-onboarding-content{
+    padding: 18px 16px 16px !important;
+    gap: 14px !important;
+  }
+
+  .rts-onboarding-title{
+    font-size: 44px !important;
+    line-height: 1.0 !important;
+    margin: 0 0 10px !important;
+  }
+
+  .rts-onboarding-subtitle{
+    font-size: 16px !important;
+    line-height: 1.35 !important;
+    margin: 0 0 12px !important;
+  }
+
+  .rts-onboarding-question{
+    font-size: 34px !important;
+    line-height: 1.05 !important;
+    margin: 16px 0 8px !important;
+  }
+
+  .rts-onboarding-hint{
+    font-size: 14px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .rts-onboarding-options{
+    gap: 10px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .rts-onboarding-option{
+    padding: 10px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .rts-onboarding-option label{
+    gap: 10px !important;
+    font-size: 16px !important;
+  }
+
+  .rts-onboarding-actions{
+    position: sticky !important;
+    bottom: 0 !important;
+    background: rgba(255,255,255,0.95) !important;
+    backdrop-filter: blur(4px);
+    padding: 10px 0 0 !important;
+    margin-top: 12px !important;
+  }
+
+  .rts-btn-next-step,
+  .rts-btn-complete{
+    width: 100% !important;
+    padding: 14px 16px !important;
+    font-size: 16px !important;
+    border-radius: 14px !important;
+  }
+
+  .rts-btn-skip{
+    padding: 10px 14px !important;
+    border-radius: 14px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* Ensure onboarding remains tappable above everything */
+.rts-onboarding-overlay,
+.rts-onboarding-modal{
+  pointer-events: auto !important;
+}
+
+
+/* ==========================================
+   ONBOARDING: ensure overlay is the only interactive layer (iOS fix)
+   ========================================== */
+html.rts-onboarding-active body > *:not(.rts-onboarding-overlay) {
+    pointer-events: none !important;
+}
+html.rts-onboarding-active .rts-onboarding-overlay {
+    pointer-events: auto !important;
+}
+
+/* Mobile: hide floating feedback tab button (it crowds the top) */
+@media (max-width: 768px) {
+    .rts-letter-tabs { display: none !important; }
+}
+
+/* Mobile: tighten onboarding spacing so Next is visible */
+@media (max-width: 480px) {
+    .rts-onboarding-modal { max-width: 96vw !important; }
+    .rts-onboarding-topbar { padding: 10px 12px 0 !important; }
+    .rts-onboarding-content { padding: 12px 14px 14px !important; }
+    .rts-onboarding-content h1,
+    .rts-onboarding-content h2 { font-size: 1.6rem !important; line-height: 1.2 !important; margin-bottom: 10px !important; }
+    .rts-onboarding-content p { font-size: 1rem !important; line-height: 1.35 !important; margin-bottom: 10px !important; }
+    .rts-onboarding-options { gap: 8px !important; }
+    .rts-onboarding-actions {
+        position: sticky !important;
+        bottom: 0 !important;
+        background: #fff !important;
+        padding-top: 10px !important;
+        padding-bottom: calc(env(safe-area-inset-bottom) + 8px) !important;
+    }
 }

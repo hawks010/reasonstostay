@@ -23,7 +23,8 @@ class RTS_CSV_Importer {
 
     public function __construct() {
         if (is_admin()) {
-            add_action('admin_post_rts_import_csv', array($this, 'handle_import'));
+			add_action('admin_post_rts_import_csv', array($this, 'handle_import'));
+			add_action('admin_post_rts_export_csv', array($this, 'handle_export'));
             add_action('wp_ajax_rts_import_progress', array($this, 'ajax_get_import_progress'));
             add_action('wp_ajax_rts_cancel_import', array($this, 'ajax_cancel_import'));
         }
@@ -141,12 +142,96 @@ class RTS_CSV_Importer {
         // Kick off background job immediately
         wp_schedule_single_event(time(), 'rts_process_import_chunk', array($session_id));
 
-        // Redirect to progress page
+        // Redirect back to the consolidated Subscribers Dashboard (shows progress card).
         wp_redirect(add_query_arg(array(
-            'page'       => 'rts-import',
+            'post_type'  => 'rts_subscriber',
+            'page'       => 'rts-subscribers-dashboard',
             'session'    => $session_id,
             'processing' => 1,
-        ), admin_url('admin.php')));
+        ), admin_url('edit.php')));
+        exit;
+    }
+
+    /**
+     * Export subscribers to CSV.
+     * Streams output for large lists.
+     */
+    public function handle_export() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Unauthorized action.', 'rts-subscriber-system'));
+        }
+        check_admin_referer('rts_export_csv');
+
+        $scope = isset($_POST['export_scope']) ? sanitize_key(wp_unslash($_POST['export_scope'])) : 'all';
+        if (!in_array($scope, array('all','active','bounced','unsubscribed'), true)) {
+            $scope = 'all';
+        }
+
+        @ini_set('memory_limit', '256M');
+        @set_time_limit(0);
+
+        nocache_headers();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=rts-subscribers-' . $scope . '-' . gmdate('Y-m-d-His') . '.csv');
+
+        $out = fopen('php://output', 'w');
+        if (!$out) {
+            wp_die(__('Unable to open output stream.', 'rts-subscriber-system'));
+        }
+
+        // Header
+        fputcsv($out, array('email','status','frequency','pref_letters','pref_newsletters'));
+
+        $paged = 1;
+        $per_page = 500;
+
+        // Filter by status via meta.
+        $meta_query = array();
+        if ($scope !== 'all') {
+            $meta_query[] = array(
+                'key'   => '_rts_subscriber_status',
+                'value' => $scope,
+            );
+        }
+
+        do {
+            $q = new WP_Query(array(
+                'post_type'              => 'rts_subscriber',
+                'post_status'            => 'publish',
+                'posts_per_page'         => $per_page,
+                'paged'                  => $paged,
+                'fields'                 => 'ids',
+                'orderby'                => 'ID',
+                'order'                  => 'ASC',
+                'no_found_rows'          => false,
+                'update_post_meta_cache' => true,
+                'update_post_term_cache' => false,
+                'meta_query'             => $meta_query,
+            ));
+
+            if (empty($q->posts)) {
+                break;
+            }
+
+            foreach ($q->posts as $subscriber_id) {
+                $email = get_post_field('post_title', $subscriber_id);
+                $status = get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+                $frequency = get_post_meta($subscriber_id, '_rts_subscriber_frequency', true);
+                $pref_letters = (int) get_post_meta($subscriber_id, '_rts_pref_letters', true);
+                $pref_newsletters = (int) get_post_meta($subscriber_id, '_rts_pref_newsletters', true);
+
+                fputcsv($out, array($email, $status, $frequency, $pref_letters, $pref_newsletters));
+            }
+
+            $paged++;
+
+            // Flush each page for huge exports.
+            if (function_exists('flush')) {
+                flush();
+            }
+        } while ($paged <= (int) $q->max_num_pages);
+
+        fclose($out);
         exit;
     }
 

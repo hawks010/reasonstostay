@@ -76,8 +76,8 @@ class RTS_Subscriber_List_Table extends WP_List_Table {
 
         foreach ($q->posts as $post_id) {
             $email = get_post_meta($post_id, '_rts_email', true);
-            $status = get_post_meta($post_id, '_rts_status', true);
-            $frequency = get_post_meta($post_id, '_rts_frequency', true);
+            $status = get_post_meta($post_id, '_rts_subscriber_status', true);
+            $frequency = get_post_meta($post_id, '_rts_subscriber_frequency', true);
             $subs = get_post_meta($post_id, '_rts_subscriptions', true);
             if (is_array($subs)) {
                 $subs = implode(', ', array_map('sanitize_text_field', $subs));

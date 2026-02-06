@@ -63,6 +63,8 @@ class RTS_Subscriber_System {
         // Hooks
         add_action('after_switch_theme', array($this, 'activate'));
         add_action('init', array($this, 'check_database_version'));
+        // One-time legacy meta migration
+        add_action('admin_init', array($this, 'migrate_legacy_subscriber_meta'));
         
         // Health & Cron
         add_action('plugins_loaded', array($this, 'register_health_checks'));
@@ -352,7 +354,7 @@ public function register_letter_cpt() {
         $is_subscriber_context = (
             strpos($post_type, 'rts_') === 0
             || strpos($page, 'rts-subscriber') === 0
-            || in_array($page, array('rts-email-templates', 'rts-subscriber-analytics', 'rts-subscriber-settings', 'rts-subscriber-import'), true)
+            || in_array($page, array('rts-subscribers-dashboard', 'rts-email-templates', 'rts-email-settings'), true)
         );
 
         if (!$is_subscriber_context) {
@@ -492,7 +494,54 @@ public function register_letter_cpt() {
         }
         return array('status' => 'good', 'label' => 'Tables OK', 'description' => 'All tables present.');
     }
+
+    /**
+     * One-time migration (v1.2):
+     * Legacy meta keys: _rts_status, _rts_frequency
+     * New canonical keys: _rts_subscriber_status, _rts_subscriber_frequency
+     *
+     * Copies values forward without deleting legacy keys.
+     */
+    public function migrate_legacy_subscriber_meta() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $flag = get_option('rts_subscriber_meta_migrated_v1_2');
+        if ($flag) {
+            return;
+        }
+
+        global $wpdb;
+        $pm = $wpdb->postmeta;
+
+        // Copy _rts_status -> _rts_subscriber_status where new is missing
+        $wpdb->query("
+            INSERT INTO {$pm} (post_id, meta_key, meta_value)
+            SELECT old.post_id, '_rts_subscriber_status', old.meta_value
+            FROM {$pm} old
+            LEFT JOIN {$pm} new
+              ON new.post_id = old.post_id AND new.meta_key = '_rts_subscriber_status'
+            WHERE old.meta_key = '_rts_status'
+              AND new.meta_id IS NULL
+        ");
+
+        // Copy _rts_frequency -> _rts_subscriber_frequency where new is missing
+        $wpdb->query("
+            INSERT INTO {$pm} (post_id, meta_key, meta_value)
+            SELECT old.post_id, '_rts_subscriber_frequency', old.meta_value
+            FROM {$pm} old
+            LEFT JOIN {$pm} new
+              ON new.post_id = old.post_id AND new.meta_key = '_rts_subscriber_frequency'
+            WHERE old.meta_key = '_rts_frequency'
+              AND new.meta_id IS NULL
+        ");
+
+        update_option('rts_subscriber_meta_migrated_v1_2', 1, false);
+    }
+
 }
+
 
 // Global accessor
 function RTS_Subscriber_System() {

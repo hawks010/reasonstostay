@@ -55,7 +55,7 @@ class RTS_Email_Queue {
         global $wpdb;
 
         // Template Validation
-        $valid_templates = array('welcome', 'verification', 'daily_digest', 'weekly_digest', 'monthly_digest', 'reconsent', 'newsletter_custom');
+        $valid_templates = array('welcome', 'verification', 'daily_digest', 'weekly_digest', 'monthly_digest', 'reconsent', 'newsletter_custom', 'all_caught_up');
         if (!in_array($template, $valid_templates, true)) {
             return new WP_Error('invalid_template', 'Invalid email template: ' . esc_html($template));
         }
@@ -159,6 +159,8 @@ class RTS_Email_Queue {
      * @return void
      */
     public function process_queue_batch($limit = null) {
+        $start_time = time();
+
         // Check pause state first
         if ($this->is_paused()) {
             return;
@@ -177,6 +179,8 @@ class RTS_Email_Queue {
         }
 
         foreach ($items as $item) {
+            if (time() - $start_time > 45) { break; }
+
             // Claim item to avoid double-sends (Atomicity check)
             if (!$this->claim_item($item->id)) {
                 continue;

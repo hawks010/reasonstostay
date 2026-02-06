@@ -79,6 +79,21 @@ class RTS_Multilingual {
 			'id' => ['name' => 'Bahasa Indonesia', 'flag' => '🇮🇩', 'google_code' => 'id', 'dir' => 'ltr'],
 		];
 
+// Normalise language definitions for backwards-compatibility.
+// Some renderers expect `native` but older configs only define `name`.
+foreach ($this->supported_languages as $code => $lang) {
+    if (!isset($lang['native']) || $lang['native'] === '') {
+        $this->supported_languages[$code]['native'] = $lang['name'] ?? strtoupper((string) $code);
+    }
+    if (!isset($lang['name']) || $lang['name'] === '') {
+        $this->supported_languages[$code]['name'] = $this->supported_languages[$code]['native'];
+    }
+    if (!isset($lang['flag'])) {
+        $this->supported_languages[$code]['flag'] = '🌐';
+    }
+}
+
+
 		$this->current_language = $this->detect_language();
 		$this->load_translations();
 
@@ -378,36 +393,6 @@ class RTS_Multilingual {
 			}
 			echo '</ul>';
 			echo '</div>'; // .rts-lang-compact-wrapper
-
-			// JavaScript for compact dropdown functionality
-			echo '<script>
-(function() {
-	const button = document.getElementById("rts-lang-compact-btn");
-	const menu = document.getElementById("rts-lang-compact-menu");
-
-	if (button && menu) {
-		button.addEventListener("click", function(e) {
-			e.stopPropagation();
-			const isExpanded = button.getAttribute("aria-expanded") === "true";
-			button.setAttribute("aria-expanded", !isExpanded);
-			menu.style.display = isExpanded ? "none" : "grid";
-		});
-
-		document.addEventListener("click", function() {
-			button.setAttribute("aria-expanded", "false");
-			menu.style.display = "none";
-		});
-
-		// Handle language selection
-		menu.querySelectorAll(".rts-lang-compact-option").forEach(function(option) {
-			option.addEventListener("click", function(e) {
-				const lang = this.getAttribute("data-lang");
-				document.cookie = "rts_language=" + lang + "; path=/; max-age=" + (365 * 24 * 60 * 60);
-			});
-		});
-	}
-})();
-</script>';
 
 			echo '</div>'; // .rts-language-switcher
 		} else if ($atts['style'] === 'flags') {
@@ -784,8 +769,12 @@ body:not(.rts-dark-mode) .rts-lang-compact-menu li[aria-selected="true"] .rts-la
 }
 
 .rts-flag-emoji {
-	font-size: 1.4em;
+	font-size: 2em;
+	padding: 5px 5px;
 	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .rts-dropdown-arrow {

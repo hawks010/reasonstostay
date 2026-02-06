@@ -19,6 +19,72 @@
     // Main System Definition attached directly to window
     window.RTSLetterSystem = {
       loaded: true, // Flag to prevent re-init
+      // --- Debug / diagnostics ---
+      diagEnabled: (function(){
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('rts_debug') === '1') return true;
+          if (window.localStorage && localStorage.getItem('rts_debug') === '1') return true;
+        } catch (e) {}
+        return false;
+      })(),
+      diagLogs: [],
+      diagLog(event, data) {
+        try {
+          if (!this.diagEnabled) return;
+          const entry = { t: Date.now(), event: String(event || 'event'), data: data || null };
+          this.diagLogs.push(entry);
+          if (this.diagLogs.length > 300) this.diagLogs.shift();
+          if (window.console && console.log) console.log('[RTS diag]', entry.event, entry.data);
+          window.RTS_DIAG_LOGS = this.diagLogs;
+        } catch (e) {}
+      },
+      enableDiag() {
+        this.diagEnabled = true;
+        try { if (window.localStorage) localStorage.setItem('rts_debug','1'); } catch(e) {}
+        this.diagLog('diag_enabled', { url: window.location.href });
+      },
+      // --- Toasts ---
+      showHelpfulToast(message, type = 'info', duration = 2600) {
+        try {
+          const msg = (message || '').toString();
+          if (!msg) return;
+          let wrap = document.getElementById('rts-toast-wrap');
+          if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.id = 'rts-toast-wrap';
+            wrap.setAttribute('aria-live', 'polite');
+            wrap.setAttribute('aria-atomic', 'true');
+            wrap.style.cssText = 'position:fixed;z-index:999999;right:14px;bottom:14px;max-width:320px;display:flex;flex-direction:column;gap:10px;';
+            document.body.appendChild(wrap);
+          }
+          const toast = document.createElement('div');
+          toast.className = 'rts-toast rts-toast-' + type;
+          toast.style.cssText = 'background:#111827;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,0.25);font-size:14px;line-height:1.3;';
+          toast.textContent = msg;
+          wrap.appendChild(toast);
+          window.setTimeout(() => {
+            try { toast.style.opacity = '0'; toast.style.transition = 'opacity .2s ease'; } catch(e) {}
+            window.setTimeout(() => { try { toast.remove(); } catch(e) {} }, 260);
+          }, Math.max(800, duration|0));
+        } catch (e) {
+          try { console.log('[RTS toast fallback]', message); } catch (ee) {}
+        }
+      },
+      safeToast(message, type = 'info') {
+        try {
+          // Prefer the instance method, but never assume `this` binding is intact.
+          if (window.RTSLetterSystem && typeof window.RTSLetterSystem.showHelpfulToast === 'function') {
+            window.RTSLetterSystem.showHelpfulToast(message, type);
+            return;
+          }
+          if (typeof this.showHelpfulToast === 'function') {
+            window.RTSLetterSystem.safeToast(message, type);
+            return;
+          }
+        } catch (e) {}
+        try { console.log('[RTS]', message); } catch(e) {}
+      },
 
       // State
       preferences: {
@@ -139,22 +205,6 @@
           }
         },
 
-        BUDGETS: {
-          render: 100,
-          network: 2000,
-          total: 3000
-        },
-
-        checkBudget(label, duration) {
-          const budget = (this.BUDGETS && this.BUDGETS[label]) ? this.BUDGETS[label] : 1000;
-          if (duration > budget) {
-            this.logMetric('BUDGET_EXCEEDED_' + label, duration, false);
-            if (label === 'render' && duration > 500) {
-              try { document.documentElement.classList.add('rts-no-animations'); } catch(e){}
-            }
-          }
-        },
-
         logMetric(label, duration, success = true) {
           const metric = {
             label,
@@ -228,7 +278,21 @@
           this.setupExperiments();
           this.ensureStyles();
           this.setupPerformanceTracking();
-          this.addResourceHints();
+this.addResourceHints();
+
+// Diagnostics: capture errors and promise rejections when enabled
+try {
+  this.diagLog('init', { ua: navigator.userAgent, rocket: !!window.__cfRLUnblockHandlers });
+  if (this.diagEnabled) {
+    window.addEventListener('error', (ev) => {
+      try { this.diagLog('window_error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno }); } catch(e){}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try { this.diagLog('unhandledrejection', { reason: (ev && ev.reason) ? (''+ev.reason) : 'unknown' }); } catch(e){}
+    });
+  }
+} catch(e) {}
+
 
           this.sessionStartTime = Date.now();
           this.lastActivityTime = Date.now();
@@ -243,19 +307,6 @@
           this.setupMemoryWatchdog();
 
           window.addEventListener('beforeunload', () => this.cleanup());
-
-          if (window.history && window.history.pushState) {
-            try {
-              const self = this;
-              const originalPushState = history.pushState;
-              history.pushState = function () {
-                originalPushState.apply(this, arguments);
-                self.cleanup();
-              };
-            } catch (e) {
-              this.logError('historyOverride', e);
-            }
-          }
         } catch (error) {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
           const fallbackMsg = document.createElement('div');
@@ -418,7 +469,7 @@ injectCriticalStyles() {
               if (!newWorker) return;
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  this.showHelpfulToast('New version available. Refresh to update.');
+                  window.RTSLetterSystem.safeToast('New version available. Refresh to update.');
                 }
               });
             });
@@ -476,39 +527,37 @@ cleanupMemory() {
 
       
 cacheDomElements() {
-        // Use single query for frequently accessed elements
         const container = document.querySelector('.rts-letter-viewer');
+        if (!container) return;
 
-        if (container) {
-          this.domElements.loading = container.querySelector('.rts-loading');
-          this.domElements.display = container.querySelector('.rts-letter-display');
-          this.domElements.content = container.querySelector('.rts-letter-body');
-          this.domElements.helpfulBtn = container.querySelector('.rts-btn-helpful');
-          this.domElements.unhelpBtn = container.querySelector('.rts-btn-unhelpful');
-          this.domElements.ratePrompt = container.querySelector('.rts-rate-prompt');
-          this.domElements.rateUpBtn = container.querySelector('.rts-rate-up');
-          this.domElements.rateDownBtn = container.querySelector('.rts-rate-down');
-          this.domElements.rateSkipBtn = container.querySelector('.rts-rate-skip');
+        // If the container hasn't changed, keep cached references
+        if (this.domElements && this.domElements.container === container && this.domElements.content && this.domElements.display) return;
+
+        this.domElements = this.domElements || {};
+        this.domElements.container = container;
+
+        const selectors = {
+          loading: '.rts-loading',
+          display: '.rts-letter-display',
+          content: '.rts-letter-body',
+          helpfulBtn: '.rts-btn-helpful',
+          unhelpBtn: '.rts-btn-unhelpful',
+          ratePrompt: '.rts-rate-prompt',
+          rateUpBtn: '.rts-rate-up',
+          rateDownBtn: '.rts-rate-down',
+          rateSkipBtn: '.rts-rate-skip'
+        };
+
+        for (const [key, sel] of Object.entries(selectors)) {
+          this.domElements[key] = container.querySelector(sel) || null;
         }
 
-        // Fallback to document-wide search only if needed
-        if (!this.domElements.display) {
-          this.domElements.display = document.querySelector('.rts-letter-display');
-        }
-        if (!this.domElements.content) {
-          this.domElements.content = document.querySelector('.rts-letter-body');
-        }
-
-        // One-time fallback checks (avoid recurring timeouts)
-        if (!this.domElements.ratePrompt) {
-          this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
-        }
-        if (!this.domElements.helpfulBtn) {
-          this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
-        }
-        if (!this.domElements.unhelpBtn) {
-          this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
-        }
+        // Minimal fallbacks (only once, and only if missing)
+        if (!this.domElements.display) this.domElements.display = document.querySelector('.rts-letter-display');
+        if (!this.domElements.content) this.domElements.content = document.querySelector('.rts-letter-body');
+        if (!this.domElements.ratePrompt) this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
+        if (!this.domElements.helpfulBtn) this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
+        if (!this.domElements.unhelpBtn) this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
       },
 
       getRestBase() {
@@ -964,6 +1013,13 @@ getCacheKey() {
       // =============================
       openOnboardingDialog(onboardingEl) {
         try {
+          // Ensure overlay is a direct child of <body> so global pointer-event locks can't disable it (Elementor wrappers can).
+          try {
+            if (onboardingEl && onboardingEl.parentElement && onboardingEl.parentElement !== document.body) {
+              document.body.appendChild(onboardingEl);
+            }
+          } catch (e) {}
+
           if (!onboardingEl || this.onboardingA11y.active) return;
           const modal = onboardingEl.querySelector('.rts-onboarding-modal');
           if (!modal) return;
@@ -1302,53 +1358,52 @@ getCacheKey() {
         }
       },
 
+progressiveRender(contentEl, html) {
+  if (!contentEl) return;
 
+  // Fast path for small payloads
+  if (!html || (typeof html === 'string' && html.length < 1000)) {
+    contentEl.innerHTML = html || '';
+    return;
+  }
 
+  // Clear once
+  contentEl.textContent = '';
 
-      progressiveRender(contentEl, html) {
-        // Fast path for small payloads
-        if (typeof html === 'string' && html.length < 1000) {
-          contentEl.innerHTML = html;
-          return;
-        }
+  // Create temp container and MOVE nodes in batches (no cloning)
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
 
-        const fragment = document.createDocumentFragment();
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
+  const nodes = Array.from(temp.childNodes);
+  if (nodes.length <= 5) {
+    // Small DOM tree: move everything now
+    while (temp.firstChild) contentEl.appendChild(temp.firstChild);
+    temp.textContent = '';
+    return;
+  }
 
-        const children = tempDiv.children;
-        const total = children.length;
+  const initialBatch = Math.min(3, nodes.length);
+  const frag1 = document.createDocumentFragment();
 
-        // Clear once
-        contentEl.textContent = '';
+  for (let i = 0; i < initialBatch; i++) {
+    // Always move the first node because childNodes is live while we move
+    if (temp.firstChild) frag1.appendChild(temp.firstChild);
+  }
+  contentEl.appendChild(frag1);
 
-        if (total > 10) {
-          // First batch
-          for (let i = 0; i < Math.min(5, total); i++) {
-            fragment.appendChild(children[i].cloneNode(true));
-          }
-          contentEl.appendChild(fragment);
+  const renderRemaining = () => {
+    const frag2 = document.createDocumentFragment();
+    while (temp.firstChild) frag2.appendChild(temp.firstChild);
+    contentEl.appendChild(frag2);
+    temp.textContent = '';
+  };
 
-          const renderRemaining = () => {
-            const remaining = document.createDocumentFragment();
-            for (let i = 5; i < total; i++) {
-              remaining.appendChild(children[i].cloneNode(true));
-            }
-            contentEl.appendChild(remaining);
-            tempDiv.innerHTML = '';
-          };
-
-          if (window.requestIdleCallback) {
-            window.requestIdleCallback(renderRemaining, { timeout: 100 });
-          } else {
-            setTimeout(renderRemaining, 0);
-          }
-        } else {
-          while (tempDiv.firstChild) fragment.appendChild(tempDiv.firstChild);
-          contentEl.appendChild(fragment);
-          tempDiv.innerHTML = '';
-        }
-      },
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(renderRemaining, { timeout: 120 });
+  } else {
+    setTimeout(renderRemaining, 0);
+  }
+},
 
 
       renderLetter(letter) {
@@ -1376,7 +1431,9 @@ getCacheKey() {
             // Use progressive rendering for large letters
             const sanitized = this.sanitizeHtml(letter.content);
             this.progressiveRender(contentEl, sanitized);
-            this.setupLazyLoading(contentEl);
+
+            // Defer non-critical work
+            setTimeout(() => { try { this.setupLazyLoading(contentEl); } catch(e){} }, 0);
 
             // Animation with proper timing for smoother transitions
             displayEl.classList.remove('rts-fade-in');
@@ -1475,6 +1532,7 @@ getCacheKey() {
 
       async trackHelpful() {
         if (!this.currentLetter) return;
+        this.diagLog('trackHelpful', { letter_id: this.currentLetter.id || null });
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
 
@@ -1494,10 +1552,10 @@ getCacheKey() {
               await this.ajaxPost('rts_track_helpful', { letter_id: this.currentLetter.id });
             }
           }
-          this.showHelpfulToast('Thanks. That helps.');
+          window.RTSLetterSystem.safeToast('Thanks. That helps.');
         } catch (error) {
           this.logError('trackHelpful', error);
-          this.showHelpfulToast('Thanks. That helps.');
+          window.RTSLetterSystem.safeToast('Thanks. That helps.');
         }
 
         if (this.pendingNextAfterRate) {
@@ -1528,7 +1586,7 @@ getCacheKey() {
               await this.ajaxPost('rts_track_rate', { letter_id: this.currentLetter.id, value: 'down' });
             }
           }
-          this.showHelpfulToast('Thanks, that helps us improve the mix.');
+          window.RTSLetterSystem.safeToast('Thanks, that helps us improve the mix.');
         } catch (error) {
           this.logError('trackUnhelpful', error);
         }
@@ -1664,7 +1722,49 @@ getCacheKey() {
         document.body.classList.remove('rts-modal-open');
       },
 
-      showRatePrompt() {
+      
+      showHelpfulToast(message) {
+        try {
+          if (!this.features || !this.features.toastNotifications) return;
+          const msg = (message || '').toString().trim();
+          if (!msg) return;
+
+          // Reuse existing toast if present
+          let toast = document.getElementById('rts-toast');
+          if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'rts-toast';
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            toast.style.position = 'fixed';
+            toast.style.left = '50%';
+            toast.style.bottom = '18px';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.zIndex = '2147483647';
+            toast.style.maxWidth = '92%';
+            toast.style.padding = '10px 14px';
+            toast.style.borderRadius = '999px';
+            toast.style.background = 'rgba(0,0,0,0.85)';
+            toast.style.color = '#fff';
+            toast.style.fontSize = '14px';
+            toast.style.lineHeight = '1.3';
+            toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 150ms ease';
+            document.body.appendChild(toast);
+          }
+
+          toast.textContent = msg;
+          clearTimeout(this._toastTimer);
+          requestAnimationFrame(() => { toast.style.opacity = '1'; });
+
+          this._toastTimer = setTimeout(() => {
+            toast.style.opacity = '0';
+          }, 2200);
+        } catch (e) { /* no-op */ }
+      },
+
+showRatePrompt() {
         const prompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
         
         if (!prompt) {
@@ -1727,12 +1827,12 @@ getCacheKey() {
 
           if (!data || !data.success) {
             const msg = (data && data.message) ? data.message : 'Could not send feedback. Please try again.';
-            this.showHelpfulToast(msg);
+            window.RTSLetterSystem.safeToast(msg);
             if (submitBtn) submitBtn.disabled = false;
             return;
           }
 
-          this.showHelpfulToast('Thanks. Your feedback has been received.');
+          window.RTSLetterSystem.safeToast('Thanks. Your feedback has been received.');
           this.closeFeedbackModal();
           // Treat feedback submission as a completed rating so the Next button can proceed
           try {
@@ -1756,7 +1856,7 @@ getCacheKey() {
           if (idField) idField.value = id;
         } catch (err) {
           this.logError('submitFeedback', err);
-          this.showHelpfulToast('Network issue. Please try again.');
+          window.RTSLetterSystem.safeToast('Network issue. Please try again.');
           if (submitBtn) submitBtn.disabled = false;
         }
       },
@@ -2087,7 +2187,7 @@ bindEvents() {
         // Keep existing online/offline handlers
         const onlineHandler = () => {
           this.isOnline = true;
-          this.showHelpfulToast('Connection restored');
+          window.RTSLetterSystem.safeToast('Connection restored');
           this.healthCheck();
         };
         window.addEventListener('online', onlineHandler);
@@ -2095,21 +2195,107 @@ bindEvents() {
 
         const offlineHandler = () => {
           this.isOnline = false;
-          this.showHelpfulToast('You are offline. Some features may be limited.');
+          window.RTSLetterSystem.safeToast('You are offline. Some features may be limited.');
         };
         window.addEventListener('offline', offlineHandler);
         this.eventListeners.push({ element: window, type: 'offline', handler: offlineHandler });
 
         // Single delegated click handler
         const clickHandler = (e) => {
-          // 1. Next Letter Button
+
+          // Touchscreen reliability: avoid double-fire (pointerup + click)
+          try {
+            const now = Date.now();
+            if (e.type === 'click' && this._lastPointerUpTs && (now - this._lastPointerUpTs) < 350) {
+              return;
+            }
+            if (e.type === 'pointerup') {
+              this._lastPointerUpTs = now;
+            }
+          } catch (err) {}
+
+
+          // --- Language switcher (global, must work outside letter viewer) ---
+          // Some optimisation layers (eg NitroPack) can defer/strip inline scripts,
+          // so we support the header language dropdown here.
+          const langToggle = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-button') : null;
+          if (langToggle) {
+            if (e.cancelable) e.preventDefault();
+            this.diagLog('lang_toggle', { expanded: langToggle.getAttribute('aria-expanded') });
+
+            const btn = langToggle;
+            const wrapper = btn.closest('.rts-lang-compact-wrapper') || document;
+            const menu = wrapper.querySelector ? wrapper.querySelector('.rts-lang-compact-menu') : null;
+            if (menu) {
+              const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+              btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+              menu.style.display = isExpanded ? 'none' : 'grid';
+            }
+            return;
+          }
+
+          // If a language option is clicked, set cookie early (navigation still happens)
+          const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option') : null;
+          if (langOption) {
+            this.diagLog('lang_option', { lang: langOption.getAttribute('data-lang'), href: langOption.getAttribute('href') });
+            try {
+              const lang = langOption.getAttribute('data-lang');
+              if (lang) {
+                document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
+              }
+            } catch (err) {}
+            // allow default navigation
+            return;
+          }
+
+          // Close language menu when clicking outside it
+          const langBtnEl = document.getElementById('rts-lang-compact-btn');
+          const langMenuEl = document.getElementById('rts-lang-compact-menu');
+          if (langBtnEl && langMenuEl) {
+            const wrapper = langBtnEl.closest('.rts-lang-compact-wrapper');
+            const clickedInside = wrapper && wrapper.contains ? wrapper.contains(e.target) : false;
+            if (!clickedInside) {
+              langBtnEl.setAttribute('aria-expanded', 'false');
+              langMenuEl.style.display = 'none';
+            }
+          }          // Performance: ignore clicks outside relevant RTS UI areas
+          const target = e.target;
+          if (!target) return;
+
+          const viewerContainer = (this.domElements && this.domElements.container)
+            ? this.domElements.container
+            : document.querySelector('.rts-letter-viewer');
+
+          const onboardingOverlay = document.querySelector('.rts-onboarding-overlay');
+          const isOnboardingClick = onboardingOverlay && onboardingOverlay.contains(target);
+
+          // Allow onboarding interactions (mobile taps on labels/inputs) and language switcher
+          if (!isOnboardingClick) {
+            if (!viewerContainer || !viewerContainer.contains(target)) return;
+          }
+
+          // Only react to actionable controls (supports taps on SVG/path inside buttons)
+          // IMPORTANT: Do not intercept generic <button> or <a> elements.
+          // Intercept only RTS controls, otherwise we break navigation, forms, and Elementor widgets.
+          const actionable = target.closest(
+            '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
+          );
+          if (!actionable) return;
+
+// 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
 
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
             if (this.currentLetter && !this.currentLetter._rtsRated && ratePrompt) {
+              // If the prompt is already open and user presses Next again, override and load next.
+              if (this.pendingNextAfterRate && ratePrompt.classList && ratePrompt.classList.contains('is-open')) {
+                this.pendingNextAfterRate = false;
+                this.hideRatePrompt();
+                this.getNextLetter(true);
+                return;
+              }
               this.pendingNextAfterRate = true;
               this.showRatePrompt();
               return;
@@ -2123,7 +2309,6 @@ bindEvents() {
           if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
           if (e.target.closest('.rts-rate-skip')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.hideRatePrompt();
             if (this.pendingNextAfterRate) { this.pendingNextAfterRate = false; this.getNextLetter(true); }
             return;
@@ -2137,7 +2322,6 @@ bindEvents() {
           const shareBtn = e.target.closest('.rts-share-btn');
           if (shareBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             const platform = shareBtn.dataset.platform;
             if (platform) {
               this.trackShare(platform);
@@ -2149,7 +2333,6 @@ bindEvents() {
           // 5. Onboarding: Exit/Skip
           if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.skipOnboarding();
             return;
           }
@@ -2158,7 +2341,6 @@ bindEvents() {
           const nextStepBtn = e.target.closest('.rts-btn-next-step');
           if (nextStepBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
 
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
             const stepEl = nextStepBtn.closest('.rts-onboarding-step');
@@ -2179,7 +2361,6 @@ bindEvents() {
           // 7. Onboarding: Complete
           if (e.target.closest('.rts-btn-complete')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.completeOnboarding();
             return;
           }
@@ -2188,7 +2369,6 @@ bindEvents() {
           const openBtn = e.target.closest('.rts-feedback-open');
           if (openBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             let defaultRating = 'neutral';
             if (document.querySelector('.rts-btn-helpful.rts-helped')) defaultRating = 'up';
             if (document.querySelector('.rts-btn-unhelpful.rts-helped')) defaultRating = 'down';
@@ -2203,7 +2383,66 @@ bindEvents() {
         };
 
         document.addEventListener('click', clickHandler, { passive: false });
+        document.addEventListener('pointerup', clickHandler, { passive: false });
         this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
+
+        // Touch-safety: ensure onboarding overlay remains interactive on iOS
+        try {
+          const onboardingOverlay = document.querySelector('.rts-onboarding-overlay');
+          if (onboardingOverlay && !this._onboardingTouchBound) {
+            this._onboardingTouchBound = true;
+            const trap = (e) => {
+              // If onboarding is active, keep taps inside it from being swallowed by other layers
+              if (!document.documentElement.classList.contains('rts-onboarding-active')) return;
+              const t = e.target;
+              if (!t) return;
+              if (t.closest('.rts-onboarding-modal')) {
+              }
+            };
+            onboardingOverlay.addEventListener('pointerdown', trap, { passive: false });
+            this.eventListeners.push({ element: onboardingOverlay, type: 'pointerdown', handler: trap });
+          }
+        } catch(e) {}
+
+        // Language picker: robust toggle on touch (does not rely on delegated click)
+        try {
+          const langBtn = document.getElementById('rts-lang-compact-btn');
+          const langMenu = document.getElementById('rts-lang-compact-menu');
+          if (langBtn && langMenu && !this._langTouchBound) {
+            this._langTouchBound = true;
+
+            const closeLang = () => {
+              langMenu.style.display = 'none';
+              langBtn.setAttribute('aria-expanded', 'false');
+              langBtn.classList.remove('is-open');
+            };
+
+            const toggleLang = (e) => {
+              if (e.cancelable) e.preventDefault();
+              const open = langMenu.style.display !== 'none';
+              if (open) closeLang();
+              else {
+                langMenu.style.display = 'block';
+                langBtn.setAttribute('aria-expanded', 'true');
+                langBtn.classList.add('is-open');
+              }
+            };
+
+            langBtn.addEventListener('pointerup', toggleLang, { passive: false });
+            langBtn.addEventListener('click', toggleLang, { passive: false });
+
+            const docClose = (e) => {
+              if (!langMenu || !langBtn) return;
+              if (langBtn.contains(e.target) || langMenu.contains(e.target)) return;
+              closeLang();
+            };
+            document.addEventListener('pointerdown', docClose, { passive: true });
+            this.eventListeners.push({ element: document, type: 'pointerdown', handler: docClose });
+          }
+        } catch(e) {}
+
+
+        this.eventListeners.push({ element: document, type: 'pointerup', handler: clickHandler });
 
         // Keydown handler (Escape handling)
         const keydownHandler = (e) => {
@@ -2217,7 +2456,6 @@ bindEvents() {
             const display = window.getComputedStyle(onboarding).display;
             if (!isHidden && display !== 'none') {
               if (e.cancelable) e.preventDefault();
-              e.stopPropagation();
               this.skipOnboarding();
               return;
             }
