@@ -532,20 +532,15 @@ class RTS_Shortcodes {
      * Pulls real data from database with manual override support
      * v2.0.17: Optimized with external CSS/JS
      */
-    public     /**
-     * [rts_site_stats_row]
-     */
     public function site_stats_row($atts) {
-        // Enqueue styles cleanly when shortcode is used
-        wp_enqueue_style(
-            'rts-stats-row',
-            get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css',
-            [],
-            '2.0.17'
-        );
-
+        // Enqueue the stats styles (only when shortcode is used)
+        add_action('wp_footer', function() {
+            wp_enqueue_style('rts-stats-row', get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css', [], '2.0.17');
+        }, 5);
+        
+        // Get real stats from database (now with caching)
         $stats = $this->get_site_stats();
-
+        
         ob_start();
         ?>
         <div class="rts-stats-row" role="group" aria-label="Site statistics">
@@ -553,69 +548,159 @@ class RTS_Shortcodes {
                 <div class="rts-stat-number" id="rts-letters-delivered">
                     <?php echo esc_html(number_format($stats['letters_delivered'])); ?>
                 </div>
-                <div class="rts-stat-label">letters delivered to site visitors.</div>
-            </div>
-
-            <div class="rts-stat">
-                <div class="rts-stat-number">
-                    <?php echo esc_html((int) $stats['feel_better_percent']); ?>%
+                <div class="rts-stat-label">
+                    letters delivered to site visitors.
                 </div>
-                <div class="rts-stat-label">say reading a letter made them feel “much better”.</div>
             </div>
-
+            
             <div class="rts-stat">
-                <div class="rts-stat-number">
+                <div class="rts-stat-number" id="rts-feel-better">
+                    <?php echo esc_html($stats['feel_better_percent']); ?>%
+                </div>
+                <div class="rts-stat-label">
+                    say reading a letter made them feel "much better".
+                </div>
+            </div>
+            
+            <div class="rts-stat">
+                <div class="rts-stat-number" id="rts-letters-submitted">
                     <?php echo esc_html(number_format($stats['letters_submitted'])); ?>
                 </div>
-                <div class="rts-stat-label">submitted letters to the site.</div>
+                <div class="rts-stat-label">
+                    submitted letters to the site.
+                </div>
             </div>
         </div>
-
-        <script>
-        (function(){
-            var el = document.getElementById('rts-letters-delivered');
-            if(!el || !window.fetch) return;
-            var api = "<?php echo esc_url(rest_url('rts/v1/site-stats')); ?>";
-            fetch(api, { credentials: 'same-origin' })
-                .then(function(r){ return r.ok ? r.json() : null; })
-                .then(function(d){
-                    if(d && typeof d.letters_delivered !== 'undefined'){
-                        el.textContent = new Intl.NumberFormat().format(d.letters_delivered);
-                    }
-                })
-                .catch(function(){});
-        })();
-        </script>
         <?php
+        
+        // Add inline script in footer (lightweight, one-time execution)
+        add_action('wp_footer', function() {
+            ?>
+            <script>
+            // Update stats dynamically via REST API (cached on backend)
+            (function() {
+                function updateStats() {
+                    fetch('<?php echo esc_js(rest_url('rts/v1/site-stats')); ?>')
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.letters_delivered !== undefined) {
+                                var el = document.getElementById('rts-letters-delivered');
+                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_delivered);
+                            }
+                            if (data.feel_better_percent !== undefined) {
+                                var el = document.getElementById('rts-feel-better');
+                                if (el) el.textContent = String(data.feel_better_percent) + '%';
+                            }
+                            if (data.letters_submitted !== undefined) {
+                                var el = document.getElementById('rts-letters-submitted');
+                                if (el) el.textContent = new Intl.NumberFormat().format(data.letters_submitted);
+                            }
+                        })
+                        .catch(function() {}); // Silent fail - initial HTML values remain
+                }
+                
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', updateStats);
+                } else {
+                    updateStats();
+                }
+            })();
+            </script>
+            <?php
+        }, 20);
+        
         return ob_get_clean();
     }
-
+    
     /**
-     * Helper to get stats (Private)
+     * Get real site stats from database
+     * Now with caching and security improvements (v2.0.17)
      */
     private function get_site_stats() {
-        // Prefer the shared helper in functions.php so stats stay "one source of truth"
-        if (function_exists('rts_get_site_stats')) {
-            $raw = rts_get_site_stats();
-
-            return [
-                'letters_delivered'   => (int) ($raw['letters_delivered'] ?? 0),
-                'feel_better_percent' => (int) round((float) ($raw['feel_better_percent'] ?? 0)),
-                'letters_submitted'   => (int) ($raw['total_letters'] ?? 0),
-            ];
+        // Check cache first (5 minute cache)
+        $cache_key = 'rts_site_stats_v1';
+        $cached = get_transient($cache_key);
+        
+        if ($cached !== false && is_array($cached)) {
+            return $cached;
         }
-
-        // Safe fallback if helper is unavailable for any reason
+        
         global $wpdb;
-        $total_letters = (int) (wp_count_posts('letter')->publish ?? 0);
-        $letters_delivered = $wpdb->get_var("SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = 'view_count'");
-        $feel_better_percent = (float) get_option('rts_feel_better_percentage', 0);
 
-        return [
-            'letters_delivered'   => (int) ($letters_delivered ?? 0),
-            'feel_better_percent' => (int) round($feel_better_percent),
-            'letters_submitted'   => $total_letters,
+        // Optional additive offsets (keeps stats "live" while allowing a migration bump)
+        $override_raw = get_option('rts_stats_override', []);
+        if (!is_array($override_raw)) {
+            $override_raw = [];
+        }
+        $override = wp_parse_args($override_raw, [
+            'enabled' => 0,
+            // Interpreted as additive offsets when enabled
+            'letters_delivered' => 0,
+            'letters_submitted' => 0,
+            // Optional: add to helpful/"feel better" numerator
+            'helps' => 0,
+            // Optional: if set (0-100), override computed percentage
+            'feel_better_percent' => '',
+            // Legacy key from earlier UI versions (treated as letters_submitted offset)
+            'total_letters' => 0,
+        ]);
+
+        $use_offsets = !empty($override['enabled']);
+        $offset_delivered = $use_offsets ? max(0, intval($override['letters_delivered'])) : 0;
+        $legacy_submitted  = $use_offsets ? max(0, intval($override['total_letters'])) : 0;
+        $offset_submitted  = $use_offsets ? max(0, intval($override['letters_submitted'])) : 0;
+        $offset_submitted  = max($offset_submitted, $legacy_submitted);
+        $offset_helps      = $use_offsets ? max(0, intval($override['helps'])) : 0;
+        
+        // Total letters delivered (sum of all view_count) - With prepared statement
+        $letters_delivered = $wpdb->get_var($wpdb->prepare("
+            SELECT SUM(CAST(meta_value AS UNSIGNED))
+            FROM {$wpdb->postmeta}
+            WHERE meta_key = %s
+        ", 'view_count'));
+        $letters_delivered = intval($letters_delivered);
+        
+        // Total helps (sum of all help_count) - With prepared statement
+        $total_helps = $wpdb->get_var($wpdb->prepare("
+            SELECT SUM(CAST(meta_value AS UNSIGNED))
+            FROM {$wpdb->postmeta}
+            WHERE meta_key = %s
+        ", 'help_count'));
+        $total_helps = intval($total_helps);
+
+        // Apply offsets (migration bump) while keeping stats live
+        $letters_delivered_total = $letters_delivered + $offset_delivered;
+        $total_helps_total       = $total_helps + $offset_helps;
+        
+        // Calculate (or override) feel better percentage
+        $feel_better_percent = 0;
+        $manual_percent = $use_offsets ? $override['feel_better_percent'] : '';
+        if ($manual_percent !== '' && is_numeric($manual_percent)) {
+            $feel_better_percent = max(0, min(100, (int) round(floatval($manual_percent))));
+        } else {
+            if ($letters_delivered_total > 0) {
+                $feel_better_percent = round(($total_helps_total / $letters_delivered_total) * 100);
+            }
+            // Keep within sane bounds (helps can exceed views if a user clicks multiple times)
+            $feel_better_percent = max(0, min(100, intval($feel_better_percent)));
+        }
+        
+        // Total submitted letters (published + pending)
+        $letters_submitted = wp_count_posts('letter');
+        $total_submitted = intval($letters_submitted->publish) + intval($letters_submitted->pending);
+
+        $total_submitted = $total_submitted + $offset_submitted;
+        
+        $stats = [
+            'letters_delivered' => $letters_delivered_total,
+            'feel_better_percent' => $feel_better_percent,
+            'letters_submitted' => $total_submitted
         ];
+        
+        // Cache for 5 minutes
+        set_transient($cache_key, $stats, 5 * MINUTE_IN_SECONDS);
+        
+        return $stats;
     }
 }
 

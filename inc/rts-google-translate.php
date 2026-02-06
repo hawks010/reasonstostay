@@ -65,9 +65,6 @@ class RTS_Google_Translate {
 				flags.forEach(function(flag) {
 					flag.addEventListener('click', function(e) {
 						// 1. Stop the default theme link behavior (prevent ?rts_lang=xx reload)
-						const combo = document.querySelector('select.goog-te-combo');
-						const gtReady = !!(window.google && google.translate && combo);
-						if (!gtReady) { return; } // fall back to normal ?rts_lang navigation
 						e.preventDefault();
 
 						const themeLang = flag.getAttribute('data-lang');

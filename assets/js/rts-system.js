@@ -19,72 +19,6 @@
     // Main System Definition attached directly to window
     window.RTSLetterSystem = {
       loaded: true, // Flag to prevent re-init
-      // --- Debug / diagnostics ---
-      diagEnabled: (function(){
-        try {
-          const url = new URL(window.location.href);
-          if (url.searchParams.get('rts_debug') === '1') return true;
-          if (window.localStorage && localStorage.getItem('rts_debug') === '1') return true;
-        } catch (e) {}
-        return false;
-      })(),
-      diagLogs: [],
-      diagLog(event, data) {
-        try {
-          if (!this.diagEnabled) return;
-          const entry = { t: Date.now(), event: String(event || 'event'), data: data || null };
-          this.diagLogs.push(entry);
-          if (this.diagLogs.length > 300) this.diagLogs.shift();
-          if (window.console && console.log) console.log('[RTS diag]', entry.event, entry.data);
-          window.RTS_DIAG_LOGS = this.diagLogs;
-        } catch (e) {}
-      },
-      enableDiag() {
-        this.diagEnabled = true;
-        try { if (window.localStorage) localStorage.setItem('rts_debug','1'); } catch(e) {}
-        this.diagLog('diag_enabled', { url: window.location.href });
-      },
-      // --- Toasts ---
-      showHelpfulToast(message, type = 'info', duration = 2600) {
-        try {
-          const msg = (message || '').toString();
-          if (!msg) return;
-          let wrap = document.getElementById('rts-toast-wrap');
-          if (!wrap) {
-            wrap = document.createElement('div');
-            wrap.id = 'rts-toast-wrap';
-            wrap.setAttribute('aria-live', 'polite');
-            wrap.setAttribute('aria-atomic', 'true');
-            wrap.style.cssText = 'position:fixed;z-index:999999;right:14px;bottom:14px;max-width:320px;display:flex;flex-direction:column;gap:10px;';
-            document.body.appendChild(wrap);
-          }
-          const toast = document.createElement('div');
-          toast.className = 'rts-toast rts-toast-' + type;
-          toast.style.cssText = 'background:#111827;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,0.25);font-size:14px;line-height:1.3;';
-          toast.textContent = msg;
-          wrap.appendChild(toast);
-          window.setTimeout(() => {
-            try { toast.style.opacity = '0'; toast.style.transition = 'opacity .2s ease'; } catch(e) {}
-            window.setTimeout(() => { try { toast.remove(); } catch(e) {} }, 260);
-          }, Math.max(800, duration|0));
-        } catch (e) {
-          try { console.log('[RTS toast fallback]', message); } catch (ee) {}
-        }
-      },
-      safeToast(message, type = 'info') {
-        try {
-          // Prefer the instance method, but never assume `this` binding is intact.
-          if (window.RTSLetterSystem && typeof window.RTSLetterSystem.showHelpfulToast === 'function') {
-            window.RTSLetterSystem.showHelpfulToast(message, type);
-            return;
-          }
-          if (typeof this.showHelpfulToast === 'function') {
-            window.RTSLetterSystem.safeToast(message, type);
-            return;
-          }
-        } catch (e) {}
-        try { console.log('[RTS]', message); } catch(e) {}
-      },
 
       // State
       preferences: {
@@ -278,21 +212,7 @@
           this.setupExperiments();
           this.ensureStyles();
           this.setupPerformanceTracking();
-this.addResourceHints();
-
-// Diagnostics: capture errors and promise rejections when enabled
-try {
-  this.diagLog('init', { ua: navigator.userAgent, rocket: !!window.__cfRLUnblockHandlers });
-  if (this.diagEnabled) {
-    window.addEventListener('error', (ev) => {
-      try { this.diagLog('window_error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno }); } catch(e){}
-    });
-    window.addEventListener('unhandledrejection', (ev) => {
-      try { this.diagLog('unhandledrejection', { reason: (ev && ev.reason) ? (''+ev.reason) : 'unknown' }); } catch(e){}
-    });
-  }
-} catch(e) {}
-
+          this.addResourceHints();
 
           this.sessionStartTime = Date.now();
           this.lastActivityTime = Date.now();
@@ -307,6 +227,19 @@ try {
           this.setupMemoryWatchdog();
 
           window.addEventListener('beforeunload', () => this.cleanup());
+
+          if (window.history && window.history.pushState) {
+            try {
+              const self = this;
+              const originalPushState = history.pushState;
+              history.pushState = function () {
+                originalPushState.apply(this, arguments);
+                self.cleanup();
+              };
+            } catch (e) {
+              this.logError('historyOverride', e);
+            }
+          }
         } catch (error) {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
           const fallbackMsg = document.createElement('div');
@@ -469,7 +402,7 @@ injectCriticalStyles() {
               if (!newWorker) return;
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  window.RTSLetterSystem.safeToast('New version available. Refresh to update.');
+                  this.showHelpfulToast('New version available. Refresh to update.');
                 }
               });
             });
@@ -1013,13 +946,6 @@ getCacheKey() {
       // =============================
       openOnboardingDialog(onboardingEl) {
         try {
-          // Ensure overlay is a direct child of <body> so global pointer-event locks can't disable it (Elementor wrappers can).
-          try {
-            if (onboardingEl && onboardingEl.parentElement && onboardingEl.parentElement !== document.body) {
-              document.body.appendChild(onboardingEl);
-            }
-          } catch (e) {}
-
           if (!onboardingEl || this.onboardingA11y.active) return;
           const modal = onboardingEl.querySelector('.rts-onboarding-modal');
           if (!modal) return;
@@ -1532,7 +1458,6 @@ progressiveRender(contentEl, html) {
 
       async trackHelpful() {
         if (!this.currentLetter) return;
-        this.diagLog('trackHelpful', { letter_id: this.currentLetter.id || null });
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
 
@@ -1552,10 +1477,10 @@ progressiveRender(contentEl, html) {
               await this.ajaxPost('rts_track_helpful', { letter_id: this.currentLetter.id });
             }
           }
-          window.RTSLetterSystem.safeToast('Thanks. That helps.');
+          this.showHelpfulToast('Thanks. That helps.');
         } catch (error) {
           this.logError('trackHelpful', error);
-          window.RTSLetterSystem.safeToast('Thanks. That helps.');
+          this.showHelpfulToast('Thanks. That helps.');
         }
 
         if (this.pendingNextAfterRate) {
@@ -1586,7 +1511,7 @@ progressiveRender(contentEl, html) {
               await this.ajaxPost('rts_track_rate', { letter_id: this.currentLetter.id, value: 'down' });
             }
           }
-          window.RTSLetterSystem.safeToast('Thanks, that helps us improve the mix.');
+          this.showHelpfulToast('Thanks, that helps us improve the mix.');
         } catch (error) {
           this.logError('trackUnhelpful', error);
         }
@@ -1827,12 +1752,12 @@ showRatePrompt() {
 
           if (!data || !data.success) {
             const msg = (data && data.message) ? data.message : 'Could not send feedback. Please try again.';
-            window.RTSLetterSystem.safeToast(msg);
+            this.showHelpfulToast(msg);
             if (submitBtn) submitBtn.disabled = false;
             return;
           }
 
-          window.RTSLetterSystem.safeToast('Thanks. Your feedback has been received.');
+          this.showHelpfulToast('Thanks. Your feedback has been received.');
           this.closeFeedbackModal();
           // Treat feedback submission as a completed rating so the Next button can proceed
           try {
@@ -1856,7 +1781,7 @@ showRatePrompt() {
           if (idField) idField.value = id;
         } catch (err) {
           this.logError('submitFeedback', err);
-          window.RTSLetterSystem.safeToast('Network issue. Please try again.');
+          this.showHelpfulToast('Network issue. Please try again.');
           if (submitBtn) submitBtn.disabled = false;
         }
       },
@@ -2187,7 +2112,7 @@ bindEvents() {
         // Keep existing online/offline handlers
         const onlineHandler = () => {
           this.isOnline = true;
-          window.RTSLetterSystem.safeToast('Connection restored');
+          this.showHelpfulToast('Connection restored');
           this.healthCheck();
         };
         window.addEventListener('online', onlineHandler);
@@ -2195,7 +2120,7 @@ bindEvents() {
 
         const offlineHandler = () => {
           this.isOnline = false;
-          window.RTSLetterSystem.safeToast('You are offline. Some features may be limited.');
+          this.showHelpfulToast('You are offline. Some features may be limited.');
         };
         window.addEventListener('offline', offlineHandler);
         this.eventListeners.push({ element: window, type: 'offline', handler: offlineHandler });
@@ -2221,7 +2146,7 @@ bindEvents() {
           const langToggle = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-button') : null;
           if (langToggle) {
             if (e.cancelable) e.preventDefault();
-            this.diagLog('lang_toggle', { expanded: langToggle.getAttribute('aria-expanded') });
+            e.stopPropagation();
 
             const btn = langToggle;
             const wrapper = btn.closest('.rts-lang-compact-wrapper') || document;
@@ -2237,7 +2162,6 @@ bindEvents() {
           // If a language option is clicked, set cookie early (navigation still happens)
           const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option') : null;
           if (langOption) {
-            this.diagLog('lang_option', { lang: langOption.getAttribute('data-lang'), href: langOption.getAttribute('href') });
             try {
               const lang = langOption.getAttribute('data-lang');
               if (lang) {
@@ -2275,16 +2199,15 @@ bindEvents() {
           }
 
           // Only react to actionable controls (supports taps on SVG/path inside buttons)
-          // IMPORTANT: Do not intercept generic <button> or <a> elements.
-          // Intercept only RTS controls, otherwise we break navigation, forms, and Elementor widgets.
           const actionable = target.closest(
-            '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
+            '[data-rts-close], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open, button, a'
           );
           if (!actionable) return;
 
 // 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
 
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
@@ -2305,23 +2228,25 @@ bindEvents() {
           }
 
           // 2. Rating prompt buttons
-          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
           if (e.target.closest('.rts-rate-skip')) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             this.hideRatePrompt();
             if (this.pendingNextAfterRate) { this.pendingNextAfterRate = false; this.getNextLetter(true); }
             return;
           }
 
           // 3. Backwards compatible helpful buttons
-          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
 
           // 4. Share buttons
           const shareBtn = e.target.closest('.rts-share-btn');
           if (shareBtn) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             const platform = shareBtn.dataset.platform;
             if (platform) {
               this.trackShare(platform);
@@ -2333,6 +2258,7 @@ bindEvents() {
           // 5. Onboarding: Exit/Skip
           if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             this.skipOnboarding();
             return;
           }
@@ -2341,6 +2267,7 @@ bindEvents() {
           const nextStepBtn = e.target.closest('.rts-btn-next-step');
           if (nextStepBtn) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
 
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
             const stepEl = nextStepBtn.closest('.rts-onboarding-step');
@@ -2361,6 +2288,7 @@ bindEvents() {
           // 7. Onboarding: Complete
           if (e.target.closest('.rts-btn-complete')) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             this.completeOnboarding();
             return;
           }
@@ -2369,6 +2297,7 @@ bindEvents() {
           const openBtn = e.target.closest('.rts-feedback-open');
           if (openBtn) {
             if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             let defaultRating = 'neutral';
             if (document.querySelector('.rts-btn-helpful.rts-helped')) defaultRating = 'up';
             if (document.querySelector('.rts-btn-unhelpful.rts-helped')) defaultRating = 'down';
@@ -2377,9 +2306,9 @@ bindEvents() {
           }
 
           const triggerBtn = e.target.closest('.rts-trigger-open');
-          if (triggerBtn) { if (e.cancelable) e.preventDefault(); this.openFeedbackModal('down', true); return; }
+          if (triggerBtn) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.openFeedbackModal('down', true); return; }
 
-          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); this.closeFeedbackModal(); return; }
+          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
         };
 
         document.addEventListener('click', clickHandler, { passive: false });
@@ -2397,6 +2326,7 @@ bindEvents() {
               const t = e.target;
               if (!t) return;
               if (t.closest('.rts-onboarding-modal')) {
+                e.stopPropagation();
               }
             };
             onboardingOverlay.addEventListener('pointerdown', trap, { passive: false });
@@ -2419,6 +2349,7 @@ bindEvents() {
 
             const toggleLang = (e) => {
               if (e.cancelable) e.preventDefault();
+              e.stopPropagation();
               const open = langMenu.style.display !== 'none';
               if (open) closeLang();
               else {
@@ -2456,6 +2387,7 @@ bindEvents() {
             const display = window.getComputedStyle(onboarding).display;
             if (!isHidden && display !== 'none') {
               if (e.cancelable) e.preventDefault();
+              e.stopPropagation();
               this.skipOnboarding();
               return;
             }

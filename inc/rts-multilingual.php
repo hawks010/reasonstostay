@@ -79,21 +79,6 @@ class RTS_Multilingual {
 			'id' => ['name' => 'Bahasa Indonesia', 'flag' => '🇮🇩', 'google_code' => 'id', 'dir' => 'ltr'],
 		];
 
-// Normalise language definitions for backwards-compatibility.
-// Some renderers expect `native` but older configs only define `name`.
-foreach ($this->supported_languages as $code => $lang) {
-    if (!isset($lang['native']) || $lang['native'] === '') {
-        $this->supported_languages[$code]['native'] = $lang['name'] ?? strtoupper((string) $code);
-    }
-    if (!isset($lang['name']) || $lang['name'] === '') {
-        $this->supported_languages[$code]['name'] = $this->supported_languages[$code]['native'];
-    }
-    if (!isset($lang['flag'])) {
-        $this->supported_languages[$code]['flag'] = '🌐';
-    }
-}
-
-
 		$this->current_language = $this->detect_language();
 		$this->load_translations();
 
