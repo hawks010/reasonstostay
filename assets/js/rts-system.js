@@ -2305,8 +2305,8 @@ bindEvents() {
           }
 
           // 2. Rating prompt buttons
-          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
           if (e.target.closest('.rts-rate-skip')) {
             if (e.cancelable) e.preventDefault();
             this.hideRatePrompt();
@@ -2315,8 +2315,8 @@ bindEvents() {
           }
 
           // 3. Backwards compatible helpful buttons
-          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
 
           // 4. Share buttons
           const shareBtn = e.target.closest('.rts-share-btn');
@@ -2377,9 +2377,9 @@ bindEvents() {
           }
 
           const triggerBtn = e.target.closest('.rts-trigger-open');
-          if (triggerBtn) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.openFeedbackModal('down', true); return; }
+          if (triggerBtn) { if (e.cancelable) e.preventDefault(); this.openFeedbackModal('down', true); return; }
 
-          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
+          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); this.closeFeedbackModal(); return; }
         };
 
         document.addEventListener('click', clickHandler, { passive: false });
