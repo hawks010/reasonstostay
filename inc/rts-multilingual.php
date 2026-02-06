@@ -79,6 +79,21 @@ class RTS_Multilingual {
 			'id' => ['name' => 'Bahasa Indonesia', 'flag' => '🇮🇩', 'google_code' => 'id', 'dir' => 'ltr'],
 		];
 
+// Normalise language definitions for backwards-compatibility.
+// Some renderers expect `native` but older configs only define `name`.
+foreach ($this->supported_languages as $code => $lang) {
+    if (!isset($lang['native']) || $lang['native'] === '') {
+        $this->supported_languages[$code]['native'] = $lang['name'] ?? strtoupper((string) $code);
+    }
+    if (!isset($lang['name']) || $lang['name'] === '') {
+        $this->supported_languages[$code]['name'] = $this->supported_languages[$code]['native'];
+    }
+    if (!isset($lang['flag'])) {
+        $this->supported_languages[$code]['flag'] = '🌐';
+    }
+}
+
+
 		$this->current_language = $this->detect_language();
 		$this->load_translations();
 
@@ -352,7 +367,7 @@ class RTS_Multilingual {
 			echo '<div class="rts-language-switcher rts-compact">';
 			echo '<div class="rts-lang-compact-wrapper">';
 			echo sprintf(
-				'<button type="button" class="rts-lang-compact-button" id="rts-lang-compact-btn" aria-haspopup="listbox" aria-expanded="false" title="Change Language">
+				'<button type="button" class="rts-lang-compact-button" aria-haspopup="listbox" aria-expanded="false" title="Change Language">
 					<span class="rts-flag-emoji">%s</span>
 					<span class="rts-lang-code">%s</span>
 					<svg class="rts-dropdown-arrow" width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -363,7 +378,7 @@ class RTS_Multilingual {
 				strtoupper($this->current_language)
 			);
 
-			echo '<ul class="rts-lang-compact-menu" id="rts-lang-compact-menu" role="listbox" style="display:none;">';
+			echo '<ul class="rts-lang-compact-menu" role="listbox" style="display:none;">';
 			foreach ($this->supported_languages as $code => $lang) {
 				$active = ($code === $this->current_language) ? ' aria-selected="true"' : '';
 				$url = add_query_arg('rts_lang', $code);
@@ -406,16 +421,6 @@ class RTS_Multilingual {
 			echo '</div>';
 
 			// JavaScript for flag grid
-			echo '<script>
-(function() {
-	document.querySelectorAll(".rts-lang-flag").forEach(function(flag) {
-		flag.addEventListener("click", function(e) {
-			const lang = this.getAttribute("data-lang");
-			document.cookie = "rts_language=" + lang + "; path=/; max-age=" + (365 * 24 * 60 * 60);
-		});
-	});
-})();
-</script>';
 		} else {
 			// Custom styled dropdown with flags
 			$current_lang_data = $this->supported_languages[$this->current_language] ?? $this->supported_languages['en'];
@@ -423,7 +428,7 @@ class RTS_Multilingual {
 			echo '<div class="rts-language-switcher rts-dropdown">';
 			echo '<div class="rts-lang-dropdown-wrapper">';
 			echo sprintf(
-				'<button type="button" class="rts-lang-dropdown-button" id="rts-lang-button" aria-haspopup="listbox" aria-expanded="false">
+				'<button type="button" class="rts-lang-dropdown-button" aria-haspopup="listbox" aria-expanded="false">
 					<span class="rts-flag-emoji">%s</span>
 					<span class="rts-lang-label">%s</span>
 					<svg class="rts-dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -434,7 +439,7 @@ class RTS_Multilingual {
 				esc_html($current_lang_data['native'])
 			);
 
-			echo '<ul class="rts-lang-dropdown-menu" id="rts-lang-menu" role="listbox" style="display:none;">';
+			echo '<ul class="rts-lang-dropdown-menu" role="listbox" style="display:none;">';
 			foreach ($this->supported_languages as $code => $lang) {
 				$active = ($code === $this->current_language) ? ' aria-selected="true"' : '';
 				$url = add_query_arg('rts_lang', $code);
@@ -451,35 +456,6 @@ class RTS_Multilingual {
 			echo '</div>'; // .rts-lang-dropdown-wrapper
 
 			// JavaScript for dropdown functionality
-			echo '<script>
-(function() {
-	const button = document.getElementById("rts-lang-button");
-	const menu = document.getElementById("rts-lang-menu");
-
-	if (button && menu) {
-		button.addEventListener("click", function(e) {
-			e.stopPropagation();
-			const isExpanded = button.getAttribute("aria-expanded") === "true";
-			button.setAttribute("aria-expanded", !isExpanded);
-			menu.style.display = isExpanded ? "none" : "grid";
-		});
-
-		document.addEventListener("click", function() {
-			button.setAttribute("aria-expanded", "false");
-			menu.style.display = "none";
-		});
-
-		// Handle language selection
-		menu.querySelectorAll(".rts-lang-option").forEach(function(option) {
-			option.addEventListener("click", function(e) {
-				const lang = this.getAttribute("data-lang");
-				document.cookie = "rts_language=" + lang + "; path=/; max-age=" + (365 * 24 * 60 * 60);
-			});
-		});
-	}
-})();
-</script>';
-
 			echo '</div>'; // .rts-language-switcher
 		}
 
@@ -916,6 +892,15 @@ body:not(.rts-dark-mode) .rts-lang-flag.active {
 	.rts-flag-emoji {
 		font-size: 1.8em;
 	}
+}
+
+
+/* Click safety */
+.rts-language-switcher, .rts-language-switcher * {
+    pointer-events: auto !important;
+}
+.rts-lang-compact-menu, .rts-lang-dropdown-menu {
+    z-index: 99999 !important;
 }
 ');
 

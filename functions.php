@@ -449,8 +449,9 @@ if (file_exists($rts_engine_path)) {
 $rts_hard_reset_path = get_stylesheet_directory() . '/inc/rts-zombie-queue-hard-reset.php';
 if (file_exists($rts_hard_reset_path)) {
     require_once $rts_hard_reset_path;
+}
 
-// === THREE CRITICAL FIXES: Context-Aware Safety, Streaming Import, Multilingual ===
+// === Enterprise modules (independent includes, fail-soft) ===
 
 // Context-aware safety scanner (differentiates "I want to die" from "you should die")
 $safety_path = get_stylesheet_directory() . '/inc/rts-context-aware-safety.php';
@@ -470,8 +471,6 @@ if (file_exists($multilingual_path)) {
     require_once $multilingual_path;
 }
 
-}
-
 
 // Core includes with file_exists() checks for safety
 $core_includes = [
@@ -480,7 +479,6 @@ $core_includes = [
     'rts-bulk-jobs.php',
     'shortcodes.php',
     'logger.php',
-    'rts-multilingual.php',
     'rts-google-translate.php',
     'rts-quick-exit.php',
 ];

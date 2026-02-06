@@ -1,3 +1,4 @@
+window.RTS_DISABLE_TRACKING = true;
 /**
  * Reasons to Stay - Main JavaScript
  * Handles letter viewer, onboarding, and form submission
@@ -19,6 +20,72 @@
     // Main System Definition attached directly to window
     window.RTSLetterSystem = {
       loaded: true, // Flag to prevent re-init
+      // --- Debug / diagnostics ---
+      diagEnabled: (function(){
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('rts_debug') === '1') return true;
+          if (window.localStorage && localStorage.getItem('rts_debug') === '1') return true;
+        } catch (e) {}
+        return false;
+      })(),
+      diagLogs: [],
+      diagLog(event, data) {
+        try {
+          if (!this.diagEnabled) return;
+          const entry = { t: Date.now(), event: String(event || 'event'), data: data || null };
+          this.diagLogs.push(entry);
+          if (this.diagLogs.length > 300) this.diagLogs.shift();
+          if (window.console && console.log) console.log('[RTS diag]', entry.event, entry.data);
+          window.RTS_DIAG_LOGS = this.diagLogs;
+        } catch (e) {}
+      },
+      enableDiag() {
+        this.diagEnabled = true;
+        try { if (window.localStorage) localStorage.setItem('rts_debug','1'); } catch(e) {}
+        this.diagLog('diag_enabled', { url: window.location.href });
+      },
+      // --- Toasts ---
+      showHelpfulToast(message, type = 'info', duration = 2600) {
+        try {
+          const msg = (message || '').toString();
+          if (!msg) return;
+          let wrap = document.getElementById('rts-toast-wrap');
+          if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.id = 'rts-toast-wrap';
+            wrap.setAttribute('aria-live', 'polite');
+            wrap.setAttribute('aria-atomic', 'true');
+            wrap.style.cssText = 'position:fixed;z-index:999999;right:14px;bottom:14px;max-width:320px;display:flex;flex-direction:column;gap:10px;';
+            document.body.appendChild(wrap);
+          }
+          const toast = document.createElement('div');
+          toast.className = 'rts-toast rts-toast-' + type;
+          toast.style.cssText = 'background:#111827;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,0.25);font-size:14px;line-height:1.3;';
+          toast.textContent = msg;
+          wrap.appendChild(toast);
+          window.setTimeout(() => {
+            try { toast.style.opacity = '0'; toast.style.transition = 'opacity .2s ease'; } catch(e) {}
+            window.setTimeout(() => { try { toast.remove(); } catch(e) {} }, 260);
+          }, Math.max(800, duration|0));
+        } catch (e) {
+          try { console.log('[RTS toast fallback]', message); } catch (ee) {}
+        }
+      },
+      safeToast(message, type = 'info') {
+        try {
+          // Prefer the instance method, but never assume `this` binding is intact.
+          if (window.RTSLetterSystem && typeof window.RTSLetterSystem.showHelpfulToast === 'function') {
+            window.RTSLetterSystem.showHelpfulToast(message, type);
+            return;
+          }
+          if (typeof this.showHelpfulToast === 'function') {
+            window.RTSLetterSystem.safeToast(message, type);
+            return;
+          }
+        } catch (e) {}
+        try { console.log('[RTS]', message); } catch(e) {}
+      },
 
       // State
       preferences: {
@@ -212,7 +279,21 @@
           this.setupExperiments();
           this.ensureStyles();
           this.setupPerformanceTracking();
-          this.addResourceHints();
+this.addResourceHints();
+
+// Diagnostics: capture errors and promise rejections when enabled
+try {
+  this.diagLog('init', { ua: navigator.userAgent, rocket: !!window.__cfRLUnblockHandlers });
+  if (this.diagEnabled) {
+    window.addEventListener('error', (ev) => {
+      try { this.diagLog('window_error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno }); } catch(e){}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try { this.diagLog('unhandledrejection', { reason: (ev && ev.reason) ? (''+ev.reason) : 'unknown' }); } catch(e){}
+    });
+  }
+} catch(e) {}
+
 
           this.sessionStartTime = Date.now();
           this.lastActivityTime = Date.now();
@@ -227,19 +308,6 @@
           this.setupMemoryWatchdog();
 
           window.addEventListener('beforeunload', () => this.cleanup());
-
-          if (window.history && window.history.pushState) {
-            try {
-              const self = this;
-              const originalPushState = history.pushState;
-              history.pushState = function () {
-                originalPushState.apply(this, arguments);
-                self.cleanup();
-              };
-            } catch (e) {
-              this.logError('historyOverride', e);
-            }
-          }
         } catch (error) {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
           const fallbackMsg = document.createElement('div');
@@ -402,7 +470,7 @@ injectCriticalStyles() {
               if (!newWorker) return;
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  this.showHelpfulToast('New version available. Refresh to update.');
+                  window.RTSLetterSystem.safeToast('New version available. Refresh to update.');
                 }
               });
             });
@@ -946,6 +1014,13 @@ getCacheKey() {
       // =============================
       openOnboardingDialog(onboardingEl) {
         try {
+          // Ensure overlay is a direct child of <body> so global pointer-event locks can't disable it (Elementor wrappers can).
+          try {
+            if (onboardingEl && onboardingEl.parentElement && onboardingEl.parentElement !== document.body) {
+              document.body.appendChild(onboardingEl);
+            }
+          } catch (e) {}
+
           if (!onboardingEl || this.onboardingA11y.active) return;
           const modal = onboardingEl.querySelector('.rts-onboarding-modal');
           if (!modal) return;
@@ -1458,6 +1533,7 @@ progressiveRender(contentEl, html) {
 
       async trackHelpful() {
         if (!this.currentLetter) return;
+        this.diagLog('trackHelpful', { letter_id: this.currentLetter.id || null });
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
 
@@ -1477,10 +1553,10 @@ progressiveRender(contentEl, html) {
               await this.ajaxPost('rts_track_helpful', { letter_id: this.currentLetter.id });
             }
           }
-          this.showHelpfulToast('Thanks. That helps.');
+          window.RTSLetterSystem.safeToast('Thanks. That helps.');
         } catch (error) {
           this.logError('trackHelpful', error);
-          this.showHelpfulToast('Thanks. That helps.');
+          window.RTSLetterSystem.safeToast('Thanks. That helps.');
         }
 
         if (this.pendingNextAfterRate) {
@@ -1511,7 +1587,7 @@ progressiveRender(contentEl, html) {
               await this.ajaxPost('rts_track_rate', { letter_id: this.currentLetter.id, value: 'down' });
             }
           }
-          this.showHelpfulToast('Thanks, that helps us improve the mix.');
+          window.RTSLetterSystem.safeToast('Thanks, that helps us improve the mix.');
         } catch (error) {
           this.logError('trackUnhelpful', error);
         }
@@ -1752,12 +1828,12 @@ showRatePrompt() {
 
           if (!data || !data.success) {
             const msg = (data && data.message) ? data.message : 'Could not send feedback. Please try again.';
-            this.showHelpfulToast(msg);
+            window.RTSLetterSystem.safeToast(msg);
             if (submitBtn) submitBtn.disabled = false;
             return;
           }
 
-          this.showHelpfulToast('Thanks. Your feedback has been received.');
+          window.RTSLetterSystem.safeToast('Thanks. Your feedback has been received.');
           this.closeFeedbackModal();
           // Treat feedback submission as a completed rating so the Next button can proceed
           try {
@@ -1781,7 +1857,7 @@ showRatePrompt() {
           if (idField) idField.value = id;
         } catch (err) {
           this.logError('submitFeedback', err);
-          this.showHelpfulToast('Network issue. Please try again.');
+          window.RTSLetterSystem.safeToast('Network issue. Please try again.');
           if (submitBtn) submitBtn.disabled = false;
         }
       },
@@ -2112,7 +2188,7 @@ bindEvents() {
         // Keep existing online/offline handlers
         const onlineHandler = () => {
           this.isOnline = true;
-          this.showHelpfulToast('Connection restored');
+          window.RTSLetterSystem.safeToast('Connection restored');
           this.healthCheck();
         };
         window.addEventListener('online', onlineHandler);
@@ -2120,7 +2196,7 @@ bindEvents() {
 
         const offlineHandler = () => {
           this.isOnline = false;
-          this.showHelpfulToast('You are offline. Some features may be limited.');
+          window.RTSLetterSystem.safeToast('You are offline. Some features may be limited.');
         };
         window.addEventListener('offline', offlineHandler);
         this.eventListeners.push({ element: window, type: 'offline', handler: offlineHandler });
@@ -2146,7 +2222,7 @@ bindEvents() {
           const langToggle = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-button') : null;
           if (langToggle) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
+            this.diagLog('lang_toggle', { expanded: langToggle.getAttribute('aria-expanded') });
 
             const btn = langToggle;
             const wrapper = btn.closest('.rts-lang-compact-wrapper') || document;
@@ -2160,29 +2236,91 @@ bindEvents() {
           }
 
           // If a language option is clicked, set cookie early (navigation still happens)
-          const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option') : null;
+          const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option, .rts-lang-option, .rts-lang-flag') : null;
           if (langOption) {
+            this.diagLog('lang_option', { lang: langOption.getAttribute('data-lang'), href: langOption.getAttribute('href') });
             try {
               const lang = langOption.getAttribute('data-lang');
+              if (lang) {
+                // Prefer Google Translate integration when available (cookie method + reload).
+                if (window.RTSGoogleTranslate && typeof window.RTSGoogleTranslate.setLang === 'function' && window.RTSGoogleTranslate.isReady) {
+                  if (e.cancelable) e.preventDefault();
+                  e.stopPropagation();
+                  try { window.RTSGoogleTranslate.setLang(lang); } catch (err2) {}
+                  return;
+                }
+
+                // Persist preference for UI consistency even when navigating normally.
+                document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
+              }
+            } catch (err) {}
+            // Allow default navigation (?rts_lang=xx) if GT isn't ready/available.
+            return;
+          }
+
+
+
+          // --- Language switcher: full dropdown style (supports multiple instances) ---
+          const langDropdownToggle = e.target && e.target.closest ? e.target.closest('.rts-lang-dropdown-button') : null;
+          if (langDropdownToggle) {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+
+            const btn = langDropdownToggle;
+            const wrapper = btn.closest('.rts-lang-dropdown-wrapper') || document;
+            const menu = wrapper.querySelector ? wrapper.querySelector('.rts-lang-dropdown-menu') : null;
+
+            // Close any other open dropdown menus
+            document.querySelectorAll('.rts-lang-dropdown-button[aria-expanded="true"]').forEach((other) => {
+              if (other !== btn) {
+                other.setAttribute('aria-expanded', 'false');
+                const w = other.closest('.rts-lang-dropdown-wrapper');
+                const m = w ? w.querySelector('.rts-lang-dropdown-menu') : null;
+                if (m) m.style.display = 'none';
+              }
+            });
+
+            if (menu) {
+              const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+              btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+              menu.style.display = isExpanded ? 'none' : 'block';
+            }
+            return;
+          }
+
+          // Dropdown option click: set cookie early (navigation still happens)
+          const langDropdownOption = e.target && e.target.closest ? e.target.closest('.rts-lang-option') : null;
+          if (langDropdownOption) {
+            try {
+              const lang = langDropdownOption.getAttribute('data-lang');
               if (lang) {
                 document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
               }
             } catch (err) {}
-            // allow default navigation
             return;
           }
 
-          // Close language menu when clicking outside it
-          const langBtnEl = document.getElementById('rts-lang-compact-btn');
-          const langMenuEl = document.getElementById('rts-lang-compact-menu');
-          if (langBtnEl && langMenuEl) {
-            const wrapper = langBtnEl.closest('.rts-lang-compact-wrapper');
-            const clickedInside = wrapper && wrapper.contains ? wrapper.contains(e.target) : false;
-            if (!clickedInside) {
-              langBtnEl.setAttribute('aria-expanded', 'false');
-              langMenuEl.style.display = 'none';
-            }
-          }          // Performance: ignore clicks outside relevant RTS UI areas
+          // Close any open dropdown menus when clicking outside
+          if (!e.target.closest || !e.target.closest('.rts-lang-dropdown-wrapper')) {
+            document.querySelectorAll('.rts-lang-dropdown-button[aria-expanded="true"]').forEach((btn) => {
+              btn.setAttribute('aria-expanded', 'false');
+              const wrap = btn.closest('.rts-lang-dropdown-wrapper');
+              const menu = wrap ? wrap.querySelector('.rts-lang-dropdown-menu') : null;
+              if (menu) menu.style.display = 'none';
+            });
+          }
+
+          // Close any open compact language menus when clicking outside
+          if (!e.target.closest || !e.target.closest('.rts-lang-compact-wrapper')) {
+            document.querySelectorAll('.rts-lang-compact-button[aria-expanded="true"]').forEach((btn) => {
+              btn.setAttribute('aria-expanded', 'false');
+              const wrap = btn.closest('.rts-lang-compact-wrapper');
+              const menu = wrap ? wrap.querySelector('.rts-lang-compact-menu') : null;
+              if (menu) menu.style.display = 'none';
+            });
+          }
+
+          // Performance: ignore clicks outside relevant RTS UI areas
           const target = e.target;
           if (!target) return;
 
@@ -2199,15 +2337,16 @@ bindEvents() {
           }
 
           // Only react to actionable controls (supports taps on SVG/path inside buttons)
+          // IMPORTANT: Do not intercept generic <button> or <a> elements.
+          // Intercept only RTS controls, otherwise we break navigation, forms, and Elementor widgets.
           const actionable = target.closest(
-            '[data-rts-close], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open, button, a'
+            '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
           );
           if (!actionable) return;
 
 // 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
 
             const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
@@ -2228,25 +2367,23 @@ bindEvents() {
           }
 
           // 2. Rating prompt buttons
-          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
           if (e.target.closest('.rts-rate-skip')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.hideRatePrompt();
             if (this.pendingNextAfterRate) { this.pendingNextAfterRate = false; this.getNextLetter(true); }
             return;
           }
 
           // 3. Backwards compatible helpful buttons
-          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
 
           // 4. Share buttons
           const shareBtn = e.target.closest('.rts-share-btn');
           if (shareBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             const platform = shareBtn.dataset.platform;
             if (platform) {
               this.trackShare(platform);
@@ -2258,7 +2395,6 @@ bindEvents() {
           // 5. Onboarding: Exit/Skip
           if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.skipOnboarding();
             return;
           }
@@ -2267,7 +2403,6 @@ bindEvents() {
           const nextStepBtn = e.target.closest('.rts-btn-next-step');
           if (nextStepBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
 
             const modalEl = nextStepBtn.closest('.rts-onboarding-modal');
             const stepEl = nextStepBtn.closest('.rts-onboarding-step');
@@ -2288,7 +2423,6 @@ bindEvents() {
           // 7. Onboarding: Complete
           if (e.target.closest('.rts-btn-complete')) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             this.completeOnboarding();
             return;
           }
@@ -2297,7 +2431,6 @@ bindEvents() {
           const openBtn = e.target.closest('.rts-feedback-open');
           if (openBtn) {
             if (e.cancelable) e.preventDefault();
-            e.stopPropagation();
             let defaultRating = 'neutral';
             if (document.querySelector('.rts-btn-helpful.rts-helped')) defaultRating = 'up';
             if (document.querySelector('.rts-btn-unhelpful.rts-helped')) defaultRating = 'down';
@@ -2306,9 +2439,9 @@ bindEvents() {
           }
 
           const triggerBtn = e.target.closest('.rts-trigger-open');
-          if (triggerBtn) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.openFeedbackModal('down', true); return; }
+          if (triggerBtn) { if (e.cancelable) e.preventDefault(); this.openFeedbackModal('down', true); return; }
 
-          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); e.stopPropagation(); this.closeFeedbackModal(); return; }
+          if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); this.closeFeedbackModal(); return; }
         };
 
         document.addEventListener('click', clickHandler, { passive: false });
@@ -2326,7 +2459,6 @@ bindEvents() {
               const t = e.target;
               if (!t) return;
               if (t.closest('.rts-onboarding-modal')) {
-                e.stopPropagation();
               }
             };
             onboardingOverlay.addEventListener('pointerdown', trap, { passive: false });
@@ -2334,43 +2466,6 @@ bindEvents() {
           }
         } catch(e) {}
 
-        // Language picker: robust toggle on touch (does not rely on delegated click)
-        try {
-          const langBtn = document.getElementById('rts-lang-compact-btn');
-          const langMenu = document.getElementById('rts-lang-compact-menu');
-          if (langBtn && langMenu && !this._langTouchBound) {
-            this._langTouchBound = true;
-
-            const closeLang = () => {
-              langMenu.style.display = 'none';
-              langBtn.setAttribute('aria-expanded', 'false');
-              langBtn.classList.remove('is-open');
-            };
-
-            const toggleLang = (e) => {
-              if (e.cancelable) e.preventDefault();
-              e.stopPropagation();
-              const open = langMenu.style.display !== 'none';
-              if (open) closeLang();
-              else {
-                langMenu.style.display = 'block';
-                langBtn.setAttribute('aria-expanded', 'true');
-                langBtn.classList.add('is-open');
-              }
-            };
-
-            langBtn.addEventListener('pointerup', toggleLang, { passive: false });
-            langBtn.addEventListener('click', toggleLang, { passive: false });
-
-            const docClose = (e) => {
-              if (!langMenu || !langBtn) return;
-              if (langBtn.contains(e.target) || langMenu.contains(e.target)) return;
-              closeLang();
-            };
-            document.addEventListener('pointerdown', docClose, { passive: true });
-            this.eventListeners.push({ element: document, type: 'pointerdown', handler: docClose });
-          }
-        } catch(e) {}
 
 
         this.eventListeners.push({ element: document, type: 'pointerup', handler: clickHandler });
@@ -2387,7 +2482,6 @@ bindEvents() {
             const display = window.getComputedStyle(onboarding).display;
             if (!isHidden && display !== 'none') {
               if (e.cancelable) e.preventDefault();
-              e.stopPropagation();
               this.skipOnboarding();
               return;
             }

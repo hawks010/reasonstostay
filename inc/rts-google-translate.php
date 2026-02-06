@@ -1,8 +1,12 @@
 <?php
 /**
  * RTS Google Translate Integration
- * Provides automatic translation triggered by custom theme flags.
- * Uses the "Cookie Method" for reliable switching.
+ * Provides automatic translation triggered by theme language switcher.
+ *
+ * Design goals:
+ * - Never break normal navigation or other clickable UI.
+ * - Expose a small JS API the main rts-system.js can call (single source of truth).
+ * - Use the reliable Google "cookie method" (googtrans) + reload.
  */
 
 if (!defined('ABSPATH')) { exit; }
@@ -19,8 +23,8 @@ class RTS_Google_Translate {
 	}
 
 	private function __construct() {
-		// output the script and hidden widget in the footer
-		add_action('wp_footer', [$this, 'render_google_translate_scripts']);
+		// Output the script and hidden widget in the footer
+		add_action('wp_footer', [$this, 'render_google_translate_scripts'], 50);
 	}
 
 	/**
@@ -32,20 +36,25 @@ class RTS_Google_Translate {
 
 		<script type="text/javascript">
 			function googleTranslateElementInit() {
-				new google.translate.TranslateElement({
-					pageLanguage: 'en',
-					includedLanguages: 'en,es,fr,zh-CN,zh-TW,hi,ru,pt,ja,de,ar',
-					autoDisplay: false
-				}, 'google_translate_element');
+				try {
+					window.RTSGoogleTranslate = window.RTSGoogleTranslate || {};
+					window.RTSGoogleTranslate.isReady = true;
+
+					new google.translate.TranslateElement({
+						pageLanguage: 'en',
+						includedLanguages: 'en,es,fr,zh-CN,zh-TW,hi,ru,pt,ja,de,ar',
+						autoDisplay: false
+					}, 'google_translate_element');
+				} catch (e) {}
 			}
 		</script>
 
 		<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
 		<script type="text/javascript">
-			document.addEventListener('DOMContentLoaded', function() {
+			(function() {
 				// Map theme language codes to Google Translate codes
-				const langMap = {
+				var langMap = {
 					'en': 'en',
 					'es': 'es',
 					'fr': 'fr',
@@ -59,48 +68,66 @@ class RTS_Google_Translate {
 					'ar': 'ar'
 				};
 
-				// Select all language flags/options in the theme
-				const flags = document.querySelectorAll('.rts-lang-flag, .rts-lang-compact-option, .rts-lang-option');
+				function setCookie(name, value, maxAgeSeconds) {
+					try {
+						var parts = [name + '=' + value, 'path=/'];
+						if (typeof maxAgeSeconds === 'number') parts.push('max-age=' + maxAgeSeconds);
+						document.cookie = parts.join('; ');
+					} catch (e) {}
+				}
 
-				flags.forEach(function(flag) {
-					flag.addEventListener('click', function(e) {
-						// 1. Stop the default theme link behavior (prevent ?rts_lang=xx reload)
-						e.preventDefault();
+				function clearGoogTransCookie() {
+					try {
+						var expired = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+						// Clear both host-only and domain cookies (common GT behavior)
+						document.cookie = 'googtrans=; path=/; ' + expired;
+						document.cookie = 'googtrans=; path=/; domain=' + document.domain + '; ' + expired;
+						var rootDomain = ('.' + document.domain).replace(/^\.www\./, '.');
+						document.cookie = 'googtrans=; path=/; domain=' + rootDomain + '; ' + expired;
+					} catch (e) {}
+				}
 
-						const themeLang = flag.getAttribute('data-lang');
-						if (!themeLang) return;
+				function applyLanguage(themeLang) {
+					if (!themeLang) return;
 
-						// Map to Google Translate code
-						const targetLang = langMap[themeLang] || themeLang;
+					var targetLang = langMap[themeLang] || themeLang;
 
-						// 2. Clear existing Google cookies to ensure clean switch
-						document.cookie = "googtrans=; path=/; domain=" + document.domain + "; expires=Thu, 01 Jan 1970 00:00:00 UTC";
-						document.cookie = "googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
+					// Always persist theme preference for UI consistency
+					setCookie('rts_language', themeLang, 365 * 24 * 60 * 60);
 
-						// 3. Set the new Google Translate cookie
-						// Format: /source/target (e.g., /auto/es for Spanish)
-						const cookieValue = '/en/' + targetLang;
-						document.cookie = "googtrans=" + cookieValue + "; path=/; domain=" + document.domain;
-						document.cookie = "googtrans=" + cookieValue + "; path=/;";
+					// If GT script isn't ready yet, do NOT block anything. Let normal navigation happen.
+					if (!window.RTSGoogleTranslate || !window.RTSGoogleTranslate.isReady) return false;
 
-						// 4. Also set the Theme's preference cookie (for UI consistency)
-						document.cookie = "rts_language=" + themeLang + "; path=/; max-age=" + (365 * 24 * 60 * 60);
+					clearGoogTransCookie();
 
-						// 5. Reload the page - Google Translate will read the cookie and translate immediately on load
-						window.location.reload();
-					});
-				});
-			});
+					// Format: /source/target (e.g., /en/es)
+					var cookieValue = '/en/' + targetLang;
+
+					try {
+						// Host-only + domain cookies (covers most setups)
+						document.cookie = 'googtrans=' + cookieValue + '; path=/';
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + document.domain;
+						var rootDomain2 = ('.' + document.domain).replace(/^\.www\./, '.');
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + rootDomain2;
+					} catch (e) {}
+
+					setTimeout(function() { window.location.reload(); }, 80);
+					return true;
+				}
+
+				// Expose a tiny API for rts-system.js (single source of truth for click behavior)
+				window.RTSGoogleTranslate = window.RTSGoogleTranslate || {};
+				window.RTSGoogleTranslate.isReady = window.RTSGoogleTranslate.isReady || false;
+				window.RTSGoogleTranslate.setLang = applyLanguage;
+				window.RTSGoogleTranslate.langMap = langMap;
+			})();
 		</script>
 
 		<style>
-			/* Hide the Google Top Bar that appears after translation */
-			.goog-te-banner-frame.skiptranslate {
-				display: none !important;
-			}
-			body {
-				top: 0px !important;
-			}
+			/* Hide the Google top bar that appears after translation */
+			.goog-te-banner-frame.skiptranslate { display: none !important; }
+			body { top: 0px !important; }
+
 			/* Hide the widget completely */
 			#google_translate_element {
 				display: none !important;
@@ -108,17 +135,17 @@ class RTS_Google_Translate {
 				opacity: 0;
 				pointer-events: none;
 			}
+
 			.goog-logo-link,
 			.goog-te-gadget span,
 			.goog-te-gadget a {
 				display: none !important;
 			}
+
 			/* Ensure flags look clickable */
 			.rts-lang-flag,
 			.rts-lang-compact-option,
-			.rts-lang-option {
-				cursor: pointer;
-			}
+			.rts-lang-option { cursor: pointer; }
 		</style>
 		<?php
 	}
