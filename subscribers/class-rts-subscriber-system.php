@@ -67,7 +67,9 @@ class RTS_Subscriber_System {
         add_action('admin_init', array($this, 'migrate_legacy_subscriber_meta'));
         
         // Health & Cron
-        add_action('plugins_loaded', array($this, 'register_health_checks'));
+        // NOTE: This class is loaded from a theme (not a plugin), so `plugins_loaded`
+        // fires before the theme loads and the callback is never reached. Use `init` instead.
+        add_action('init', array($this, 'register_health_checks'));
         add_action('rts_cron_health_check', array($this, 'cron_health_check'));
         
         // Reconsent Handlers
@@ -121,54 +123,51 @@ class RTS_Subscriber_System {
     }
     
     private function init_components() {
-        if (class_exists('RTS_Subscriber_CPT')) {
-            $this->subscriber_cpt = new RTS_Subscriber_CPT();
-            if (method_exists($this->subscriber_cpt, 'init_hooks')) { $this->subscriber_cpt->init_hooks(); }
+        // Map of property => class name for all required components.
+        // Each entry is initialised if its class exists; otherwise a diagnostic message is logged.
+        $components = array(
+            'subscriber_cpt'    => 'RTS_Subscriber_CPT',
+            'newsletter_cpt'    => 'RTS_Newsletter_CPT',
+            'subscription_form' => 'RTS_Subscription_Form',
+            'email_engine'      => 'RTS_Email_Engine',
+            'email_queue'       => 'RTS_Email_Queue',
+            'email_templates'   => 'RTS_Email_Templates',
+            'smtp_settings'     => 'RTS_SMTP_Settings',
+            'unsubscribe'       => 'RTS_Unsubscribe',
+            'csv_importer'      => 'RTS_CSV_Importer',
+        );
+
+        foreach ($components as $prop => $class) {
+            if (class_exists($class)) {
+                $this->$prop = new $class();
+                if (method_exists($this->$prop, 'init_hooks')) {
+                    $this->$prop->init_hooks();
+                }
+            } else {
+                error_log('[RTS Subscriber] Missing component class: ' . $class);
+            }
         }
-        if (class_exists('RTS_Newsletter_CPT')) {
-            $this->newsletter_cpt = new RTS_Newsletter_CPT();
-            if (method_exists($this->newsletter_cpt, 'init_hooks')) { $this->newsletter_cpt->init_hooks(); }
-        }
-        if (class_exists('RTS_Subscription_Form')) {
-            $this->subscription_form = new RTS_Subscription_Form();
-            if (method_exists($this->subscription_form, 'init_hooks')) { $this->subscription_form->init_hooks(); }
-        }
-        if (class_exists('RTS_Email_Engine')) {
-            $this->email_engine = new RTS_Email_Engine();
-            if (method_exists($this->email_engine, 'init_hooks')) { $this->email_engine->init_hooks(); }
-        }
-        if (class_exists('RTS_Email_Queue')) {
-            $this->email_queue = new RTS_Email_Queue();
-            if (method_exists($this->email_queue, 'init_hooks')) { $this->email_queue->init_hooks(); }
-        }
-        if (class_exists('RTS_Email_Templates')) {
-            $this->email_templates = new RTS_Email_Templates();
-            if (method_exists($this->email_templates, 'init_hooks')) { $this->email_templates->init_hooks(); }
-        }
-        if (class_exists('RTS_SMTP_Settings')) {
-            $this->smtp_settings = new RTS_SMTP_Settings();
-            if (method_exists($this->smtp_settings, 'init_hooks')) { $this->smtp_settings->init_hooks(); }
-        }
-        if (class_exists('RTS_Unsubscribe')) {
-            $this->unsubscribe = new RTS_Unsubscribe();
-            if (method_exists($this->unsubscribe, 'init_hooks')) { $this->unsubscribe->init_hooks(); }
-        }
-        
-        // FIX: Use singleton accessor for Analytics
+
+        // Analytics uses singleton pattern.
         if (class_exists('RTS_Analytics')) {
             $this->analytics = RTS_Analytics::get_instance();
-            // Note: The Singleton constructor already calls setup_hooks(), so explicit init_hooks() call isn't needed here for Analytics if it follows the new pattern.
-            // But checking for method existence is safe.
-            if (method_exists($this->analytics, 'init_hooks')) { $this->analytics->init_hooks(); }
+            if (method_exists($this->analytics, 'init_hooks')) {
+                $this->analytics->init_hooks();
+            }
+        } else {
+            error_log('[RTS Subscriber] Missing component class: RTS_Analytics');
         }
-        
-        if (class_exists('RTS_CSV_Importer')) {
-            $this->csv_importer = new RTS_CSV_Importer();
-            if (method_exists($this->csv_importer, 'init_hooks')) { $this->csv_importer->init_hooks(); }
-        }
-        if (is_admin() && class_exists('RTS_Admin_Menu')) {
-            $this->admin_menu = new RTS_Admin_Menu();
-            if (method_exists($this->admin_menu, 'init_hooks')) { $this->admin_menu->init_hooks(); }
+
+        // Admin menu is admin-only.
+        if (is_admin()) {
+            if (class_exists('RTS_Admin_Menu')) {
+                $this->admin_menu = new RTS_Admin_Menu();
+                if (method_exists($this->admin_menu, 'init_hooks')) {
+                    $this->admin_menu->init_hooks();
+                }
+            } else {
+                error_log('[RTS Subscriber] Missing component class: RTS_Admin_Menu');
+            }
         }
     }
     

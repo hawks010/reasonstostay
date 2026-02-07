@@ -194,6 +194,9 @@ if (!class_exists('RTS_Moderation_Engine')) {
 			$post_id = absint($post_id);
 			if (!$post_id) return;
 
+			// Never process trashed letters (admin intentionally deleted them).
+			if (get_post_status($post_id) === 'trash') return;
+
 			$post = get_post($post_id);
 			if (!$post || $post->post_type !== 'letter') return;
 
