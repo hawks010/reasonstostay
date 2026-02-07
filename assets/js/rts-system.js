@@ -1206,6 +1206,40 @@ getCacheKey() {
         finally { this.loadingFirstLetter = false; }
       },
 
+      // ---------------------------------------------------------------------------
+      // Data-Diet: fetch a single letter via the native WP REST endpoint.
+      // Uses ?_fields=id,title,content,date,link to minimise payload (~90% smaller).
+      // Falls back to the custom /rts/v1/letter/next endpoint, then admin-ajax.
+      // ---------------------------------------------------------------------------
+      async fetchLetterNativeRest() {
+        const viewed = Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : [];
+        const excludeParam = viewed.length ? '&exclude=' + viewed.join(',') : '';
+
+        // Native WP REST with strict field selection (Data Diet)
+        const url = '/wp-json/wp/v2/letter?_fields=id,title,content,date,link'
+                  + '&per_page=1&orderby=rand' + excludeParam;
+
+        const response = await this.robustFetch(url, {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { 'X-WP-Nonce': ((window.RTS_CONFIG || {}).nonce || '') }
+        });
+
+        if (!response || !response.ok) return null;
+        const items = await this.parseJson(response);
+        if (!Array.isArray(items) || !items.length) return null;
+
+        // Normalize native WP shape → internal shape expected by renderLetter
+        const raw = items[0];
+        return {
+          id:      raw.id,
+          title:   (raw.title && raw.title.rendered) ? raw.title.rendered : '',
+          content: (raw.content && raw.content.rendered) ? raw.content.rendered : '',
+          date:    raw.date || '',
+          link:    raw.link || ''
+        };
+      },
+
       // forceFresh=true skips any cached letter for the current state and always requests a new one.
       async getNextLetter(forceFresh = false) {
         const onboardingEl = document.querySelector('.rts-onboarding-overlay');
@@ -1238,6 +1272,24 @@ getCacheKey() {
             return;
           }
 
+          // Read-Ahead: serve from prefetch cache (0 ms load) when available.
+          if (window.nextLetterCache && window.nextLetterCache.id) {
+            const letter = window.nextLetterCache;
+            window.nextLetterCache = null;
+
+            this.currentLetter = letter;
+            this.viewedLetterIds.push(letter.id);
+            this.saveState();
+
+            this.renderLetter(letter);
+            this.trackView(letter.id);
+
+            if (this.features.prefetch) this.prefetchNextLetter();
+            this.endTimer('getNextLetter');
+            return;
+          }
+
+          // Legacy: also honour the instance-level prefetch slot
           if (this.prefetchedLetter && this.prefetchedLetter.id) {
             const letter = this.prefetchedLetter;
             this.prefetchedLetter = null;
@@ -1262,92 +1314,109 @@ getCacheKey() {
 
           let loadedOk = false;
           try {
-                // Keep payload compact (helps mobile + slow networks)
-                const payload = {
-                  preferences: this.preferences,
-                  viewed: (Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : []),
-                  timestamp: Date.now()
-                };
+                // --- Strategy 1: Data-Diet via native WP REST ---
+                let nativeLetter = null;
+                try {
+                  nativeLetter = await this.fetchLetterNativeRest();
+                } catch (e) { /* fall through to legacy path */ }
 
-                const fetchLetterData = async () => {
-                  if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
-                    const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
-                      method: 'POST',
-                      headers: this.getHeaders(),
-                      credentials: 'same-origin',
-                      body: JSON.stringify(payload)
-                    });
+                if (nativeLetter && nativeLetter.id) {
+                  this.currentLetter = nativeLetter;
+                  this.viewedLetterIds.push(nativeLetter.id);
+                  this.saveState();
 
-                    if (response && response.ok) {
-                      try {
-                        return await this.parseJson(response);
-                      } catch (e) {
-                        return { success: false, message: 'Invalid response format' };
-                      }
-                    }
+                  this.letterCache[cacheKey] = { letter: nativeLetter, timestamp: Date.now() };
 
-                    if (response && (response.status === 403 || response.status === 404)) {
-                      return await this.ajaxPost('rts_get_next_letter', payload);
-                    }
+                  this.renderLetter(nativeLetter);
+                  this.trackView(nativeLetter.id);
+                  this.trackSuccess('nextLetter');
 
-                    return { success: false, message: `HTTP ${response ? response.status : '0'}` };
-                  }
+                  loadedOk = true;
 
-                  return await this.ajaxPost('rts_get_next_letter', payload);
-                };
-
-                // Retry once for transient network hiccups (mobile connections can be spiky)
-                let data = null;
-                for (let attempt = 0; attempt < 2; attempt++) {
-                  try {
-                    data = await fetchLetterData();
-                    break;
-                  } catch (e) {
-                    if (attempt === 0) {
-                      await new Promise(r => setTimeout(r, 250));
-                      continue;
-                    }
-                    throw e;
-                  }
+                  if (this.features.prefetch) this.prefetchNextLetter();
                 }
 
-            // Normalize response shapes from REST and admin-ajax.
-            // Supported:
-            // 1) { success: true, letter: {...} }
-            // 2) wp_send_json_success: { success: true, data: { letter: {...} } }
-            // 3) REST: { ok: true, letter: {...} }
-            const normalized = {
-              ok: (data && (data.success === true || data.ok === true)) ? true : false,
-              letter: (data && data.letter) ? data.letter : (data && data.data && data.data.letter) ? data.data.letter : null,
-              message: (data && data.message) ? data.message : (data && data.data && data.data.message) ? data.data.message : null
-            };
+                // --- Strategy 2: Legacy custom endpoint / AJAX fallback ---
+                if (!loadedOk) {
+                  const payload = {
+                    preferences: this.preferences,
+                    viewed: (Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : []),
+                    timestamp: Date.now()
+                  };
 
-            if (normalized.ok && normalized.letter) {
-              this.currentLetter = normalized.letter;
-              this.viewedLetterIds.push(normalized.letter.id);
-              this.saveState();
+                  const fetchLetterData = async () => {
+                    if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
+                      const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
+                        method: 'POST',
+                        headers: this.getHeaders(),
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload)
+                      });
 
-              this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
+                      if (response && response.ok) {
+                        try {
+                          return await this.parseJson(response);
+                        } catch (e) {
+                          return { success: false, message: 'Invalid response format' };
+                        }
+                      }
 
-              this.renderLetter(normalized.letter);
-              this.trackView(normalized.letter.id);
-              this.trackSuccess('nextLetter');
+                      if (response && (response.status === 403 || response.status === 404)) {
+                        return await this.ajaxPost('rts_get_next_letter', payload);
+                      }
 
-              loadedOk = true;
+                      return { success: false, message: `HTTP ${response ? response.status : '0'}` };
+                    }
 
-              if (this.features.prefetch) this.prefetchNextLetter();
-            } else if (normalized.message) {
-              this.showError(normalized.message);
-            } else {
-              this.showError('No letter available right now. Please refresh the page in a moment.');
-            }
+                    return await this.ajaxPost('rts_get_next_letter', payload);
+                  };
+
+                  // Retry once for transient network hiccups
+                  let data = null;
+                  for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                      data = await fetchLetterData();
+                      break;
+                    } catch (e) {
+                      if (attempt === 0) {
+                        await new Promise(r => setTimeout(r, 250));
+                        continue;
+                      }
+                      throw e;
+                    }
+                  }
+
+                  const normalized = {
+                    ok: (data && (data.success === true || data.ok === true)) ? true : false,
+                    letter: (data && data.letter) ? data.letter : (data && data.data && data.data.letter) ? data.data.letter : null,
+                    message: (data && data.message) ? data.message : (data && data.data && data.data.message) ? data.data.message : null
+                  };
+
+                  if (normalized.ok && normalized.letter) {
+                    this.currentLetter = normalized.letter;
+                    this.viewedLetterIds.push(normalized.letter.id);
+                    this.saveState();
+
+                    this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
+
+                    this.renderLetter(normalized.letter);
+                    this.trackView(normalized.letter.id);
+                    this.trackSuccess('nextLetter');
+
+                    loadedOk = true;
+
+                    if (this.features.prefetch) this.prefetchNextLetter();
+                  } else if (normalized.message) {
+                    this.showError(normalized.message);
+                  } else {
+                    this.showError('No letter available right now. Please refresh the page in a moment.');
+                  }
+                }
           } catch (error) {
             this.logError('getNextLetter', error, 'error');
             this.trackError('nextLetter');
             this.showError('Unable to load letter. Please check your connection and refresh the page.');
           } finally {
-            // Only reveal the letter display when we actually have a letter.
-            // Otherwise keep the loading panel visible so errors are readable.
             if (loadedOk) {
               if (loadingEl) loadingEl.style.display = 'none';
               if (displayEl) displayEl.style.display = 'block';
@@ -1369,6 +1438,8 @@ getCacheKey() {
         };
       },
 
+      // Read-Ahead Prefetching: silently fetch the next letter via native REST
+      // and store it in window.nextLetterCache for 0 ms load on the next "Next" click.
       async prefetchNextLetter() {
         if (!this.features.prefetch) return;
 
@@ -1383,13 +1454,16 @@ getCacheKey() {
         if (connection.effectiveType === '3g' && Math.random() < 0.3) return;
 
         if (this.prefetchInFlight) return;
-        if (this.prefetchedLetter && this.prefetchedLetter.id) return;
+        if (window.nextLetterCache && window.nextLetterCache.id) return;
 
         try {
           this.prefetchInFlight = true;
-          const prefetchLetter = await this.queueRequest(() => this.fetchNextLetter(), 'low', 'prefetch', 15000);
+          const prefetchLetter = await this.queueRequest(
+            () => this.fetchLetterNativeRest(),
+            'low', 'prefetch', 15000
+          );
           if (prefetchLetter && prefetchLetter.id && (!this.viewedLetterIds || !this.viewedLetterIds.includes(prefetchLetter.id))) {
-            this.prefetchedLetter = prefetchLetter;
+            window.nextLetterCache = prefetchLetter;
             this.trackSuccess('prefetch');
           }
         } catch (e) {
