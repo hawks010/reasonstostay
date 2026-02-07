@@ -21,13 +21,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Theme version constant (used for cache-busting enqueued assets)
+// TEMPORARY: forced to time() to bust all caches after theme repair.
+// Revert to wp_get_theme()->get('Version') once deployment is stable.
 if ( ! defined( 'RTS_THEME_VERSION' ) ) {
-    $theme_obj = wp_get_theme();
-    $ver = is_object( $theme_obj ) ? $theme_obj->get( 'Version' ) : '';
-    if ( ! is_string( $ver ) || $ver === '' ) {
-        $ver = (string) time();
-    }
-    define( 'RTS_THEME_VERSION', $ver );
+    define( 'RTS_THEME_VERSION', (string) time() );
 }
 
 // =============================================================================
