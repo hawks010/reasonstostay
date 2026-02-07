@@ -932,6 +932,46 @@ function rts_show_activation_notice() {
     }
 }
 
+// =============================================================================
+// 8. PERFORMANCE: GZIP + REST API OPTIMISATIONS
+// =============================================================================
+
+/**
+ * Force GZIP compression on REST API responses when zlib is available.
+ * Reduces JSON payload size by ~90% on uncompressed hosts.
+ */
+add_filter( 'rest_pre_serve_request', 'rts_force_rest_gzip', 0, 4 );
+function rts_force_rest_gzip( $served, $result, $request, $server ) {
+    if (
+        ! headers_sent()
+        && extension_loaded( 'zlib' )
+        && ! ini_get( 'zlib.output_compression' )
+        && isset( $_SERVER['HTTP_ACCEPT_ENCODING'] )
+        && stripos( $_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip' ) !== false
+    ) {
+        ob_start( 'ob_gzhandler' );
+    }
+    return $served; // false = let WP continue normal serving
+}
+
+/**
+ * Allow ?orderby=rand for the letter CPT REST endpoint (Data Diet prefetching).
+ * Without this, WP REST rejects `rand` as an invalid orderby parameter.
+ */
+add_filter( 'rest_letter_collection_params', 'rts_allow_rand_orderby' );
+function rts_allow_rand_orderby( $params ) {
+    if ( isset( $params['orderby']['enum'] ) && ! in_array( 'rand', $params['orderby']['enum'], true ) ) {
+        $params['orderby']['enum'][] = 'rand';
+    }
+    return $params;
+}
+
+// =============================================================================
+// 9. SYNDICATION ENGINE (Embed Widgets)
+// =============================================================================
+
+require_once get_stylesheet_directory() . '/embeds/rts-embed-bootloader.php';
+
 /**
  * Admin menu order
  * Put Letters and Subscribers at the very top, just under Dashboard/Updates.
