@@ -1,0 +1,54 @@
+/**
+ * RTS Stats Row Shortcode Styles
+ * Extracted from inline styles for better performance
+ * Version: 2.0.17
+ */
+
+.rts-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 32px;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.rts-stat {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.rts-stat-number {
+    font-family: 'Special Elite', 'Courier New', monospace;
+    font-size: 2.8rem;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--rts-black, #2A2A2A);
+}
+
+.rts-stat-label {
+    margin-top: 10px;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--rts-gray-mid, #666);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .rts-stats-row {
+        gap: 24px;
+    }
+    
+    .rts-stat {
+        min-width: 150px;
+    }
+    
+    .rts-stat-number {
+        font-size: 2.2rem;
+    }
+}
+
+/* Ensure compatibility with various themes */
+.rts-stats-row * {
+    box-sizing: border-box;
+}

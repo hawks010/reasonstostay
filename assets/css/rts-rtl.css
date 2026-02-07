@@ -1,0 +1,29 @@
+/**
+ * RTS RTL Stylesheet
+ * For Arabic and other right-to-left languages
+ */
+
+body[dir="rtl"],
+html[dir="rtl"] {
+    direction: rtl;
+}
+
+body[dir="rtl"] .rts-letter-viewer {
+    text-align: right;
+    direction: rtl;
+}
+
+body[dir="rtl"] .rts-btn-next,
+body[dir="rtl"] .rts-btn-helpful,
+body[dir="rtl"] .rts-btn-unhelpful {
+    float: left;
+}
+
+body[dir="rtl"] .rts-letter-content {
+    direction: rtl;
+    text-align: right;
+}
+
+body[dir="rtl"] .rts-language-switcher {
+    float: left;
+}
