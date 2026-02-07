@@ -12,7 +12,7 @@
  *  - form.rts-subscribe-form
  *  - input[name="email"]
  *  - input[name="preferences[]"] checkboxes
- *  - .rts-msg (message container)
+ *  - .rts-form-message or .rts-msg (message container)
  */
 
 (function () {
@@ -27,11 +27,16 @@
   }
 
   function setMsg(form, html, isError) {
-    const msg = qs(form, '.rts-msg');
+    // Theme markup uses .rts-form-message; older builds used .rts-msg
+    const msg = qs(form, '.rts-form-message') || qs(form, '.rts-msg');
     if (!msg) return;
     msg.innerHTML = html;
     msg.style.display = 'block';
-    msg.classList.toggle('rts-msg--error', !!isError);
+
+    // Normalise state classes for both markup variants
+    msg.classList.remove('error', 'success');
+    msg.classList.toggle('rts-msg--error', !!isError); // legacy styling hook
+    msg.classList.add(isError ? 'error' : 'success');  // preferred styling hook
   }
 
   function disableForm(form, disabled) {

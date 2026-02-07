@@ -94,7 +94,7 @@ class RTS_Shortcodes {
             </div>
             
             <!-- Letter display (populated by JS) -->
-            <div class="rts-letter-display" style="display:none;">
+            <div class="rts-letter-display" style="display:none;" hidden aria-hidden="true" aria-live="polite">
                 <div class="rts-letter-card">
                     <div class="rts-letter-tabs" aria-label="Letter options">
                         <button type="button"
@@ -125,7 +125,7 @@ class RTS_Shortcodes {
                 
                 <div class="rts-letter-rate-wrap" aria-label="Rate this letter">
                     <?php if ($atts['show_helpful'] === 'yes') : ?>
-                    <div class="rts-rate-prompt" hidden aria-live="polite" aria-label="Rate this letter before continuing">
+                    <div class="rts-rate-prompt" hidden aria-hidden="true" style="display:none" aria-live="polite" aria-label="Rate this letter before continuing">
                         <span class="rts-rate-prompt-text">Before the next letter, how was that one?</span>
                         <div class="rts-rate-prompt-actions" role="group" aria-label="Rate this letter">
                             <button type="button" class="rts-rate-btn rts-rate-up" aria-label="This helped">
@@ -153,7 +153,7 @@ class RTS_Shortcodes {
                 
                 
                 <!-- Feedback modal (subtle, internal, letter-linked) -->
-                <div class="rts-modal" id="rts-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title" aria-hidden="true">
+                <div class="rts-feedback-modal rts-modal" id="rts-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="rts-feedback-title" aria-hidden="true" hidden style="display:none;">
                     <div class="rts-modal-backdrop" data-rts-close></div>
                     <div class="rts-modal-panel" role="document">
                         <div class="rts-modal-header">
@@ -238,106 +238,128 @@ class RTS_Shortcodes {
 
         ob_start();
         ?>
-        <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true">
-            <div class="rts-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="rts-onboarding-title" aria-describedby="rts-onboarding-desc" tabindex="-1">
-                <!-- Topbar Skip button (mobile-first, stays inside modal) -->
-                <div class="rts-onboarding-topbar">
-                    <button class="rts-btn-skip" type="button" aria-label="Skip onboarding">
-                        Skip
-                    </button>
-                </div>
-            
-                <!-- NEW: Inner wrapper handles scrolling so tag is not clipped -->
-                <div class="rts-onboarding-scroll-wrapper">
-                    <div class="rts-onboarding-content">
-                        <h2 id="rts-onboarding-title">Would you like a letter chosen just for you?</h2>
-                        <p id="rts-onboarding-desc">Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
-<!-- Step 1: Feelings -->
-                        <div class="rts-onboarding-step" data-step="1">
-                            <h3>What are you feeling right now?</h3>
-                            <p class="rts-step-subtitle">Select all that apply</p>
-                            
-                            <div class="rts-checkbox-group">
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="hopeless">
-                                    <span>Hopeless</span>
-                                </label>
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="alone">
-                                    <span>Alone</span>
-                                </label>
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="anxious">
-                                    <span>Anxious</span>
-                                </label>
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="grieving">
-                                    <span>Grieving</span>
-                                </label>
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="tired">
-                                    <span>Tired of fighting</span>
-                                </label>
-                                <label class="rts-checkbox-label">
-                                    <input type="checkbox" name="feelings[]" value="struggling">
-                                    <span>Just struggling</span>
-                                </label>
-                            </div>
-                            
-                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
-                        </div>
-                        
-                        <!-- Step 2: Reading time -->
-                        <div class="rts-onboarding-step" data-step="2" style="display:none;">
-                            <h3>How much time do you have?</h3>
-                            
-                            <div class="rts-radio-group">
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="readingTime" value="short">
-                                    <span>Just a minute</span>
-                                </label>
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="readingTime" value="medium">
-                                    <span>A few minutes</span>
-                                </label>
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="readingTime" value="long" checked>
-                                    <span>I can read for a bit</span>
-                                </label>
-                            </div>
-                            
-                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
-                        </div>
-                        
-                        <!-- Step 3: Tone -->
-                        <div class="rts-onboarding-step" data-step="3" style="display:none;">
-                            <h3>What kind of voice helps you?</h3>
-                            
-                            <div class="rts-radio-group">
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="tone" value="gentle">
-                                    <span>Warm and gentle</span>
-                                </label>
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="tone" value="real">
-                                    <span>Straight-talking and real</span>
-                                </label>
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="tone" value="hopeful">
-                                    <span>Hopeful and uplifting</span>
-                                </label>
-                                <label class="rts-radio-label">
-                                    <input type="radio" name="tone" value="any" checked>
-                                    <span>Surprise me</span>
-                                </label>
-                            </div>
-                            
-                            <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+	        <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true"></div>
+	        <div class="rts-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="rts-onboarding-title" aria-describedby="rts-onboarding-desc" tabindex="-1" style="display:none;">
+	            <!-- Skip button container (desktop: right vertical tab, mobile: top button) -->
+	            <div class="rts-skip-container">
+	                <button class="rts-btn-skip" type="button" aria-label="Skip onboarding">Skip</button>
+	            </div>
+	
+	            <!-- Inner wrapper handles scrolling -->
+	            <div class="rts-onboarding-scroll-wrapper">
+	                <div class="rts-onboarding-content">
+	                    <!-- Dynamic Header -->
+	                    <div id="intro-text">
+	                        <h2 id="rts-onboarding-title">Would you like a letter chosen just for you?</h2>
+	                        <p id="rts-onboarding-desc">Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
+	                    </div>
+	
+	                    <!-- Step 1: Feelings -->
+	                    <div class="rts-onboarding-step" data-step="1">
+	                        <h3>What are you feeling right now?</h3>
+	                        <p class="rts-step-subtitle">Select all that apply</p>
+	
+	                        <div class="rts-checkbox-group">
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="hopeless">
+	                                <span>Hopeless</span>
+	                            </label>
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="alone">
+	                                <span>Alone</span>
+	                            </label>
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="anxious">
+	                                <span>Anxious</span>
+	                            </label>
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="grieving">
+	                                <span>Grieving</span>
+	                            </label>
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="tired">
+	                                <span>Tired of fighting</span>
+	                            </label>
+	                            <label class="rts-checkbox-label">
+	                                <input type="checkbox" name="feelings[]" value="struggling">
+	                                <span>Just struggling</span>
+	                            </label>
+	                        </div>
+	
+	                        <div class="rts-step-footer">
+	                            <div class="rts-progress-dots" aria-hidden="true">
+	                                <div class="rts-dot active"></div>
+	                                <div class="rts-dot"></div>
+	                                <div class="rts-dot"></div>
+	                            </div>
+	                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+	                        </div>
+	                    </div>
+	
+	                    <!-- Step 2: Reading time -->
+	                    <div class="rts-onboarding-step" data-step="2" style="display:none;">
+	                        <h3>How much time do you have?</h3>
+	
+	                        <div class="rts-radio-group">
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="readingTime" value="short">
+	                                <span>Just a minute</span>
+	                            </label>
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="readingTime" value="medium">
+	                                <span>A few minutes</span>
+	                            </label>
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="readingTime" value="long" checked>
+	                                <span>I can read for a bit</span>
+	                            </label>
+	                        </div>
+	
+	                        <div class="rts-step-footer">
+	                            <div class="rts-progress-dots" aria-hidden="true">
+	                                <div class="rts-dot"></div>
+	                                <div class="rts-dot active"></div>
+	                                <div class="rts-dot"></div>
+	                            </div>
+	                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+	                        </div>
+	                    </div>
+	
+	                    <!-- Step 3: Tone -->
+	                    <div class="rts-onboarding-step" data-step="3" style="display:none;">
+	                        <h3>What kind of voice helps you?</h3>
+	
+	                        <div class="rts-radio-group">
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="tone" value="gentle">
+	                                <span>Warm and gentle</span>
+	                            </label>
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="tone" value="real">
+	                                <span>Straight-talking and real</span>
+	                            </label>
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="tone" value="hopeful">
+	                                <span>Hopeful and uplifting</span>
+	                            </label>
+	                            <label class="rts-radio-label">
+	                                <input type="radio" name="tone" value="any" checked>
+	                                <span>Surprise me</span>
+	                            </label>
+	                        </div>
+	
+	                        <div class="rts-step-footer">
+	                            <div class="rts-progress-dots" aria-hidden="true">
+	                                <div class="rts-dot"></div>
+	                                <div class="rts-dot"></div>
+	                                <div class="rts-dot active"></div>
+	                            </div>
+	                            <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
+	                        </div>
+	                    </div>
+	                </div>
+	            </div>
+	        </div>
         <?php
         return ob_get_clean();
     }
@@ -356,7 +378,7 @@ class RTS_Shortcodes {
             <div class="rts-submit-grid">
                 
                 <!-- LEFT: Form (2fr) -->
-                <form id="rts-submit-form" class="rts-form" novalidate>
+                <form id="rts-submit-form" class="rts-submit-form rts-form" novalidate>
                     
                     <div class="rts-form-field">
                         <label for="rts-author-name">Your first name <span class="rts-optional">(optional)</span></label>
