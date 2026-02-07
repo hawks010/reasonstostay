@@ -4246,9 +4246,6 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 		public static function on_save_post_letter(int $post_id, \WP_Post $post, bool $update): void {
 			if (!rts_as_available() || wp_is_post_revision($post_id) || wp_is_post_autosave($post_id) || $post->post_type !== 'letter' || $post->post_status === 'publish') return;
 
-			// Never re-process trashed letters (prevents moderation from un-trashing admin deletions).
-			if ($post->post_status === 'trash') return;
-
 			// Skip empty posts (auto-drafts converted to drafts, etc.)
 			if (empty(trim($post->post_content ?? ''))) return;
 
