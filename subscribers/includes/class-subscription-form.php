@@ -134,6 +134,8 @@ class RTS_Subscription_Form {
         }
 
         // Cache-bust using file mtime so changes are visible immediately (CDN/NitroPack safe).
+        // RTS_PLUGIN_DIR/URL already point to the /subscribers/ directory.
+        // Avoid double "subscribers/subscribers" in the final URL.
         $js_ver  = @filemtime(RTS_PLUGIN_DIR . 'assets/js/subscription-form.js') ?: RTS_VERSION;
         $css_ver = @filemtime(RTS_PLUGIN_DIR . 'assets/css/frontend.css') ?: RTS_VERSION;
 
@@ -178,6 +180,7 @@ class RTS_Subscription_Form {
         static $rts_subscribe_assets_enqueued = false;
         if (!$rts_subscribe_assets_enqueued) {
             // Cache-bust using file mtime so changes are visible immediately (CDN/NitroPack safe).
+            // RTS_PLUGIN_DIR already points to the /subscribers/ directory.
             $js_ver  = @filemtime(RTS_PLUGIN_DIR . 'assets/js/subscription-form.js') ?: RTS_VERSION;
             $css_ver = @filemtime(RTS_PLUGIN_DIR . 'assets/css/frontend.css') ?: RTS_VERSION;
 

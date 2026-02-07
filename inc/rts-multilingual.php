@@ -605,6 +605,7 @@ foreach ($this->supported_languages as $code => $lang) {
 	top: calc(100% + 6px);
 	right: 0;
 	min-width: 360px;
+	max-width: calc(100vw - 20px);
 	background: #182437;
 	border: 2px solid #FCA311;
 	border-radius: 12px;
@@ -645,13 +646,17 @@ foreach ($this->supported_languages as $code => $lang) {
 	font-size: 1.25rem;
 }
 
+
 .rts-lang-compact-option:hover {
-	background: #1f2d45;
+	background: rgba(241, 227, 211, 0.12);
+	border-radius: 999px;
 	transform: translateY(-1px);
 }
 
+
 .rts-lang-compact-option:focus {
-	background: #1f2d45;
+	background: rgba(241, 227, 211, 0.12);
+	border-radius: 999px;
 	outline: 2px solid #FCA311;
 	outline-offset: 2px;
 }
@@ -663,7 +668,10 @@ foreach ($this->supported_languages as $code => $lang) {
 
 @media (max-width: 520px) {
 	.rts-lang-compact-menu {
-		min-width: 280px;
+		left: 0;
+		right: auto;
+		min-width: 0;
+		width: calc(100vw - 20px);
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }

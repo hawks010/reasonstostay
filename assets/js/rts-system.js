@@ -40,55 +40,6 @@ window.RTS_DISABLE_TRACKING = true;
           window.RTS_DIAG_LOGS = this.diagLogs;
         } catch (e) {}
       },
-
-
-    // Safe storage helpers (cross-browser, tracking-prevention tolerant)
-    storage: {
-      memory: {},
-      canUse(type) {
-        try {
-          const s = window[type];
-          if (!s) return false;
-          const k = '__rts_test__' + String(Date.now());
-          s.setItem(k, '1');
-          s.removeItem(k);
-          return true;
-        } catch (e) { return false; }
-      },
-      get(key) {
-        const k = String(key);
-        try {
-          if (this.canUse('localStorage')) {
-            const v = window.localStorage.getItem(k);
-            if (v !== null) return v;
-          }
-        } catch (e) {}
-        try {
-          // Cookie fallback
-          const m = document.cookie.match(new RegExp('(?:^|; )' + k.replace(/[-.$?*|{}()\[\]\\/\+^]/g, '\\$&') + '=([^;]*)'));
-          if (m) return decodeURIComponent(m[1]);
-        } catch (e) {}
-        return Object.prototype.hasOwnProperty.call(this.memory, k) ? this.memory[k] : null;
-      },
-      set(key, value, days = 365) {
-        const k = String(key);
-        const v = String(value);
-        try {
-          if (this.canUse('localStorage')) {
-            window.localStorage.setItem(k, v);
-            return true;
-          }
-        } catch (e) {}
-        try {
-          const maxAge = Math.max(0, Math.floor(days * 86400));
-          document.cookie = k + '=' + encodeURIComponent(v) + '; path=/; max-age=' + maxAge + '; samesite=lax';
-          return true;
-        } catch (e) {}
-        this.memory[k] = v;
-        return true;
-      }
-    },
-
       enableDiag() {
         this.diagEnabled = true;
         try { if (window.localStorage) localStorage.setItem('rts_debug','1'); } catch(e) {}
@@ -348,28 +299,6 @@ try {
           this.lastActivityTime = Date.now();
 
           this.cacheDomElements();
-
-          // Hard-hide critical UI regions to prevent flash-of-UI on load and
-          // keep the viewer fail-closed until we successfully render a letter.
-          try {
-            const d = this.domElements || {};
-            if (d.display) {
-              d.display.style.display = 'none';
-              d.display.hidden = true;
-              d.display.setAttribute('aria-hidden', 'true');
-            }
-            if (d.ratePrompt) {
-              d.ratePrompt.style.display = 'none';
-              d.ratePrompt.hidden = true;
-              d.ratePrompt.setAttribute('aria-hidden', 'true');
-            }
-            if (d.feedbackModal) {
-              d.feedbackModal.style.display = 'none';
-              d.feedbackModal.hidden = true;
-              d.feedbackModal.setAttribute('aria-hidden', 'true');
-            }
-          } catch (e) {}
-
           this.loadState();
           this.checkOnboarding();
           this.bindEvents();
@@ -481,7 +410,7 @@ injectCriticalStyles() {
         style.textContent = `
           .rts-letter-viewer{max-width:800px;margin:0 auto;padding:20px}
           .rts-loading,.rts-error{text-align:center;padding:40px}
-          .rts-btn-next,.rts-rate-up,.rts-rate-down{padding:10px 20px;margin:5px;cursor:pointer}
+          .rts-btn-next,.rts-btn-helpful,.rts-btn-unhelpful{padding:10px 20px;margin:5px;cursor:pointer}
           .rts-hidden{display:none!important}
 
           /* Performance optimizations */
@@ -612,8 +541,8 @@ cacheDomElements() {
           loading: '.rts-loading',
           display: '.rts-letter-display',
           content: '.rts-letter-body',
-          helpfulBtn: '.rts-rate-up',
-          unhelpBtn: '.rts-rate-down',
+          helpfulBtn: '.rts-btn-helpful',
+          unhelpBtn: '.rts-btn-unhelpful',
           ratePrompt: '.rts-rate-prompt',
           rateUpBtn: '.rts-rate-up',
           rateDownBtn: '.rts-rate-down',
@@ -628,8 +557,8 @@ cacheDomElements() {
         if (!this.domElements.display) this.domElements.display = document.querySelector('.rts-letter-display');
         if (!this.domElements.content) this.domElements.content = document.querySelector('.rts-letter-body');
         if (!this.domElements.ratePrompt) this.domElements.ratePrompt = document.querySelector('.rts-rate-prompt');
-        if (!this.domElements.helpfulBtn) this.domElements.helpfulBtn = document.querySelector('.rts-rate-up');
-        if (!this.domElements.unhelpBtn) this.domElements.unhelpBtn = document.querySelector('.rts-rate-down');
+        if (!this.domElements.helpfulBtn) this.domElements.helpfulBtn = document.querySelector('.rts-btn-helpful');
+        if (!this.domElements.unhelpBtn) this.domElements.unhelpBtn = document.querySelector('.rts-btn-unhelpful');
       },
 
       getRestBase() {
@@ -1104,9 +1033,6 @@ getCacheKey() {
           document.documentElement.classList.add('rts-onboarding-active');
           document.body.classList.add('rts-modal-open');
 
-          // Wire up visual selection states (checkbox + radio labels).
-          this.wireOnboardingSelections(modal);
-
           // Hide the rest of the page from assistive tech while the dialog is open.
           // Use inert where available, otherwise fall back to aria-hidden.
           const bodyChildren = Array.from(document.body.children);
@@ -1123,7 +1049,7 @@ getCacheKey() {
           });
 
           // Focus: prefer Skip, otherwise first focusable element.
-          const focusTarget = modal.querySelector('.rts-rate-skip') || modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          const focusTarget = modal.querySelector('.rts-btn-skip') || modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
           setTimeout(() => {
             try {
               (focusTarget || modal).focus({ preventScroll: true });
@@ -1166,36 +1092,6 @@ getCacheKey() {
           // Fail open visually, but avoid crashing letter viewer.
           try { onboardingEl && (onboardingEl.style.display = 'flex'); } catch (err) {}
         }
-      },
-
-      wireOnboardingSelections(modal) {
-        try {
-          if (!modal) return;
-          if (modal.dataset && modal.dataset.rtsWiredSelections === '1') return;
-          if (modal.dataset) modal.dataset.rtsWiredSelections = '1';
-
-          const inputs = Array.from(modal.querySelectorAll('input[type="checkbox"], input[type="radio"]'));
-
-          const syncLabel = (input) => {
-            const label = input.closest('label');
-            if (!label) return;
-            if (input.checked) label.classList.add('selected');
-            else label.classList.remove('selected');
-          };
-
-          inputs.forEach((input) => {
-            syncLabel(input);
-            input.addEventListener('change', () => {
-              if (input.type === 'radio' && input.name) {
-                modal.querySelectorAll(`input[type="radio"][name="${CSS.escape(input.name)}"]`).forEach((el) => {
-                  const lbl = el.closest('label');
-                  if (lbl) lbl.classList.remove('selected');
-                });
-              }
-              syncLabel(input);
-            });
-          });
-        } catch (e) {}
       },
 
       closeOnboardingDialog(onboardingEl) {
@@ -1248,8 +1144,7 @@ getCacheKey() {
         const viewerEl = document.querySelector('.rts-letter-viewer');
         if (!viewerEl) return;
 
-        const key = 'rts_onboarded_v1';
-        const hasOnboarded = this.storage.get(key);
+        const hasOnboarded = sessionStorage.getItem('rts_onboarded');
 
         if (onboardingEl) {
           if (!hasOnboarded && !this.preferences.skipOnboarding) {
@@ -1274,7 +1169,7 @@ getCacheKey() {
       // forceFresh=true skips any cached letter for the current state and always requests a new one.
       async getNextLetter(forceFresh = false) {
         const onboardingEl = document.querySelector('.rts-onboarding-overlay');
-        if (onboardingEl && this.storage.get('rts_onboarded_v1')) {
+        if (onboardingEl && sessionStorage.getItem('rts_onboarded')) {
             onboardingEl.style.display = 'none';
             this.closeOnboardingDialog(onboardingEl);
         }
@@ -1323,20 +1218,7 @@ getCacheKey() {
           const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
 
           if (loadingEl) loadingEl.style.display = 'block';
-          if (displayEl) {
-            displayEl.style.display = 'none';
-            displayEl.hidden = true;
-            displayEl.setAttribute('aria-hidden', 'true');
-          }
-
-          // Safety timeout: never leave users stuck on a spinner.
-          const safetyTimer = setTimeout(() => {
-            try {
-              if (!this.state.loading) return;
-              // Fail-closed: show a safe error, keep feedback hidden.
-              this.showError('Taking longer than expected. Please try again.');
-            } catch (e) {}
-          }, 8000);
+          if (displayEl) displayEl.style.display = 'none';
 
           let loadedOk = false;
           try {
@@ -1424,23 +1306,14 @@ getCacheKey() {
             this.trackError('nextLetter');
             this.showError('Unable to load letter. Please check your connection and refresh the page.');
           } finally {
-            clearTimeout(safetyTimer);
             // Only reveal the letter display when we actually have a letter.
             // Otherwise keep the loading panel visible so errors are readable.
             if (loadedOk) {
               if (loadingEl) loadingEl.style.display = 'none';
-              if (displayEl) {
-                displayEl.style.display = 'block';
-                displayEl.hidden = false;
-                displayEl.setAttribute('aria-hidden', 'false');
-              }
+              if (displayEl) displayEl.style.display = 'block';
             } else {
               if (loadingEl) loadingEl.style.display = 'block';
-              if (displayEl) {
-                displayEl.style.display = 'none';
-                displayEl.hidden = true;
-                displayEl.setAttribute('aria-hidden', 'true');
-              }
+              if (displayEl) displayEl.style.display = 'none';
             }
             this.endTimer('getNextLetter');
           }
@@ -1555,8 +1428,6 @@ progressiveRender(contentEl, html) {
             // Batch visibility changes
             if (loadingEl) loadingEl.style.display = 'none';
             displayEl.style.display = 'block';
-            displayEl.hidden = false;
-            displayEl.setAttribute('aria-hidden', 'false');
             
             // Use progressive rendering for large letters
             const sanitized = this.sanitizeHtml(letter.content);
@@ -1572,15 +1443,15 @@ progressiveRender(contentEl, html) {
             }, 16); // ~1 frame delay (16ms at 60fps)
             
             // Update button states
-            const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-rate-up');
-            const unhelpBtn = this.domElements.unhelpBtn || document.querySelector('.rts-rate-down');
+            const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-btn-helpful');
+            const unhelpBtn = this.domElements.unhelpBtn || document.querySelector('.rts-btn-unhelpful');
             
             if (helpfulBtn) {
-                helpfulBtn.classList.remove('selected'); helpfulBtn.setAttribute('aria-pressed','false');
+                helpfulBtn.classList.remove('rts-helped');
                 helpfulBtn.disabled = false;
             }
             if (unhelpBtn) {
-                unhelpBtn.classList.remove('selected'); unhelpBtn.setAttribute('aria-pressed','false');
+                unhelpBtn.classList.remove('rts-helped');
                 unhelpBtn.disabled = false;
             }
             
@@ -1666,7 +1537,7 @@ progressiveRender(contentEl, html) {
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
 
-        const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-rate-up');
+        const helpfulBtn = this.domElements.helpfulBtn || document.querySelector('.rts-btn-helpful');
         if (helpfulBtn) { helpfulBtn.disabled = true; helpfulBtn.classList.add('rts-helped'); }
 
         try {
@@ -1700,7 +1571,7 @@ progressiveRender(contentEl, html) {
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
 
-        const btn = this.domElements.unhelpBtn || document.querySelector('.rts-rate-down');
+        const btn = this.domElements.unhelpBtn || document.querySelector('.rts-btn-unhelpful');
         if (btn) { btn.classList.add('rts-helped'); btn.disabled = true; }
 
         try {
@@ -1835,7 +1706,6 @@ progressiveRender(contentEl, html) {
         }
 
         modal.setAttribute('aria-hidden', 'false');
-        modal.hidden = false;
         modal.style.display = 'block'; 
         document.body.classList.add('rts-modal-open');
 
@@ -1849,7 +1719,6 @@ progressiveRender(contentEl, html) {
         const modal = document.getElementById('rts-feedback-modal');
         if (!modal) return;
         modal.setAttribute('aria-hidden', 'true');
-        modal.hidden = true;
         modal.style.display = 'none';
         document.body.classList.remove('rts-modal-open');
       },
@@ -2044,7 +1913,7 @@ showRatePrompt() {
         
         // Save to sessionStorage
         this.saveState();
-        this.storage.set('rts_onboarded_v1', '1');
+        sessionStorage.setItem('rts_onboarded', 'true');
         document.documentElement.classList.remove('rts-onboarding_active');
         document.documentElement.classList.remove('rts-onboarding-active');
         
@@ -2093,7 +1962,7 @@ showRatePrompt() {
       skipOnboarding() {
         
         this.preferences.skipOnboarding = true;
-        this.storage.set('rts_onboarded_v1', '1');
+        sessionStorage.setItem('rts_onboarded', 'true');
         document.documentElement.classList.remove('rts-onboarding_active');
         document.documentElement.classList.remove('rts-onboarding-active');
         
@@ -2335,16 +2204,15 @@ bindEvents() {
         // Single delegated click handler
         const clickHandler = (e) => {
 
-          // Touchscreen reliability: avoid double-fire (pointerup + click)
+          
+            if (e && e.rtsHandled) return;
+// Touchscreen reliability: avoid double-fire (pointerup + click)
           try {
             const now = Date.now();
             if (e.type === 'click' && this._lastPointerUpTs && (now - this._lastPointerUpTs) < 350) {
               return;
             }
-            if (e.type === 'pointerup') {
-              this._lastPointerUpTs = now;
-            }
-          } catch (err) {}
+            } catch (err) {}
 
 
           // --- Language switcher (global, must work outside letter viewer) ---
@@ -2352,6 +2220,7 @@ bindEvents() {
           // so we support the header language dropdown here.
           const langToggle = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-button') : null;
           if (langToggle) {
+            e.rtsHandled = true;
             if (e.cancelable) e.preventDefault();
             this.diagLog('lang_toggle', { expanded: langToggle.getAttribute('aria-expanded') });
 
@@ -2471,7 +2340,7 @@ bindEvents() {
           // IMPORTANT: Do not intercept generic <button> or <a> elements.
           // Intercept only RTS controls, otherwise we break navigation, forms, and Elementor widgets.
           const actionable = target.closest(
-            '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-rate-up, .rts-rate-down, .rts-share-btn, .rts-skip-tag, .rts-rate-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
+            '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
           );
           if (!actionable) return;
 
@@ -2479,7 +2348,9 @@ bindEvents() {
           if (e.target.closest('.rts-btn-next')) {
             if (e.cancelable) e.preventDefault();
 
-            const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
+            
+            e.rtsHandled = true;
+const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
             if (this.currentLetter && !this.currentLetter._rtsRated && ratePrompt) {
               // If the prompt is already open and user presses Next again, override and load next.
@@ -2508,8 +2379,8 @@ bindEvents() {
           }
 
           // 3. Backwards compatible helpful buttons
-          if (e.target.closest('.rts-rate-up')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
-          if (e.target.closest('.rts-rate-down')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
+          if (e.target.closest('.rts-btn-helpful')) { if (e.cancelable) e.preventDefault(); this.trackHelpful(); return; }
+          if (e.target.closest('.rts-btn-unhelpful')) { if (e.cancelable) e.preventDefault(); this.trackUnhelpful(); return; }
 
           // 4. Share buttons
           const shareBtn = e.target.closest('.rts-share-btn');
@@ -2524,7 +2395,7 @@ bindEvents() {
           }
 
           // 5. Onboarding: Exit/Skip
-          if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-rate-skip')) {
+          if (e.target.closest('.rts-skip-tag') || e.target.closest('.rts-btn-skip')) {
             if (e.cancelable) e.preventDefault();
             this.skipOnboarding();
             return;
@@ -2563,8 +2434,8 @@ bindEvents() {
           if (openBtn) {
             if (e.cancelable) e.preventDefault();
             let defaultRating = 'neutral';
-            if (document.querySelector('.rts-rate-up.rts-helped')) defaultRating = 'up';
-            if (document.querySelector('.rts-rate-down.rts-helped')) defaultRating = 'down';
+            if (document.querySelector('.rts-btn-helpful.rts-helped')) defaultRating = 'up';
+            if (document.querySelector('.rts-btn-unhelpful.rts-helped')) defaultRating = 'down';
             this.openFeedbackModal(defaultRating);
             return;
           }
@@ -2576,8 +2447,7 @@ bindEvents() {
         };
 
         document.addEventListener('click', clickHandler, { passive: false });
-        document.addEventListener('pointerup', clickHandler, { passive: false });
-        this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
+this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
 
         // Touch-safety: ensure onboarding overlay remains interactive on iOS
         try {
@@ -2596,12 +2466,7 @@ bindEvents() {
             this.eventListeners.push({ element: onboardingOverlay, type: 'pointerdown', handler: trap });
           }
         } catch(e) {}
-
-
-
-        this.eventListeners.push({ element: document, type: 'pointerup', handler: clickHandler });
-
-        // Keydown handler (Escape handling)
+// Keydown handler (Escape handling)
         const keydownHandler = (e) => {
           if (e.key !== 'Escape') return;
           const modal = document.getElementById('rts-feedback-modal');
