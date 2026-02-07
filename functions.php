@@ -374,62 +374,7 @@ JS;
 /**
  * Shortcode: [rts_site_stats_row]
  */
-add_shortcode('rts_site_stats_row', function () {
-
-  $stats = [
-    [
-      'num'   => rts_stat('rts_stat1_number', '101,193'),
-      'label' => rts_stat('rts_stat1_label', 'letters delivered to site visitors.'),
-    ],
-    [
-      'num'   => rts_stat('rts_stat2_number', '74%'),
-      'label' => rts_stat('rts_stat2_label', 'say reading a letter made them feel “much better”.'),
-    ],
-    [
-      'num'   => '<span id="rts-letters-submitted">0</span>',
-      'label' => rts_stat('rts_stat3_label', 'submitted letters to the site.'),
-    ],
-  ];
-
-  ob_start(); ?>
-
-  <div role="group"
-       aria-label="Site statistics"
-       style="
-         display:flex;
-         flex-wrap:wrap;
-         justify-content:center;
-         gap:32px;
-         text-align:center;
-       ">
-
-    <?php foreach ($stats as $s): ?>
-      <div style="min-width:200px; max-width:300px;">
-
-        <div style="
-          font-family:'Special Elite', monospace;
-          font-size:2.8rem;
-          line-height:1;
-        ">
-          <?php echo wp_kses_post($s['num']); ?>
-        </div>
-
-        <div style="
-          margin-top:10px;
-          font-size:1rem;
-          line-height:1.5;
-        ">
-          <?php echo esc_html($s['label']); ?>
-        </div>
-
-      </div>
-    <?php endforeach; ?>
-
-  </div>
-
-  <?php
-  return ob_get_clean();
-});
+// [rts_site_stats_row] is registered in /inc/shortcodes.php (single source of truth).
 
 
 // =============================================================================
@@ -590,6 +535,13 @@ function rts_enqueue_frontend_assets() {
         '6.5.1'
     );
 
+wp_enqueue_style(
+        'rts-google-fonts',
+        'https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600&display=swap',
+        [],
+        null
+    );
+
     // Main CSS
     $css_file = get_stylesheet_directory() . '/assets/css/rts-system.css';
     $css_ver  = file_exists($css_file) ? (string) filemtime($css_file) : $ver;
@@ -600,7 +552,7 @@ function rts_enqueue_frontend_assets() {
     wp_enqueue_style(
         'rts-system',
         get_stylesheet_directory_uri() . '/assets/css/rts-system.css',
-        ['rts-fontawesome'],
+        ['rts-fontawesome','rts-google-fonts'],
         $css_ver
     );
 
@@ -691,39 +643,53 @@ function rts_initialize_taxonomies() {
  * Use this function in shortcodes/templates to get consistent stats
  */
 function rts_get_site_stats() {
+    // Manual offsets (legacy-compatible)
     $stats_override = get_option('rts_stats_override', ['enabled' => 0]);
-    
-    // If manual override is enabled, use those numbers
-    if (!empty($stats_override['enabled'])) {
-        return [
-            'total_letters' => intval($stats_override['total_letters'] ?? 0),
-            'letters_delivered' => intval($stats_override['letters_delivered'] ?? 0),
-            'feel_better_percent' => floatval($stats_override['feel_better_percent'] ?? 0),
-            'using_override' => true
-        ];
-    }
-    
-    // Otherwise, calculate from database
+
     global $wpdb;
-    
-    // Total published letters
-    $total_letters = wp_count_posts('letter')->publish;
-    
-    // Total views (letters delivered)
-    $letters_delivered = $wpdb->get_var("
-        SELECT SUM(meta_value) 
-        FROM {$wpdb->postmeta} 
+
+    // Live totals (always calculated)
+    $live_letters_submitted = (int) wp_count_posts('letter')->publish;
+
+    $live_letters_delivered = (int) $wpdb->get_var("
+        SELECT SUM(meta_value)
+        FROM {$wpdb->postmeta}
         WHERE meta_key = 'view_count'
     ");
-    
-    // Feel better percentage (from feedback if available)
-    $feel_better_percent = get_option('rts_feel_better_percentage', 85.7);
-    
+
+    // Feel better percentage (stored option, or sensible default)
+    $live_feel_better_percent = (float) get_option('rts_feel_better_percentage', 85.7);
+
+    // If "override" is enabled, treat provided values as OFFSETS (never as replacements),
+    // so the counters remain live and continue to increase.
+    if (!empty($stats_override['enabled'])) {
+        $off_submitted = (int) ($stats_override['offset_submitted'] ?? $stats_override['total_letters'] ?? 0);
+        $off_delivered = (int) ($stats_override['offset_delivered'] ?? $stats_override['letters_delivered'] ?? 0);
+
+        // Feel-better can be overridden as an absolute percentage (if provided), otherwise use live option.
+        $feel_better_percent = isset($stats_override['feel_better_percent']) && $stats_override['feel_better_percent'] !== ''
+            ? (float) $stats_override['feel_better_percent']
+            : $live_feel_better_percent;
+
+        return [
+            // legacy keys
+            'total_letters'       => $live_letters_submitted + $off_submitted,
+            // preferred keys
+            'letters_submitted'   => $live_letters_submitted + $off_submitted,
+            'letters_delivered'   => $live_letters_delivered + $off_delivered,
+            'feel_better_percent' => (float) $feel_better_percent,
+            'using_override'      => true,
+        ];
+    }
+
     return [
-        'total_letters' => intval($total_letters),
-        'letters_delivered' => intval($letters_delivered ?? 0),
-        'feel_better_percent' => floatval($feel_better_percent),
-        'using_override' => false
+        // legacy key
+        'total_letters'       => $live_letters_submitted,
+        // preferred keys
+        'letters_submitted'   => $live_letters_submitted,
+        'letters_delivered'   => $live_letters_delivered,
+        'feel_better_percent' => (float) $live_feel_better_percent,
+        'using_override'      => false,
     ];
 }
 

@@ -14,6 +14,7 @@ class RTS_Shortcodes {
         add_shortcode('rts_onboarding', [$this, 'onboarding']);
         add_shortcode('rts_submit_form', [$this, 'submit_form']);
         add_shortcode('rts_site_stats_row', [$this, 'site_stats_row']);
+        add_action('rest_api_init', [$this, 'register_site_stats_route']);
     }
 
     /**
@@ -240,23 +241,29 @@ class RTS_Shortcodes {
         ?>
         <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true">
             <div class="rts-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="rts-onboarding-title" aria-describedby="rts-onboarding-desc" tabindex="-1">
-                <!-- Topbar Skip button (mobile-first, stays inside modal) -->
-                <div class="rts-onboarding-topbar">
+
+                <!-- Skip button container -->
+                <div class="rts-skip-container">
                     <button class="rts-btn-skip" type="button" aria-label="Skip onboarding">
                         Skip
                     </button>
                 </div>
-            
-                <!-- NEW: Inner wrapper handles scrolling so tag is not clipped -->
+
+                <!-- Inner wrapper handles scrolling so the side-tab is never clipped -->
                 <div class="rts-onboarding-scroll-wrapper">
                     <div class="rts-onboarding-content">
-                        <h2 id="rts-onboarding-title">Would you like a letter chosen just for you?</h2>
-                        <p id="rts-onboarding-desc">Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
-<!-- Step 1: Feelings -->
+
+                        <!-- Dynamic Header -->
+                        <div id="intro-text">
+                            <h2 id="rts-onboarding-title">Would you like a letter chosen just for you?</h2>
+                            <p id="rts-onboarding-desc">Answer a few quick questions to help us find the right letter, or skip to read any letter.</p>
+                        </div>
+
+                        <!-- Step 1: Feelings -->
                         <div class="rts-onboarding-step" data-step="1">
                             <h3>What are you feeling right now?</h3>
                             <p class="rts-step-subtitle">Select all that apply</p>
-                            
+
                             <div class="rts-checkbox-group">
                                 <label class="rts-checkbox-label">
                                     <input type="checkbox" name="feelings[]" value="hopeless">
@@ -283,14 +290,21 @@ class RTS_Shortcodes {
                                     <span>Just struggling</span>
                                 </label>
                             </div>
-                            
-                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+
+                            <div class="rts-step-footer">
+                                <div class="rts-progress-dots" aria-hidden="true">
+                                    <div class="rts-dot active"></div>
+                                    <div class="rts-dot"></div>
+                                    <div class="rts-dot"></div>
+                                </div>
+                                <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+                            </div>
                         </div>
-                        
+
                         <!-- Step 2: Reading time -->
                         <div class="rts-onboarding-step" data-step="2" style="display:none;">
                             <h3>How much time do you have?</h3>
-                            
+
                             <div class="rts-radio-group">
                                 <label class="rts-radio-label">
                                     <input type="radio" name="readingTime" value="short">
@@ -305,14 +319,21 @@ class RTS_Shortcodes {
                                     <span>I can read for a bit</span>
                                 </label>
                             </div>
-                            
-                            <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+
+                            <div class="rts-step-footer">
+                                <div class="rts-progress-dots" aria-hidden="true">
+                                    <div class="rts-dot"></div>
+                                    <div class="rts-dot active"></div>
+                                    <div class="rts-dot"></div>
+                                </div>
+                                <button class="rts-btn rts-btn-next-step" type="button">Next</button>
+                            </div>
                         </div>
-                        
+
                         <!-- Step 3: Tone -->
                         <div class="rts-onboarding-step" data-step="3" style="display:none;">
                             <h3>What kind of voice helps you?</h3>
-                            
+
                             <div class="rts-radio-group">
                                 <label class="rts-radio-label">
                                     <input type="radio" name="tone" value="gentle">
@@ -331,11 +352,20 @@ class RTS_Shortcodes {
                                     <span>Surprise me</span>
                                 </label>
                             </div>
-                            
-                            <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
+
+                            <div class="rts-step-footer">
+                                <div class="rts-progress-dots" aria-hidden="true">
+                                    <div class="rts-dot"></div>
+                                    <div class="rts-dot"></div>
+                                    <div class="rts-dot active"></div>
+                                </div>
+                                <button class="rts-btn rts-btn-complete" type="button">Find My Letter</button>
+                            </div>
                         </div>
+
                     </div>
                 </div>
+
             </div>
         </div>
         <?php
@@ -527,144 +557,133 @@ class RTS_Shortcodes {
     }
     
     /**
-     * Site Stats Row - [rts_site_stats_row]
-     * Displays 3 stats: Letters delivered, Feel better %, Submitted letters
-     * Pulls real data from database with manual override support
-     * v2.0.17: Optimized with external CSS/JS
-     */
-    /**
      * [rts_site_stats_row]
      */
     public function site_stats_row($atts) {
-        // Enqueue styles cleanly when shortcode is used
-        wp_enqueue_style(
-            'rts-stats-row',
-            get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css',
-            [],
-            '2.0.17'
-        );
+        $atts = shortcode_atts([
+            'offset_delivered'  => 0,
+            'offset_feelbetter' => 0,
+            'offset_submitted'  => 0,
+        ], $atts, 'rts_site_stats_row');
 
-        $stats = $this->get_site_stats();
+        // Enqueue (single file, no inline scripts) so JS/CSS/HTML do not separate across versions.
+        $css_path = get_stylesheet_directory() . '/assets/css/rts-stats-row.css';
+        $js_path  = get_stylesheet_directory() . '/assets/js/rts-stats-row.js';
+
+        if (file_exists($css_path)) {
+            wp_enqueue_style(
+                'rts-stats-row',
+                get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css',
+                [],
+                filemtime($css_path)
+            );
+        }
+
+        if (file_exists($js_path)) {
+            wp_enqueue_script(
+                'rts-stats-row',
+                get_stylesheet_directory_uri() . '/assets/js/rts-stats-row.js',
+                [],
+                filemtime($js_path),
+                true
+            );
+
+            wp_localize_script('rts-stats-row', 'RTS_STATS_ROW', [
+                'restUrl' => esc_url_raw(rest_url('rts/v1/site-stats')),
+            ]);
+        }
+
+        $stats = $this->get_site_stats([
+            'offset_delivered'  => (int) $atts['offset_delivered'],
+            'offset_feelbetter' => (int) $atts['offset_feelbetter'],
+            'offset_submitted'  => (int) $atts['offset_submitted'],
+        ]);
+
+        $uid = 'rts-stats-' . wp_generate_uuid4();
 
         ob_start();
         ?>
-        <div class="rts-stats-row" role="group" aria-label="Site statistics">
+        <div class="rts-stats-row" id="<?php echo esc_attr($uid); ?>"
+             data-offset-delivered="<?php echo esc_attr((int) $atts['offset_delivered']); ?>"
+             data-offset-feelbetter="<?php echo esc_attr((int) $atts['offset_feelbetter']); ?>"
+             data-offset-submitted="<?php echo esc_attr((int) $atts['offset_submitted']); ?>">
+
             <div class="rts-stat">
-                <div class="rts-stat-number" id="rts-letters-delivered">
-                    <?php echo esc_html(number_format($stats['letters_delivered'])); ?>
-                </div>
-                <div class="rts-stat-label">letters delivered to site visitors.</div>
+                <div class="rts-stat-number" data-stat="letters_delivered"><?php echo esc_html($stats['letters_delivered']); ?></div>
+                <div class="rts-stat-label">Letters delivered</div>
             </div>
 
             <div class="rts-stat">
-                <div class="rts-stat-number">
-                    <?php echo esc_html((int) $stats['feel_better_percent']); ?>%
-                </div>
-                <div class="rts-stat-label">say reading a letter made them feel “much better”.</div>
+                <div class="rts-stat-number" data-stat="feel_better_percent"><?php echo esc_html($stats['feel_better_percent']); ?>%</div>
+                <div class="rts-stat-label">People who felt better</div>
             </div>
 
             <div class="rts-stat">
-                <div class="rts-stat-number">
-                    <?php echo esc_html(number_format($stats['letters_submitted'])); ?>
-                </div>
-                <div class="rts-stat-label">submitted letters to the site.</div>
+                <div class="rts-stat-number" data-stat="letters_submitted"><?php echo esc_html($stats['letters_submitted']); ?></div>
+                <div class="rts-stat-label">Letters submitted</div>
             </div>
+
         </div>
-
-        <script>
-        (function(){
-            var el = document.getElementById('rts-letters-delivered');
-            if(!el || !window.fetch) return;
-            var api = "<?php echo esc_url(rest_url('rts/v1/site-stats')); ?>";
-            fetch(api, { credentials: 'same-origin' })
-                .then(function(r){ return r.ok ? r.json() : null; })
-                .then(function(d){
-                    if(d && typeof d.letters_delivered !== 'undefined'){
-                        el.textContent = new Intl.NumberFormat().format(d.letters_delivered);
-                    }
-                })
-                .catch(function(){});
-        })();
-        </script>
         <?php
         return ob_get_clean();
     }
 
     /**
-     * Helper to get stats (Private)
+     * Single source of truth for stats (live + overrides + shortcode offsets).
      */
-    private function get_site_stats() {
-        // Prefer the shared helper in functions.php so stats stay "one source of truth"
-        if (function_exists('rts_get_site_stats')) {
-            $raw = rts_get_site_stats();
+    public function get_site_stats($overrides = []) {
+        $raw = function_exists('rts_get_site_stats') ? rts_get_site_stats(true) : [];
 
-            return [
-                'letters_delivered'   => (int) ($raw['letters_delivered'] ?? 0),
-                'feel_better_percent' => (int) round((float) ($raw['feel_better_percent'] ?? 0)),
-                'letters_submitted'   => (int) ($raw['total_letters'] ?? 0),
-            ];
-        }
+        $letters_submitted  = (int) ($raw['total_letters'] ?? $raw['letters_submitted'] ?? 0);
+        $letters_delivered  = (int) ($raw['letters_delivered'] ?? 0);
+        $feel_better_percent = (int) ($raw['feel_better_percentage'] ?? $raw['feel_better_percent'] ?? 0);
 
-        // Safe fallback if helper is unavailable for any reason
-        global $wpdb;
-        $total_letters = (int) (wp_count_posts('letter')->publish ?? 0);
-        $letters_delivered = $wpdb->get_var("SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = 'view_count'");
-        $feel_better_percent = (float) get_option('rts_feel_better_percentage', 0);
+        $off_submitted  = (int) ($overrides['offset_submitted'] ?? 0);
+        $off_delivered  = (int) ($overrides['offset_delivered'] ?? 0);
+        $off_feelbetter = (int) ($overrides['offset_feelbetter'] ?? 0);
+
+        $letters_submitted   += $off_submitted;
+        $letters_delivered   += $off_delivered;
+        $feel_better_percent += $off_feelbetter;
+
+        if ($feel_better_percent < 0) $feel_better_percent = 0;
+        if ($feel_better_percent > 100) $feel_better_percent = 100;
 
         return [
-            'letters_delivered'   => (int) ($letters_delivered ?? 0),
-            'feel_better_percent' => (int) round($feel_better_percent),
-            'letters_submitted'   => $total_letters,
+            'letters_submitted'   => $letters_submitted,
+            'letters_delivered'   => $letters_delivered,
+            'feel_better_percent' => $feel_better_percent,
         ];
     }
+
+    /**
+     * REST endpoint for live stats.
+     */
+    public function rest_site_stats($request) {
+        $stats = $this->get_site_stats([
+            'offset_delivered'  => (int) $request->get_param('offset_delivered'),
+            'offset_feelbetter' => (int) $request->get_param('offset_feelbetter'),
+            'offset_submitted'  => (int) $request->get_param('offset_submitted'),
+        ]);
+
+        return rest_ensure_response($stats);
+    }
+
+    // Register REST route (read-only, public)
+    public function register_site_stats_route() {
+        register_rest_route('rts/v1', '/site-stats', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'rest_site_stats'],
+            'permission_callback' => '__return_true',
+            'args' => [
+                'offset_delivered'  => ['sanitize_callback' => 'absint'],
+                'offset_feelbetter' => ['sanitize_callback' => 'absint'],
+                'offset_submitted'  => ['sanitize_callback' => 'absint'],
+            ],
+        ]);
+    }
+
 }
 
-// Initialize
+// Boot shortcodes
 new RTS_Shortcodes();
-
-/**
- * REST API endpoint for site stats
- * v2.0.17: Added rate limiting and security improvements
- */
-add_action('rest_api_init', function() {
-    register_rest_route('rts/v1', '/site-stats', [
-        'methods' => 'GET',
-        'permission_callback' => function($request) {
-            // Basic rate limiting: 60 requests per hour per IP
-            $ip = $request->get_header('x-forwarded-for');
-            if (empty($ip)) {
-                $ip = $_SERVER['REMOTE_ADDR'];
-            }
-            
-            $rate_key = 'rts_stats_rate_' . md5($ip . date('Y-m-d-H'));
-            $count = get_transient($rate_key);
-            
-            if ($count === false) {
-                $count = 0;
-            }
-            
-            if ($count >= 60) {
-                return new WP_Error('rate_limit_exceeded', 'Too many requests. Please try again later.', ['status' => 429]);
-            }
-            
-            set_transient($rate_key, $count + 1, HOUR_IN_SECONDS);
-            
-            return true;
-        },
-        'callback' => function() {
-            $shortcodes = new RTS_Shortcodes();
-            // Use reflection to call private method
-            $reflection = new ReflectionClass($shortcodes);
-            $method = $reflection->getMethod('get_site_stats');
-            $method->setAccessible(true);
-            $stats = $method->invoke($shortcodes);
-            
-            // Ensure all values are integers
-            return [
-                'letters_delivered' => (int) $stats['letters_delivered'],
-                'feel_better_percent' => (int) $stats['feel_better_percent'],
-                'letters_submitted' => (int) $stats['letters_submitted']
-            ];
-        }
-    ]);
-});

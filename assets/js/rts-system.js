@@ -308,6 +308,11 @@ try {
           this.setupMemoryWatchdog();
 
           window.addEventListener('beforeunload', () => this.cleanup());
+          // Notify any UI widgets (e.g., stats row) that a view was recorded
+          try {
+            window.dispatchEvent(new CustomEvent('rts:letterViewed', { detail: { letterId: letterId } }));
+          } catch (e) {}
+
         } catch (error) {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
           const fallbackMsg = document.createElement('div');
@@ -1030,6 +1035,8 @@ getCacheKey() {
 
           onboardingEl.setAttribute('aria-hidden', 'false');
           onboardingEl.style.display = 'flex';
+          this.setupOnboardingSelection(modal);
+
           document.documentElement.classList.add('rts-onboarding-active');
           document.body.classList.add('rts-modal-open');
 
@@ -1137,6 +1144,39 @@ getCacheKey() {
         } catch (e) {
           // ignore
         }
+      },
+
+      setupOnboardingSelection(modalEl) {
+        try {
+          if (!modalEl) return;
+          if (modalEl.dataset && modalEl.dataset.rtsSelectionBound === '1') return;
+          if (modalEl.dataset) modalEl.dataset.rtsSelectionBound = '1';
+
+          const inputs = modalEl.querySelectorAll('input[type="checkbox"], input[type="radio"]');
+
+          const syncLabel = (input) => {
+            if (!input) return;
+            const label = input.closest('label');
+            if (!label) return;
+
+            // Radio: clear siblings in the same group (scoped to modal)
+            if (input.type === 'radio' && input.name) {
+              const group = modalEl.querySelectorAll(`input[name="${CSS.escape(input.name)}"]`);
+              group.forEach((el) => {
+                const l = el.closest('label');
+                if (l) l.classList.remove('selected');
+              });
+            }
+
+            if (input.checked) label.classList.add('selected');
+            else label.classList.remove('selected');
+          };
+
+          inputs.forEach((input) => {
+            syncLabel(input);
+            input.addEventListener('change', () => syncLabel(input), { passive: true });
+          });
+        } catch (e) {}
       },
 
       checkOnboarding() {
