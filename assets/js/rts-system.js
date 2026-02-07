@@ -2536,9 +2536,11 @@ this.eventListeners.push({ element: document, type: 'click', handler: clickHandl
         document.addEventListener('submit', submitHandler);
         this.eventListeners.push({ element: document, type: 'submit', handler: submitHandler });
 
-        // Submit form handlers (as-is, but only bound once)
+        // Submit form handlers: only bind if the inline handler from the shortcode is NOT present.
+        // The inline handler (data-rts-inline-handler="1") is the authoritative single handler
+        // and includes its own character counter, AJAX fallback, and success UI logic.
         const submitForm = document.getElementById('rts-submit-form');
-        if (submitForm) {
+        if (submitForm && !submitForm.hasAttribute('data-rts-inline-handler')) {
           const textarea = submitForm.querySelector('#rts-letter-text');
           const charCount = submitForm.querySelector('.rts-char-count');
 
