@@ -766,7 +766,7 @@ class RTS_Shortcodes {
         ?>
         <div class="rts-submit-form-wrapper">
             <div class="rts-submit-grid">
-                <form id="rts-submit-form" class="rts-form" novalidate>
+                <form id="rts-submit-form" class="rts-form" novalidate data-rts-inline-handler="1">
                     <div class="rts-form-header">
                         <h2 class="rts-title">Write a letter</h2>
                         <p class="rts-subtitle">Write something warm and supportive for someone who needs a reason to stay.</p>
@@ -913,6 +913,9 @@ class RTS_Shortcodes {
             ready(function(){
                 var form = document.getElementById('rts-submit-form');
                 if(!form) return;
+                // Guard: only bind once (Rocket Loader / deferred scripts may re-execute).
+                if(form.getAttribute('data-rts-bound') === '1') return;
+                form.setAttribute('data-rts-bound', '1');
 
                 var textEl = document.getElementById('rts-letter-text');
                 var countEl = form.querySelector('.rts-char-count');
@@ -921,11 +924,13 @@ class RTS_Shortcodes {
                 var tsEl = document.getElementById('rts-timestamp');
                 var successBox = document.getElementById('rts-submit-success');
                 var sidebar = document.querySelector('.rts-submit-instructions');
+                var formHeader = form.querySelector('.rts-form-header');
+                var submitting = false; // lock flag
 
                 // Timestamp for lightweight bot check.
                 if(tsEl) tsEl.value = String(Date.now());
 
-                // Character counter.
+                // Character counter (bound once via passive input listener).
                 function updateCount(){
                     if(!textEl || !countEl) return;
                     countEl.textContent = String((textEl.value || '').length);
@@ -985,30 +990,65 @@ class RTS_Shortcodes {
                     msgEl.textContent = text || '';
                 }
 
+                // REST submission with AJAX fallback (WAF-safe).
                 async function submitViaRest(payload){
                     var endpoint = (window.rts_theme_data && window.rts_theme_data.rest_url)
                         ? window.rts_theme_data.rest_url.replace(/\/$/, '') + '/rts/v1/letter/submit'
                         : (window.location.origin + '/wp-json/rts/v1/letter/submit');
 
                     var headers = {'Content-Type':'application/json'};
-                    // WP nonce (logged in) if available
                     if(window.wpApiSettings && window.wpApiSettings.nonce){ headers['X-WP-Nonce'] = window.wpApiSettings.nonce; }
 
-                    var res = await fetch(endpoint, {method:'POST', credentials:'same-origin', headers:headers, body: JSON.stringify(payload)});
-                    var data = {};
-                    try{ data = await res.json(); } catch(_e) {}
-                    if(!res.ok){
+                    var res, data;
+                    try {
+                        res = await fetch(endpoint, {method:'POST', credentials:'same-origin', headers:headers, body: JSON.stringify(payload)});
+                        data = await res.json().catch(function(){ return {}; });
+                    } catch(_networkErr) {
+                        // REST failed (network error) - try AJAX fallback.
+                        return await submitViaAjax(payload);
+                    }
+
+                    // WAF / security block: fall back to admin-ajax.
+                    if(!res.ok && (res.status === 403 || res.status === 404 || res.status === 405)){
+                        return await submitViaAjax(payload);
+                    }
+                    if(res.ok && data && data.success) return data;
+                    if(!res.ok || !data || !data.success){
                         var msg = (data && data.message) ? data.message : 'Something went wrong. Please try again.';
                         throw new Error(msg);
                     }
+                    return data;
+                }
+
+                // AJAX fallback for environments where /wp-json is blocked.
+                async function submitViaAjax(payload){
+                    var ajaxUrl = (window.RTS_CONFIG && window.RTS_CONFIG.ajaxUrl)
+                        ? window.RTS_CONFIG.ajaxUrl
+                        : (window.rts_theme_data && window.rts_theme_data.ajax_url)
+                            ? window.rts_theme_data.ajax_url
+                            : '/wp-admin/admin-ajax.php';
+
+                    var params = new URLSearchParams();
+                    params.set('action', 'rts_submit_letter');
+                    params.set('payload', JSON.stringify(payload));
+
+                    var res = await fetch(ajaxUrl, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body: params.toString()});
+                    var data = {};
+                    try{ data = await res.json(); } catch(_e) {}
+                    // admin-ajax wraps in {success:bool, data:{...}}
+                    if(data && data.success && data.data) return data.data;
                     if(data && data.success) return data;
-                    throw new Error((data && data.message) ? data.message : 'Something went wrong. Please try again.');
+                    var msg = (data && data.data && data.data.message) ? data.data.message : 'Something went wrong. Please try again.';
+                    throw new Error(msg);
                 }
 
                 form.addEventListener('submit', function(e){
                     e.preventDefault();
-                    setMessage('', '');
+                    // Prevent double submits.
+                    if(submitting) return;
+                    submitting = true;
 
+                    setMessage('', '');
                     if(btn){ btn.disabled = true; btn.textContent = 'Submitting...'; }
 
                     var payload = {
@@ -1027,29 +1067,35 @@ class RTS_Shortcodes {
                     if(!payload.consent){
                         setMessage('error','Please confirm your letter can be reviewed before publishing.');
                         if(btn){ btn.disabled=false; btn.textContent='Submit Letter'; }
+                        submitting = false;
                         return;
                     }
                     if((payload.letter_text || '').replace(/<[^>]*>/g,'').trim().length < 50){
                         setMessage('error','Your letter needs to be at least 50 characters.');
                         if(btn){ btn.disabled=false; btn.textContent='Submit Letter'; }
+                        submitting = false;
                         return;
                     }
 
-                    submitViaRest(payload).then(function(){
-                        // Hide form fields, show success.
-                        Array.prototype.forEach.call(form.querySelectorAll('.rts-field, #rts-submit-btn'), function(el){ el.style.display='none'; });
+                    submitViaRest(payload).then(function(data){
+                        // Hide form fields and header, but keep the form container visible
+                        // so the success box (which is inside the form) stays visible.
+                        Array.prototype.forEach.call(form.querySelectorAll('.rts-field, .rts-honeypot, .rts-consent-field, #rts-submit-btn, #rts-form-message'), function(el){ el.style.display='none'; });
+                        if(formHeader) formHeader.style.display = 'none';
                         if(successBox){ successBox.style.display = 'block'; setupShareButtons(); }
-                        setMessage('success','Submission received. Thank you for writing.');
 
-                        // Ensure guidelines stay visible and feel “post-submit”.
+                        // Guidelines sidebar stays visible beneath the success box.
                         if(sidebar){
                             var h3 = sidebar.querySelector('h3');
                             if(h3) h3.textContent = 'What happens next';
                         }
+
+                        // Keep submit button hidden (form is done).
+                        if(btn) btn.style.display = 'none';
                     }).catch(function(err){
                         setMessage('error', err && err.message ? err.message : 'Could not submit your letter. Please try again.');
-                    }).finally(function(){
                         if(btn){ btn.disabled=false; btn.textContent='Submit Letter'; }
+                        submitting = false;
                         if(tsEl) tsEl.value = String(Date.now());
                     });
                 });
@@ -1063,10 +1109,14 @@ class RTS_Shortcodes {
     
 
     /**
-     * Shared: validate + create a quarantined Letter (draft + needs_review=1), queue moderation scan,
+     * Shared: validate + create a quarantined Letter (pending + needs_review=1), queue moderation scan,
      * and optionally send a branded thank-you email.
      *
-     * @return array{success:bool,message?:string,post_id?:int,status?:int}
+     * Idempotency: A SHA-256 hash of (email + stripped content + 5-minute time bucket) is stored in
+     * post meta (_rts_submission_hash). If a post with the same hash already exists, we return the
+     * existing post_id without creating a duplicate.
+     *
+     * @return array{success:bool,message?:string,letter_id?:int,status?:int}
      */
     private function process_letter_submission(array $payload): array {
         // Nonce (must match wp_create_nonce('rts_submit_letter'))
@@ -1106,12 +1156,37 @@ class RTS_Shortcodes {
             return ['success' => false, 'message' => 'Letter must be at least 50 characters.', 'status' => 400];
         }
 
+        // --- Idempotency guard ---
+        // Hash the email + stripped content + 5-minute time bucket to detect duplicate submissions.
+        $time_bucket = (string) floor(time() / 300);
+        $submission_hash = hash('sha256', strtolower(trim($author_email)) . '|' . trim($letter_text_stripped) . '|' . $time_bucket);
+
+        $existing = get_posts([
+            'post_type'      => 'letter',
+            'post_status'    => ['pending', 'draft', 'publish'],
+            'meta_key'       => '_rts_submission_hash',
+            'meta_value'     => $submission_hash,
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+        ]);
+
+        if (!empty($existing)) {
+            // Duplicate detected: return success with existing ID (idempotent).
+            return ['success' => true, 'message' => 'Letter received.', 'letter_id' => (int) $existing[0], 'status' => 200];
+        }
+
+        // Flag to prevent the save_post_letter hook from also queueing a moderation scan.
+        // We queue it explicitly below; the flag is checked by on_save_post_letter.
+        if (!defined('RTS_FRONTEND_SUBMISSION_IN_PROGRESS')) {
+            define('RTS_FRONTEND_SUBMISSION_IN_PROGRESS', true);
+        }
+
         // Create a quarantined letter.
         $title_seed = $author_name ? "Letter from {$author_name}" : 'New Letter Submission';
         $post_title = wp_trim_words($title_seed, 10, '');
         $post_id = wp_insert_post([
             'post_type'    => 'letter',
-            'post_status'  => 'draft', // quarantine until moderation approves
+            'post_status'  => 'pending', // queued for moderation review
             'post_title'   => $post_title,
             'post_content' => $letter_text,
         ], true);
@@ -1125,11 +1200,13 @@ class RTS_Shortcodes {
         update_post_meta($post_id, 'rts_moderation_status', 'pending_review');
         update_post_meta($post_id, 'rts_submission_source', 'frontend');
         update_post_meta($post_id, 'rts_author_name', $author_name);
+        update_post_meta($post_id, '_rts_submission_hash', $submission_hash);
         if ($author_email && is_email($author_email)) {
             update_post_meta($post_id, 'rts_author_email', $author_email);
         }
 
-        // Queue moderation scan (if available)
+        // Queue moderation scan exactly once (meta lock prevents on_save_post_letter from re-queuing).
+        update_post_meta($post_id, '_rts_moderation_job_scheduled', '1');
         if (class_exists('RTS_Engine_Dashboard') && method_exists('RTS_Engine_Dashboard', 'queue_letter_scan')) {
             try {
                 RTS_Engine_Dashboard::queue_letter_scan((int) $post_id);
@@ -1143,7 +1220,7 @@ class RTS_Shortcodes {
             $this->send_letter_thank_you_email($author_email, $author_name);
         }
 
-        return ['success' => true, 'post_id' => (int) $post_id, 'status' => 200];
+        return ['success' => true, 'letter_id' => (int) $post_id, 'status' => 200];
     }
 
     /**

@@ -4242,6 +4242,14 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 
 		public static function on_save_post_letter(int $post_id, \WP_Post $post, bool $update): void {
 			if (!rts_as_available() || wp_is_post_revision($post_id) || wp_is_post_autosave($post_id) || $post->post_type !== 'letter' || $post->post_status === 'publish') return;
+
+			// Skip empty posts (auto-drafts converted to drafts, etc.)
+			if (empty(trim($post->post_content ?? ''))) return;
+
+			// If the frontend submission handler already queued a moderation job, don't double-queue.
+			if (defined('RTS_FRONTEND_SUBMISSION_IN_PROGRESS') && RTS_FRONTEND_SUBMISSION_IN_PROGRESS) return;
+			if (get_post_meta($post_id, '_rts_moderation_job_scheduled', true) === '1') return;
+
 			$existing_ip = (string) get_post_meta($post_id, 'rts_submission_ip', true);
 			if (trim($existing_ip) === '') {
 				$ip = RTS_IP_Utils::get_client_ip();

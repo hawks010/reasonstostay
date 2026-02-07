@@ -77,6 +77,9 @@ class RTS_CPT_Letters_System {
         add_filter('handle_bulk_actions-edit-letter', [$this, 'handle_bulk_actions'], 10, 3);
         // Legacy AJAX processing removed (handled by RTS Moderation Engine via Action Scheduler).
         
+        // Disable autosave for letter CPT admin screens to prevent auto-draft spam.
+        add_action('admin_enqueue_scripts', [$this, 'disable_autosave_for_letters']);
+
         // Custom CSS
         add_action('admin_head', [$this, 'admin_css']);
         // Legacy quick-approve removed.
@@ -1276,32 +1279,42 @@ public function admin_css(): void {
     }
     
     /**
-     * Prevent auto-draft creation for letters
-     * v2.0.18: WordPress sometimes creates auto-drafts automatically - prevent this for letters
+     * Prevent auto-draft creation for letters.
+     *
+     * WordPress creates auto-drafts when the admin clicks "Add New" and during autosave.
+     * For the letter CPT, front-end submissions call wp_insert_post() directly with 'pending'
+     * status, so they are never auto-drafts. We only need to handle the admin "Add New" path:
+     * allow it (so the editor works) but mark it so moderation doesn't queue empty posts.
      */
     public function prevent_auto_draft($data, $postarr) {
-        // Only affect letters
-        if ($data['post_type'] !== 'letter') {
+        if (!isset($data['post_type']) || $data['post_type'] !== 'letter') {
             return $data;
         }
-        
-        // If this is trying to create an auto-draft with no content
-        if ($data['post_status'] === 'auto-draft' && empty($data['post_content']) && empty($data['post_title'])) {
-            // Check if this is a programmatic creation (not from user action)
-            if (!isset($_POST['post_title']) && !isset($_POST['content'])) {
-                // Prevent creation by setting to draft instead
-                $data['post_status'] = 'draft';
-                
-                // Or better yet, skip it entirely if we're in admin and not editing
-                if (is_admin() && !isset($_GET['action'])) {
-                    // This is an automatic creation, not a user edit
-                    // We can't truly prevent it here, but we can mark it for cleanup
-                    $data['post_title'] = '[Auto-draft - DELETE ME]';
-                }
+
+        // Allow auto-drafts created via admin "Add New" (they are needed for the editor).
+        // But if this is an auto-draft with empty content AND it's not an explicit admin action,
+        // block it entirely by setting post_status to 'trash' so it won't pollute the list.
+        if ($data['post_status'] === 'auto-draft') {
+            $has_content = !empty(trim($data['post_content'] ?? ''));
+            $is_admin_new = is_admin() && (isset($_GET['post_type']) || isset($_GET['action']));
+
+            if (!$has_content && !$is_admin_new && !isset($_POST['post_title'])) {
+                // Silently block: set to trash so it's never visible.
+                $data['post_status'] = 'trash';
             }
         }
-        
+
         return $data;
+    }
+
+    /**
+     * Disable autosave on letter edit screens to prevent auto-draft spam.
+     */
+    public function disable_autosave_for_letters() {
+        global $post_type;
+        if ($post_type === 'letter') {
+            wp_deregister_script('autosave');
+        }
     }
 }
 
