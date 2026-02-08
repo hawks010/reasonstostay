@@ -1223,22 +1223,49 @@ getCacheKey() {
       // ---------------------------------------------------------------------------
       async fetchLetterNativeRest() {
         const viewed = Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : [];
-        const excludeParam = viewed.length ? '?exclude=' + viewed.join(',') : '';
+        const excludeParam = viewed.length ? 'exclude=' + viewed.join(',') : '';
 
-        // WAF-safe custom endpoint (randomisation is server-side, no orderby=rand in URL)
-        const base = (window.RTS_CONFIG && window.RTS_CONFIG.restBase)
-          ? window.RTS_CONFIG.restBase.replace(/\/$/, '')
-          : '/wp-json/rts/v1';
-        const url = base + '/letter/random' + excludeParam;
+        // Strategy A: Try the REST endpoint first (fast, cache-friendly).
+        // Strategy B: If REST returns 403 (Cloudflare / WAF block), fall back
+        //             to admin-ajax.php which is never blocked.
+        let raw = null;
 
-        const response = await this.robustFetch(url, {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: { 'X-WP-Nonce': ((window.RTS_CONFIG || {}).nonce || '') }
-        });
+        try {
+          const base = (window.RTS_CONFIG && window.RTS_CONFIG.restBase)
+            ? window.RTS_CONFIG.restBase.replace(/\/$/, '')
+            : '/wp-json/rts/v1';
+          const restUrl = base + '/letter/random' + (excludeParam ? '?' + excludeParam : '');
 
-        if (!response || !response.ok) return null;
-        const raw = await this.parseJson(response);
+          const response = await this.robustFetch(restUrl, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'X-WP-Nonce': ((window.RTS_CONFIG || {}).nonce || '') }
+          });
+
+          if (response && response.ok) {
+            raw = await this.parseJson(response);
+          }
+        } catch (e) { /* REST failed – fall through to AJAX */ }
+
+        // Strategy B: AJAX fallback (admin-ajax.php is never blocked by WAF)
+        if (!raw || !raw.id) {
+          try {
+            const ajaxUrl = (window.RTS_CONFIG && window.RTS_CONFIG.ajaxUrl)
+              ? window.RTS_CONFIG.ajaxUrl
+              : '/wp-admin/admin-ajax.php';
+            const ajaxEndpoint = ajaxUrl + '?action=rts_random_letter' + (excludeParam ? '&' + excludeParam : '');
+
+            const ajaxResp = await this.robustFetch(ajaxEndpoint, {
+              method: 'GET',
+              credentials: 'same-origin'
+            });
+
+            if (ajaxResp && ajaxResp.ok) {
+              raw = await this.parseJson(ajaxResp);
+            }
+          } catch (e) { /* both paths failed */ }
+        }
+
         if (!raw || !raw.id) return null;
 
         // Response is already flat { id, title, content, date, link, tone, feelings }
