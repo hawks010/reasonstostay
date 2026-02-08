@@ -1,322 +1,79 @@
 <?php
-/**
- * RTS Email Renderer (Brand Proxy)
- *
- * Programmatically renders Letters (WP_Post) into branded, accessible HTML emails.
- * - Inline CSS for Outlook compatibility
- * - Semantic HTML + table wrapper
- * - Dark mode support via prefers-color-scheme
- * - Injects header (logo/site name) + CAN-SPAM footer (unsubscribe + address)
- *
- * @package    RTS_Subscriber_System
- * @subpackage Renderer
- * @version    1.2.0
- */
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 class RTS_Email_Renderer {
 
-    /**
-     * Render a single Letter email.
-     *
-     * @param WP_Post $letter
-     * @param array   $args {
-     *   @type string $preheader
-     *   @type string $unsubscribe_url
-     *   @type string $recipient_email
-     *   @type string $template_type
-     * }
-     * @return string HTML
-     */
-    public function render_letter($letter, $args = array()) {
-        if (!($letter instanceof WP_Post)) {
-            return '';
+    private $logo_url = 'https://reasonstostay.inkfire.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+
+    public function render($template_name, $data = array()) {
+        $content = $this->get_template_content($template_name);
+
+        // Merge header and footer
+        $full_html = $this->get_header() . $content . $this->get_footer($data);
+
+        // Replace variables
+        foreach ($data as $key => $value) {
+            $full_html = str_replace('{{' . $key . '}}', $value, $full_html);
         }
 
-        $defaults = array(
-            'preheader'       => '',
-            'unsubscribe_url' => home_url('/'),
-            'recipient_email' => '',
-            'template_type'   => 'letter',
-        );
-        $args = wp_parse_args($args, $defaults);
+        return $full_html;
+    }
 
-        $site_name  = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
-        $title      = wp_specialchars_decode(get_the_title($letter), ENT_QUOTES);
-        $permalink  = get_permalink($letter);
+    private function get_header() {
+        ob_start();
+        ?>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #F8F1E9; margin: 0; padding: 0; color: #1A1A1A; }
+                .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; margin-top: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .header { background-color: #070C13; padding: 30px; text-align: center; border-bottom: 4px solid #FCA311; }
+                .logo { max-width: 150px; height: auto; }
+                .content { padding: 40px 30px; line-height: 1.6; font-size: 16px; }
+                .footer { background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+                .button { display: inline-block; padding: 12px 24px; background-color: #070C13; color: #ffffff !important; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="email-container">
+                <div class="header">
+                    <img src="<?php echo esc_url($this->logo_url); ?>" alt="Reasons to Stay" class="logo">
+                </div>
+                <div class="content">
+        <?php
+        return ob_get_clean();
+    }
 
-        // Brand tokens (hardcoded)
-        $bg         = '#0b1220';
-        $card       = '#111c33';
-        $text       = '#e8eefc';
-        $muted      = '#a9b7d6';
-        $accent     = '#DF157C';
-        $border     = '#223055';
-
-        $logo_html  = $this->get_logo_html($site_name, $accent);
-
-        $content = apply_filters('the_content', $letter->post_content);
-        $content = $this->sanitize_email_html($content);
-
-        // Ensure images have alt attributes (basic pass)
-        $content = preg_replace_callback('/<img\b([^>]*?)>/i', function($m) use ($title) {
-            $attrs = $m[1];
-            if (stripos($attrs, 'alt=') === false) {
-                $attrs .= ' alt="' . esc_attr($title) . '"';
-            }
-            return '<img' . $attrs . '>';
-        }, $content);
-
-        $preheader = $args['preheader'] ? $args['preheader'] : wp_strip_all_tags(wp_trim_words($letter->post_content, 18, '…'));
-        $preheader = esc_html($preheader);
-
-        $unsubscribe_url = esc_url($args['unsubscribe_url']);
-
-        $address = trim((string) get_option('rts_company_address'));
-        if (!$address) {
-            $address = $site_name;
-        }
-        $address = esc_html($address);
-
-        $html = '<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="x-apple-disable-message-reformatting">
-<title>' . esc_html($title) . '</title>
-<style>
-/* Dark mode support (mail clients that honor it) */
-@media (prefers-color-scheme: dark) {
-  body, .bg { background: ' . $bg . ' !important; }
-  .card { background: ' . $card . ' !important; }
-  .text { color: ' . $text . ' !important; }
-  .muted { color: ' . $muted . ' !important; }
-  a { color: ' . $accent . ' !important; }
-}
-</style>
-</head>
-<body class="bg" style="margin:0;padding:0;background:' . $bg . ';color:' . $text . ';font-family:Inter, Helvetica, Arial, sans-serif;">
-<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">' . $preheader . '</div>
-
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' . $bg . ';padding:24px 10px;">
-  <tr>
-    <td align="center">
-      <table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;width:100%;">
-        <tr>
-          <td style="padding:10px 8px 18px 8px;">
-            ' . $logo_html . '
-          </td>
-        </tr>
-
-        <tr>
-          <td class="card" style="background:' . $card . ';border:1px solid ' . $border . ';border-radius:24px;padding:26px 22px;">
-            <h1 class="text" style="margin:0 0 14px 0;font-size:22px;line-height:1.25;color:' . $text . ';letter-spacing:-0.01em;">' . esc_html($title) . '</h1>
-
-            <div class="text" style="font-size:16px;line-height:1.65;color:' . $text . ';">
-              ' . $content . '
+    private function get_footer($data) {
+        $unsubscribe_url = isset($data['unsubscribe_url']) ? $data['unsubscribe_url'] : '#';
+        ob_start();
+        ?>
+                </div>
+                <div class="footer">
+                    <p>You are receiving this because you signed up for Reasons to Stay.</p>
+                    <p>
+                        <a href="<?php echo esc_url($unsubscribe_url); ?>" style="color: #666; text-decoration: underline;">Unsubscribe</a> |
+                        <a href="<?php echo home_url('/privacy-policy'); ?>" style="color: #666; text-decoration: underline;">Privacy Policy</a>
+                    </p>
+                    <p>&copy; <?php echo date('Y'); ?> Reasons to Stay. All rights reserved.</p>
+                </div>
             </div>
-
-            <div style="margin-top:18px;">
-              <a href="' . esc_url($permalink) . '" style="display:inline-block;background:' . $accent . ';color:#ffffff;text-decoration:none;padding:12px 16px;border-radius:14px;font-weight:700;font-size:14px;line-height:1;">Read on the website</a>
-            </div>
-          </td>
-        </tr>
-
-        <tr>
-          <td style="padding:16px 8px 0 8px;">
-            <p class="muted" style="margin:0;font-size:13px;line-height:1.55;color:' . $muted . ';">
-              You are receiving this email because you subscribed to updates from ' . esc_html($site_name) . '.
-              <br>
-              <a href="' . $unsubscribe_url . '" style="color:' . $accent . ';text-decoration:underline;">Unsubscribe</a>
-              <span style="color:' . $muted . ';"> · </span>
-              <span>' . $address . '</span>
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>';
-
-        return $html;
+        </body>
+        </html>
+        <?php
+        return ob_get_clean();
     }
 
-    /**
-     * Render a digest email (multiple letters).
-     *
-     * @param array $letters Array of WP_Post.
-     * @param array $args See render_letter().
-     * @return string
-     */
-    public function render_digest($letters, $args = array()) {
-        $letters = is_array($letters) ? $letters : array();
-        $letters = array_values(array_filter($letters, function($p){ return $p instanceof WP_Post; }));
-
-        $site_name  = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
-
-        $defaults = array(
-            'preheader'       => '',
-            'unsubscribe_url' => home_url('/'),
-            'recipient_email' => '',
-            'template_type'   => 'digest',
-            'heading'         => 'Your latest letters',
-        );
-        $args = wp_parse_args($args, $defaults);
-
-        $bg         = '#0b1220';
-        $card       = '#111c33';
-        $text       = '#e8eefc';
-        $muted      = '#a9b7d6';
-        $accent     = '#DF157C';
-        $border     = '#223055';
-
-        $logo_html  = $this->get_logo_html($site_name, $accent);
-
-        $items_html = '';
-        foreach ($letters as $letter) {
-            $title = esc_html(get_the_title($letter));
-            $link  = esc_url(get_permalink($letter));
-            $excerpt = esc_html(wp_strip_all_tags(wp_trim_words($letter->post_content, 28, '…')));
-
-            $items_html .= '
-              <tr>
-                <td style="padding:0 0 14px 0;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ' . $border . ';border-radius:18px;background:rgba(255,255,255,0.02);">
-                    <tr>
-                      <td style="padding:16px 16px;">
-                        <h2 style="margin:0 0 8px 0;font-size:16px;line-height:1.3;color:' . $text . ';">' . $title . '</h2>
-                        <p style="margin:0 0 12px 0;font-size:14px;line-height:1.6;color:' . $muted . ';">' . $excerpt . '</p>
-                        <a href="' . $link . '" style="color:' . $accent . ';text-decoration:underline;font-weight:700;">Read this letter</a>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>';
+    private function get_template_content($template_name) {
+        // Simple template loader
+        $file = plugin_dir_path(dirname(__FILE__)) . 'templates/' . $template_name . '.php';
+        if (file_exists($file)) {
+            ob_start();
+            include $file;
+            return ob_get_clean();
         }
-
-        if (!$items_html) {
-            $items_html = '
-              <tr>
-                <td style="padding:0;">
-                  <p style="margin:0;font-size:14px;line-height:1.6;color:' . $muted . ';">No new letters right now.</p>
-                </td>
-              </tr>';
-        }
-
-        $preheader = $args['preheader'] ? $args['preheader'] : 'A fresh bundle of letters from ' . $site_name . '.';
-        $preheader = esc_html($preheader);
-
-        $unsubscribe_url = esc_url($args['unsubscribe_url']);
-
-        $address = trim((string) get_option('rts_company_address'));
-        if (!$address) {
-            $address = $site_name;
-        }
-        $address = esc_html($address);
-
-        $heading = esc_html($args['heading']);
-
-        $html = '<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="x-apple-disable-message-reformatting">
-<title>' . $heading . '</title>
-<style>
-@media (prefers-color-scheme: dark) {
-  body, .bg { background: ' . $bg . ' !important; }
-  .card { background: ' . $card . ' !important; }
-  .text { color: ' . $text . ' !important; }
-  .muted { color: ' . $muted . ' !important; }
-  a { color: ' . $accent . ' !important; }
-}
-</style>
-</head>
-<body class="bg" style="margin:0;padding:0;background:' . $bg . ';color:' . $text . ';font-family:Inter, Helvetica, Arial, sans-serif;">
-<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">' . $preheader . '</div>
-
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' . $bg . ';padding:24px 10px;">
-  <tr>
-    <td align="center">
-      <table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;width:100%;">
-        <tr>
-          <td style="padding:10px 8px 18px 8px;">
-            ' . $logo_html . '
-          </td>
-        </tr>
-
-        <tr>
-          <td class="card" style="background:' . $card . ';border:1px solid ' . $border . ';border-radius:24px;padding:22px;">
-            <h1 class="text" style="margin:0 0 14px 0;font-size:22px;line-height:1.25;color:' . $text . ';letter-spacing:-0.01em;">' . $heading . '</h1>
-
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-              ' . $items_html . '
-            </table>
-          </td>
-        </tr>
-
-        <tr>
-          <td style="padding:16px 8px 0 8px;">
-            <p class="muted" style="margin:0;font-size:13px;line-height:1.55;color:' . $muted . ';">
-              You are receiving this email because you subscribed to updates from ' . esc_html($site_name) . '.
-              <br>
-              <a href="' . $unsubscribe_url . '" style="color:' . $accent . ';text-decoration:underline;">Unsubscribe</a>
-              <span style="color:' . $muted . ';"> · </span>
-              <span>' . $address . '</span>
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>';
-
-        return $html;
-    }
-
-    private function get_logo_html($site_name, $accent) {
-        $logo_id = get_theme_mod('custom_logo');
-        $logo_url = $logo_id ? wp_get_attachment_image_url($logo_id, 'full') : '';
-        if ($logo_url) {
-            $logo_url = esc_url($logo_url);
-            return '<img src="' . $logo_url . '" width="140" alt="' . esc_attr($site_name) . '" style="display:block;max-width:140px;height:auto;border:0;">';
-        }
-        return '<div style="font-weight:800;font-size:18px;letter-spacing:-0.01em;color:' . esc_attr($accent) . ';">' . esc_html($site_name) . '</div>';
-    }
-
-    /**
-     * Very conservative sanitizer for email HTML.
-     * Allows a small safe subset of tags/attributes so letter formatting survives.
-     */
-    private function sanitize_email_html($html) {
-        $allowed = array(
-            'a' => array('href' => true, 'title' => true, 'target' => true, 'rel' => true),
-            'p' => array(),
-            'br' => array(),
-            'strong' => array(),
-            'em' => array(),
-            'ul' => array(),
-            'ol' => array(),
-            'li' => array(),
-            'blockquote' => array(),
-            'h2' => array(),
-            'h3' => array(),
-            'h4' => array(),
-            'span' => array('style' => true),
-            'div' => array('style' => true),
-            'img' => array('src' => true, 'alt' => true, 'title' => true, 'width' => true, 'height' => true, 'style' => true),
-        );
-        return wp_kses($html, $allowed);
+        return '';
     }
 }

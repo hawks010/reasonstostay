@@ -55,7 +55,7 @@ class RTS_Email_Queue {
         global $wpdb;
 
         // Template Validation
-        $valid_templates = array('welcome', 'verification', 'daily_digest', 'weekly_digest', 'monthly_digest', 'reconsent', 'newsletter_custom', 'all_caught_up');
+        $valid_templates = array('welcome', 'verification', 'daily_digest', 'weekly_digest', 'monthly_digest', 'reconsent', 'newsletter_custom', 'all_caught_up', 'automated_letter');
         if (!in_array($template, $valid_templates, true)) {
             return new WP_Error('invalid_template', 'Invalid email template: ' . esc_html($template));
         }

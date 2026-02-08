@@ -1,119 +1,104 @@
 /**
- * RTS Subscribers: Front-end subscription form handler (jQuery-free)
+ * RTS Subscribers: Front-end subscription form handler
  *
- * Why: Cloudflare Rocket Loader or perf plugins can alter script order.
- * A hard jQuery dependency can throw "jQuery is not defined" and derail UX.
+ * Works with the new subscription form structure:
+ *  - form.rts-subscribe-form
+ *  - input[name="action"] (hidden, value="rts_handle_subscription")
+ *  - input[name="security"] (hidden, nonce)
+ *  - input[name="email"]
+ *  - select[name="frequency"]
+ *  - input[name="prefs[]"] checkboxes
+ *  - input[name="privacy_consent"] checkbox
+ *  - .rts-form-message (message container)
  *
  * Expects a global `rtsSubscribe` localized object:
- *  - ajaxUrl
- *  - nonce
- *
- * Markup expectations:
- *  - form.rts-subscribe-form
- *  - input[name="email"]
- *  - input[name="preferences[]"] checkboxes
- *  - .rts-msg (message container)
+ *  - ajax_url
  */
 
 (function () {
   'use strict';
 
-  function qs(root, sel) {
-    return (root || document).querySelector(sel);
+  function showMessage(el, text, type) {
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'rts-form-message ' + type;
   }
 
-  function qsa(root, sel) {
-    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
-  }
-
-  function setMsg(form, html, isError) {
-    const msg = qs(form, '.rts-msg');
-    if (!msg) return;
-    msg.innerHTML = html;
-    msg.style.display = 'block';
-    msg.classList.toggle('rts-msg--error', !!isError);
-  }
-
-  function disableForm(form, disabled) {
-    qsa(form, 'input, button, textarea, select').forEach((el) => {
-      el.disabled = !!disabled;
-    });
-  }
-
-  function buildPayload(form) {
-    const emailEl = qs(form, 'input[name="email"]');
-    const email = emailEl ? String(emailEl.value || '').trim() : '';
-
-    const prefs = qsa(form, 'input[name="preferences[]"]:checked').map((el) => el.value);
-
-    const payload = new URLSearchParams();
-    payload.set('action', 'rts_subscribe');
-    payload.set('nonce', (window.rtsSubscribe && window.rtsSubscribe.nonce) ? window.rtsSubscribe.nonce : '');
-    payload.set('email', email);
-    // WP/AJAX parsers can accept repeated keys
-    prefs.forEach((p) => payload.append('preferences[]', p));
-
-    return { email, prefs, payload };
-  }
-
-  async function postForm(payload) {
-    const ajaxUrl = (window.rtsSubscribe && window.rtsSubscribe.ajaxUrl) ? window.rtsSubscribe.ajaxUrl : (window.ajaxurl || '/wp-admin/admin-ajax.php');
-
-    const res = await fetch(ajaxUrl, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      },
-      body: payload.toString(),
-    });
-
-    // PHP may return non-200 with HTML error pages. Handle gracefully.
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      return { success: false, data: { message: 'Unexpected response from server.' }, _raw: text };
+  function setFormState(form, disabled) {
+    var els = form.querySelectorAll('input, button, textarea, select');
+    for (var i = 0; i < els.length; i++) {
+      els[i].disabled = !!disabled;
     }
   }
 
   function init() {
-    // Delegate submit handler (survives dynamic DOM updates)
-    document.addEventListener('submit', async (e) => {
-      const form = e.target && e.target.closest ? e.target.closest('form.rts-subscribe-form') : null;
+    document.addEventListener('submit', async function (e) {
+      var form = e.target && e.target.closest ? e.target.closest('form.rts-subscribe-form') : null;
       if (!form) return;
 
       e.preventDefault();
 
-      const { email, prefs, payload } = buildPayload(form);
+      var msgEl = form.querySelector('.rts-form-message');
+      var submitBtn = form.querySelector('.rts-form-submit');
+      var originalBtnText = submitBtn ? submitBtn.textContent : '';
 
-      if (!email) {
-        setMsg(form, '<span>Enter your email address to subscribe.</span>', true);
+      // Basic client-side validation
+      var emailInput = form.querySelector('input[name="email"]');
+      if (!emailInput || !emailInput.value.trim()) {
+        showMessage(msgEl, 'Please enter your email address.', 'error');
         return;
       }
 
-      // Preferences are optional, but if none chosen we confirm intention
-      // (No modal, just a gentle inline nudge)
-      if (!prefs.length) {
-        setMsg(form, '<span>No reminders selected. You can still subscribe, but you will not receive reminder emails.</span>', false);
+      var consent = form.querySelector('input[name="privacy_consent"]');
+      if (consent && !consent.checked) {
+        showMessage(msgEl, 'Please agree to the privacy policy to subscribe.', 'error');
+        return;
       }
 
-      disableForm(form, true);
-      setMsg(form, '<span>Saving…</span>', false);
+      // Disable form and show loading state
+      setFormState(form, true);
+      if (submitBtn) submitBtn.textContent = 'Sending\u2026';
+      showMessage(msgEl, '', '');
+      if (msgEl) msgEl.style.display = 'none';
 
       try {
-        const json = await postForm(payload);
+        // Build payload from form data
+        var formData = new FormData(form);
+        var ajaxUrl = (window.rtsSubscribe && window.rtsSubscribe.ajax_url)
+          ? window.rtsSubscribe.ajax_url
+          : '/wp-admin/admin-ajax.php';
+
+        var res = await fetch(ajaxUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: new URLSearchParams(formData),
+        });
+
+        var text = await res.text();
+        var json;
+        try {
+          json = JSON.parse(text);
+        } catch (parseErr) {
+          json = { success: false, data: { message: 'Unexpected response from server.' } };
+        }
+
         if (json && json.success) {
-          setMsg(form, '<span>You\'re subscribed. Thank you.</span>', false);
+          var successMsg = (json.data && json.data.message)
+            ? json.data.message
+            : 'You\'re subscribed. Thank you!';
+          showMessage(msgEl, successMsg, 'success');
           form.reset();
         } else {
-          const msg = (json && json.data && json.data.message) ? json.data.message : 'Subscription failed.';
-          setMsg(form, '<span>' + String(msg) + '</span>', true);
+          var errMsg = (json && json.data && json.data.message)
+            ? json.data.message
+            : 'Subscription failed. Please try again.';
+          showMessage(msgEl, errMsg, 'error');
         }
       } catch (err) {
-        setMsg(form, '<span>Network error. Please try again.</span>', true);
+        showMessage(msgEl, 'Network error. Please try again.', 'error');
       } finally {
-        disableForm(form, false);
+        setFormState(form, false);
+        if (submitBtn) submitBtn.textContent = originalBtnText;
       }
     }, { passive: false });
   }
