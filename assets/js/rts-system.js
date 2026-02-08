@@ -1223,11 +1223,13 @@ getCacheKey() {
       // ---------------------------------------------------------------------------
       async fetchLetterNativeRest() {
         const viewed = Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.slice(-50) : [];
-        const excludeParam = viewed.length ? '&exclude=' + viewed.join(',') : '';
+        const excludeParam = viewed.length ? '?exclude=' + viewed.join(',') : '';
 
-        // Native WP REST with strict field selection (Data Diet)
-        const url = '/wp-json/wp/v2/letter?_fields=id,title,content,date,link'
-                  + '&per_page=1&orderby=rand' + excludeParam;
+        // WAF-safe custom endpoint (randomisation is server-side, no orderby=rand in URL)
+        const base = (window.RTS_CONFIG && window.RTS_CONFIG.restBase)
+          ? window.RTS_CONFIG.restBase.replace(/\/$/, '')
+          : '/wp-json/rts/v1';
+        const url = base + '/letter/random' + excludeParam;
 
         const response = await this.robustFetch(url, {
           method: 'GET',
@@ -1236,17 +1238,18 @@ getCacheKey() {
         });
 
         if (!response || !response.ok) return null;
-        const items = await this.parseJson(response);
-        if (!Array.isArray(items) || !items.length) return null;
+        const raw = await this.parseJson(response);
+        if (!raw || !raw.id) return null;
 
-        // Normalize native WP shape → internal shape expected by renderLetter
-        const raw = items[0];
+        // Response is already flat { id, title, content, date, link, tone, feelings }
         return {
           id:      raw.id,
-          title:   (raw.title && raw.title.rendered) ? raw.title.rendered : '',
-          content: (raw.content && raw.content.rendered) ? raw.content.rendered : '',
+          title:   raw.title || '',
+          content: raw.content || '',
           date:    raw.date || '',
-          link:    raw.link || ''
+          link:    raw.link || '',
+          tone:    raw.tone || [],
+          feelings: raw.feelings || []
         };
       },
 
@@ -1319,7 +1322,18 @@ getCacheKey() {
           const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
           const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
 
-          if (loadingEl) loadingEl.style.display = 'block';
+          // Skeleton loading: show shimmer placeholders for better perceived performance
+          if (loadingEl) {
+            loadingEl.innerHTML = '<div class="rts-skeleton-block">'
+              + '<div class="rts-skeleton rts-skeleton-title"></div>'
+              + '<div class="rts-skeleton rts-skeleton-line"></div>'
+              + '<div class="rts-skeleton rts-skeleton-line"></div>'
+              + '<div class="rts-skeleton rts-skeleton-line"></div>'
+              + '<div class="rts-skeleton rts-skeleton-line"></div>'
+              + '<div class="rts-skeleton rts-skeleton-line"></div>'
+              + '</div>';
+            loadingEl.style.display = 'block';
+          }
           if (displayEl) displayEl.style.display = 'none';
 
           let loadedOk = false;
@@ -1450,8 +1464,14 @@ getCacheKey() {
 
       // Read-Ahead Prefetching: silently fetch the next letter via native REST
       // and store it in window.nextLetterCache for 0 ms load on the next "Next" click.
+      // Also populates window.RTS_CACHE for aggressive multi-slot prefetching.
       async prefetchNextLetter() {
         if (!this.features.prefetch) return;
+
+        // Initialise the aggressive prefetch cache (persists across clicks).
+        if (!window.RTS_CACHE) {
+          window.RTS_CACHE = { letters: [], ts: 0 };
+        }
 
         const connection = this.getConnectionInfo();
 
@@ -1474,6 +1494,14 @@ getCacheKey() {
           );
           if (prefetchLetter && prefetchLetter.id && (!this.viewedLetterIds || !this.viewedLetterIds.includes(prefetchLetter.id))) {
             window.nextLetterCache = prefetchLetter;
+            // Also store in RTS_CACHE for multi-slot availability
+            window.RTS_CACHE.letters = window.RTS_CACHE.letters.filter(l => l.id !== prefetchLetter.id);
+            window.RTS_CACHE.letters.push(prefetchLetter);
+            window.RTS_CACHE.ts = Date.now();
+            // Cap the cache to avoid memory bloat
+            if (window.RTS_CACHE.letters.length > 5) {
+              window.RTS_CACHE.letters.shift();
+            }
             this.trackSuccess('prefetch');
           }
         } catch (e) {
