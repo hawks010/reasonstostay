@@ -282,7 +282,7 @@ class RTS_Shortcodes {
         ?>
         <div class="rts-onboarding-wrapper">
         <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true">
-            <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
             <!-- Onboarding styles consolidated into assets/css/rts-system.css -->
             <style>

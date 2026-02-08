@@ -241,8 +241,18 @@ class RTS_Admin_Menu {
      * - Bottom: 50/50 cards (Import Subscribers + SMTP / Sending essentials)
      */
     public function render_dashboard() {
-        // Analytics block (reuse RTS_Analytics)
-        $analytics = class_exists('RTS_Analytics') ? new RTS_Analytics() : null;
+		// Analytics block (reuse RTS_Analytics)
+		// NOTE: RTS_Analytics is implemented as a singleton (private constructor),
+		// so it must be accessed via get_instance() to avoid fatal errors.
+		$analytics = null;
+		if (class_exists('RTS_Analytics')) {
+			if (method_exists('RTS_Analytics', 'get_instance')) {
+				$analytics = RTS_Analytics::get_instance();
+			} elseif (method_exists('RTS_Analytics', 'instance')) {
+				// Back-compat fallback if an older variant exists.
+				$analytics = RTS_Analytics::instance();
+			}
+		}
         $stats = $analytics ? $analytics->get_subscriber_stats() : array('total'=>0,'active'=>0,'bounced'=>0,'unsubscribed'=>0);
 
         // Letter email send counts (today / this week / this month / this year)

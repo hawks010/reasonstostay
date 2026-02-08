@@ -108,6 +108,9 @@ class RTS_CPT_Letters_System {
             ],
             'public' => true,
             'show_ui' => true,
+            // Enable WP REST API for front-end letter loading
+            'show_in_rest' => true,
+            'rest_base' => 'letter',
             'menu_position' => 3,
             'menu_icon' => 'dashicons-email-alt',
             'supports' => ['title', 'editor', 'author', 'custom-fields', 'thumbnail'],

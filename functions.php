@@ -534,7 +534,7 @@ function rts_enqueue_frontend_assets() {
 
 wp_enqueue_style(
         'rts-google-fonts',
-        'https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600&display=swap',
+        'https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600&display=swap',
         [],
         null
     );

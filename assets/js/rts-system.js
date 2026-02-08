@@ -303,6 +303,15 @@ try {
           this.checkOnboarding();
           this.bindEvents();
 
+          // Safety check: the viewer can be rendered in multiple modes where "Next" is optional.
+          // Avoid hard failures if markup changes or a template removes the button.
+          try {
+            const viewerEl = document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card');
+            if (viewerEl && !viewerEl.querySelector('.rts-btn-next')) {
+              console.warn('RTS: Next button not found in DOM');
+            }
+          } catch (e) {}
+
           // SW is optional
           // this.registerServiceWorker();
           this.setupMemoryWatchdog();
@@ -310,7 +319,8 @@ try {
           window.addEventListener('beforeunload', () => this.cleanup());
           // Notify any UI widgets (e.g., stats row) that a view was recorded
           try {
-            window.dispatchEvent(new CustomEvent('rts:letterViewed', { detail: { letterId: letterId } }));
+            const safeLetterId = (this.currentLetter && this.currentLetter.id) ? this.currentLetter.id : null;
+            window.dispatchEvent(new CustomEvent('rts:letterViewed', { detail: { letterId: safeLetterId } }));
           } catch (e) {}
 
         } catch (error) {

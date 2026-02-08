@@ -196,16 +196,33 @@
    It was rendering as a stray "container" at the bottom of the letter card. */
 
 
-.rts-letter-footer {  
+.rts-letter-footer {
   z-index: 1;
-  display:flex;
-  flex-direction:row;
-  min-height:100%;
-  margin-top: 50px;
   position: relative;
+  display: flex;
+  justify-content: space-between; /* Pushes buttons to edges */
+  align-items: center;
+  gap: 15px;
+  margin-top: 2rem;
   font-size: 1rem;
   line-height: 1.5rem;
   color: var(--rts-black);
+}
+
+/* Prevent buttons from becoming full-width on desktop */
+.rts-letter-footer .rts-btn {
+    background-color: #F1E3D3;
+    color: #000000;
+    padding: 12px 28px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    border: none;
+    min-width: 120px;
+    display: inline-flex;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .rts-letter-content p {
@@ -302,10 +319,8 @@
 }
 
 .rts-btn:hover {
-    background: var(--rts-gray-dark);
-    border-color: var(--rts-gray-dark);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px var(--rts-shadow);
+    background-color: #000000;
+    color: #ffffff;
 }
 
 .rts-btn:focus-visible {
@@ -478,18 +493,16 @@
 .rts-share-btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 18px;
-    background: #070C13;
-    color: #F1E3D3;
-    border: none;
-    border-radius: 999px;
-    font-size: 16px;
-    line-height: 1.2;
+    justify-content: center;
+    padding: 10px 20px;
+    border-radius: 20px;
     text-decoration: none;
-    cursor: pointer;
-    transition: color 0.15s ease;
-    min-height: 44px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border: 1px solid rgba(17, 24, 39, 0.12);
+    background: #111827;
+    color: #ffffff;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
 }
 
 .rts-share-btn:hover {
@@ -589,16 +602,16 @@ html.rts-onboarding-active .rts-a11y-panel{
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
-    transition: transform 0.12s ease, filter 0.12s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .rts-btn-skip:hover{
-    filter: brightness(1.05);
-    transform: translateY(-1px);
+    background: #000;
+    border-color: #000;
 }
 
 .rts-btn-skip:active{
-    transform: translateY(0);
+    transform: none;
 }
 
 .rts-btn-skip:focus-visible{
@@ -998,7 +1011,6 @@ html.rts-onboarding-active .rts-a11y-panel{
         flex-direction: column;
     }
     
-    .rts-btn,
     .rts-btn-helpful {
         width: 100%;
     }
@@ -1395,7 +1407,7 @@ body.rts-modal-open{overflow:hidden;}
 /* ==========================================
    ONBOARDING MOBILE TIGHTENING (Touch + Small Screens)
    ========================================== */
-@media (max-width: 600px) {
+@media (max-width: 665px) {
   .rts-onboarding-overlay{
     align-items: flex-start !important;
     padding: 10px !important;
@@ -1403,7 +1415,7 @@ body.rts-modal-open{overflow:hidden;}
   }
 
   .rts-onboarding-modal{
-    max-height: calc(100vh - 20px) !important;
+    max-height: calc(100vh - 60px) !important;
     overflow: auto !important;
     border-radius: 10px !important;
   }
@@ -1413,7 +1425,7 @@ body.rts-modal-open{overflow:hidden;}
   }
 
   .rts-onboarding-content{
-    padding: 18px 16px 16px !important;
+    padding: 35px 25px 25px !important;
     gap: 14px !important;
   }
 
@@ -1474,7 +1486,7 @@ body.rts-modal-open{overflow:hidden;}
 
   .rts-btn-skip{
     padding: 10px 14px !important;
-    border-radius: 14px !important;
+    border-radius: 10px !important;
     font-size: 14px !important;
   }
 }
@@ -1511,8 +1523,8 @@ html.rts-onboarding-active .rts-onboarding-overlay {
     .rts-onboarding-modal {
         width: 100% !important;
         max-width: 100% !important;
-        height: calc(100vh - 20px) !important;
-        max-height: calc(100vh - 20px) !important;
+        height: calc(100vh - 60px) !important;
+        max-height: calc(100vh - 60px) !important;
         border-radius: 35px !important;
         overflow: hidden !important;
     }
@@ -1522,7 +1534,7 @@ html.rts-onboarding-active .rts-onboarding-overlay {
         -webkit-overflow-scrolling: touch !important;
     }
     .rts-onboarding-topbar { padding: 12px 14px 0 !important; }
-    .rts-onboarding-content { padding: 14px 16px 16px !important; }
+    .rts-onboarding-content { padding: 35px 25px 25px !important; }
     .rts-onboarding-content h1,
     .rts-onboarding-content h2 { font-size: 1.6rem !important; line-height: 1.2 !important; margin-bottom: 10px !important; }
     .rts-onboarding-content p { font-size: 1rem !important; line-height: 1.35 !important; margin-bottom: 10px !important; }
@@ -1569,9 +1581,9 @@ html.rts-onboarding-active .rts-onboarding-overlay {
     width: 100%;
     max-width: 680px;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     max-height: 90vh;
     font-family: 'Inter', sans-serif;
 }
@@ -1592,18 +1604,24 @@ html.rts-onboarding-active .rts-onboarding-overlay {
     flex-shrink: 0;
     z-index: 20;
     background: transparent;
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 35px 22px 0;
 }
 
 .rts-btn-skip{
-    background-color:#FCA311;
-    color:#1A1A1A;
+    background-color:#D63031;
+    color:#FFFFFF;
     font-weight:700;
     font-size:12px;
     letter-spacing:0.15em;
     text-transform:uppercase;
     border:none;
     cursor:pointer;
-    transition: all 0.2s ease;
+    border-radius: 10px;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -1612,38 +1630,41 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 }
 
 .rts-btn-skip:hover{
-    background-color:#e5940e;
-    transform: scale(1.02);
+    background-color:#000;
+    transform: none;
+}
+
+/* Skip must not animate/rotate on click or focus */
+.rts-btn-skip:active,
+.rts-btn-skip:focus,
+.rts-btn-skip:focus-visible{
+    transform: none !important;
+    animation: none !important;
 }
 
 @media (min-width:768px){
-    .rts-skip-container{
-        width:40px;
-        display:flex;
-        align-items:center;
-        justify-content:flex-start;
-        order:2;
-        margin-right:-20px;
-    }
     .rts-btn-skip{
-        writing-mode: vertical-lr;
-        text-orientation: mixed;
-        transform: rotate(180deg);
-        width:100%;
-        height:200px;
-        border-radius:12px 0 0 12px;
+        writing-mode: horizontal-tb;
+        text-orientation: initial;
+        transform: none;
+        width: 200px;
+        height: auto;
+        border-radius: 10px;
+        display: block;
+        text-align: center;
+        white-space: nowrap;
     }
 }
 
 /* Scroll wrapper */
 .rts-onboarding-scroll-wrapper{
     flex-grow: 1;
-    order:1;
+    order: 2;
     overflow-y:auto;
     scrollbar-width: thin;
     scrollbar-color:#E5E7EB transparent;
     scroll-behavior:smooth;
-    border-radius:35px;
+    border-radius: 0 0 35px 35px;
 }
 .rts-onboarding-scroll-wrapper::-webkit-scrollbar{ width:6px; }
 .rts-onboarding-scroll-wrapper::-webkit-scrollbar-track{ background:transparent; }
@@ -1656,7 +1677,7 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 
 /* Typography */
 #rts-onboarding-title{
-    font-family:'Playfair Display', serif;
+    font-family: 'Special Elite', serif;
     font-size:2.25rem;
     line-height:1.1;
     font-weight:700;
@@ -1826,9 +1847,8 @@ html.rts-onboarding-active .rts-onboarding-overlay {
     transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 .rts-btn:hover{
-    background-color:#FFFFFF;
-    color:#1A1A1A;
-    border-color:#1A1A1A;
+    background-color:#000000;
+    color:#ffffff;
 }
 .rts-btn:active{ transform: scale(0.98); }
 
@@ -1892,13 +1912,13 @@ html.rts-onboarding-active .rts-onboarding-overlay {
         background:transparent;
     }
     .rts-btn-skip{
-        width:33%;
+        width:100%;
         height:auto;
         padding:10px 0;
         writing-mode: horizontal-tb;
         transform:none;
         font-size:11px;
-        border-radius: 0 0 12px 12px;
+        border-radius: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     .rts-btn-skip::before{
@@ -1914,7 +1934,8 @@ html.rts-onboarding-active .rts-onboarding-overlay {
         flex-direction:column-reverse;
         gap:15px;
     }
-    .rts-btn{ width:100%; }
+    /* Keep onboarding buttons from forcing full-width */
+    .rts-step-footer .rts-btn{ width:auto; }
 }
 
 
@@ -1946,7 +1967,7 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 .rts-consent-label{display:flex;gap:12px;align-items:flex-start;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;}
 .rts-consent-label input{margin-top:2px;width:18px;height:18px;}
 .rts-consent-label span{color:#111827;font-weight:600;line-height:1.35;}
-.rts-btn{margin-top:22px;width:100%;border:none;border-radius:12px;padding:14px 16px;font-size:1.05rem;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,background .15s ease;}
+.rts-form .rts-btn{margin-top:22px;width:auto;border:none;border-radius:12px;padding:14px 16px;font-size:1.05rem;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,background .15s ease;}
 .rts-btn-primary{background:#111827;color:#fff;font-family:'Special Elite',ui-monospace,monospace;letter-spacing:0.03em;}
 .rts-btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 18px rgba(0,0,0,0.16);}
 .rts-btn-primary:disabled{opacity:.65;cursor:not-allowed;transform:none;box-shadow:none;}
