@@ -22,7 +22,7 @@ if (!defined('RTS_PLUGIN_URL')) {
     define('RTS_PLUGIN_URL', trailingslashit(get_stylesheet_directory_uri()) . 'subscribers/');
 }
 if (!defined('RTS_VERSION')) {
-    define('RTS_VERSION', '2.0.39.12');
+    define('RTS_VERSION', '2.1.0');
 }
 
 class RTS_Subscriber_System {
@@ -30,8 +30,8 @@ class RTS_Subscriber_System {
     private static $instance = null;
     
     // Versioning
-    const VERSION = '2.0.39.12';
-    const DB_VERSION = '2.0.0'; 
+    const VERSION = '2.1.0';
+    const DB_VERSION = '2.1.0';
     
     private $plugin_path;
     private $plugin_url;
@@ -75,7 +75,18 @@ class RTS_Subscriber_System {
         // Reconsent Handlers
         add_action('admin_post_rts_send_reconsent', array($this, 'handle_send_reconsent'));
         add_action('rts_send_reconsent_batch', array($this, 'process_reconsent_batch'), 10, 1);
-        
+
+        // AJAX handler for new subscription form
+        add_action('wp_ajax_rts_handle_subscription', array($this, 'handle_subscription'));
+        add_action('wp_ajax_nopriv_rts_handle_subscription', array($this, 'handle_subscription'));
+
+        // Automated drip email processing (hourly cron)
+        add_action('rts_automated_drip', array($this, 'process_automated_emails'));
+
+        // Sync subscriber table when post meta changes
+        add_action('updated_post_meta', array($this, 'sync_subscriber_meta_change'), 10, 4);
+        add_action('added_post_meta', array($this, 'sync_subscriber_meta_change'), 10, 4);
+
         // Boot
         $this->load_dependencies();
         $this->init_components();
@@ -176,6 +187,9 @@ class RTS_Subscriber_System {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_filter('cron_schedules', array($this, 'add_cron_schedules'));
         add_action('publish_letter', array($this, 'on_letter_published'), 10, 2);
+
+        // Backward-compat shortcode: old form used [rts_subscribe], new uses [rts_subscribe_form]
+        add_shortcode('rts_subscribe', array($this, 'render_subscribe_form_compat'));
         // CPT registration is handled by the dedicated CPT classes:
         // - RTS_Subscriber_CPT
         // - RTS_Newsletter_CPT
@@ -322,6 +336,8 @@ public function register_letter_cpt() {
         if (!wp_next_scheduled('rts_monthly_digest')) wp_schedule_event(strtotime('first day of next month 09:00:00'), 'monthly', 'rts_monthly_digest');
         if (!wp_next_scheduled('rts_queue_cleanup')) wp_schedule_event(time(), 'daily', 'rts_queue_cleanup');
         if (!wp_next_scheduled('rts_cron_health_check')) wp_schedule_event(time(), 'hourly', 'rts_cron_health_check');
+        // Automated drip: process personalized letter delivery hourly
+        if (!wp_next_scheduled('rts_automated_drip')) wp_schedule_event(time(), 'hourly', 'rts_automated_drip');
     }
     
     private function set_default_options() {
@@ -346,7 +362,28 @@ public function register_letter_cpt() {
     }
     
     public function enqueue_frontend_assets() {
-        global $post;
+        // Register frontend assets (enqueued on demand by form shortcode render method).
+        $css_ver = @filemtime($this->plugin_path . 'assets/css/frontend.css') ?: self::VERSION;
+        $js_ver  = @filemtime($this->plugin_path . 'assets/js/subscription-form.js') ?: self::VERSION;
+
+        wp_register_style(
+            'rts-frontend-css',
+            $this->plugin_url . 'assets/css/frontend.css',
+            array(),
+            $css_ver
+        );
+
+        wp_register_script(
+            'rts-subscription-js',
+            $this->plugin_url . 'assets/js/subscription-form.js',
+            array(),
+            $js_ver,
+            true
+        );
+
+        wp_localize_script('rts-subscription-js', 'rtsSubscribe', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+        ));
     }
     
     public function enqueue_admin_assets($hook) {
@@ -542,6 +579,503 @@ public function register_letter_cpt() {
         ");
 
         update_option('rts_subscriber_meta_migrated_v1_2', 1, false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Backward-compat shortcode: [rts_subscribe] → delegates to new form class
+    // -----------------------------------------------------------------------
+
+    /**
+     * Render the subscription form via the old [rts_subscribe] shortcode.
+     */
+    public function render_subscribe_form_compat($atts) {
+        if ($this->subscription_form && method_exists($this->subscription_form, 'render')) {
+            return $this->subscription_form->render($atts);
+        }
+        return '';
+    }
+
+    // -----------------------------------------------------------------------
+    // AJAX Form Handler: rts_handle_subscription
+    // -----------------------------------------------------------------------
+
+    /**
+     * Handle subscription form submissions via AJAX.
+     *
+     * Validates input, creates the subscriber via CPT, stores scheduling data
+     * in the rts_subscribers table, and triggers welcome/verification email.
+     */
+    public function handle_subscription() {
+        // Verify nonce
+        if (!check_ajax_referer('rts_subscribe_nonce', 'security', false)) {
+            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'));
+            return;
+        }
+
+        // Honeypot check
+        if (!empty($_POST['rts_website'])) {
+            wp_send_json_error(array('message' => 'Invalid submission.'));
+            return;
+        }
+
+        // Email validation
+        $email = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
+        if (!is_email($email)) {
+            wp_send_json_error(array('message' => 'Please enter a valid email address.'));
+            return;
+        }
+
+        // Frequency validation (allow only known values)
+        $frequency = isset($_POST['frequency']) ? sanitize_text_field(wp_unslash($_POST['frequency'])) : 'weekly';
+        if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
+            $frequency = 'weekly';
+        }
+
+        // Preferences validation
+        $prefs = array();
+        if (!empty($_POST['prefs']) && is_array($_POST['prefs'])) {
+            $allowed_prefs = array('letters', 'newsletters');
+            foreach ($_POST['prefs'] as $pref) {
+                $pref = sanitize_text_field(wp_unslash($pref));
+                if (in_array($pref, $allowed_prefs, true)) {
+                    $prefs[] = $pref;
+                }
+            }
+        }
+        // Default to both if none selected
+        if (empty($prefs)) {
+            $prefs = array('letters', 'newsletters');
+        }
+
+        // Privacy consent required
+        if (empty($_POST['privacy_consent'])) {
+            wp_send_json_error(array('message' => 'You must agree to the privacy policy to subscribe.'));
+            return;
+        }
+
+        // Rate limiting: 5 subscriptions per IP per hour
+        $ip = $this->get_client_ip();
+        $rate_key = 'rts_sub_rate_' . md5($ip);
+        $rate_count = (int) get_transient($rate_key);
+        if ($rate_count >= 5) {
+            wp_send_json_error(array('message' => 'Too many subscription attempts. Please try again later.'));
+            return;
+        }
+        set_transient($rate_key, $rate_count + 1, HOUR_IN_SECONDS);
+
+        // Ensure CPT class is available
+        if (!$this->subscriber_cpt) {
+            $this->load_dependencies();
+            $this->init_components();
+        }
+
+        if (!$this->subscriber_cpt || !method_exists($this->subscriber_cpt, 'get_subscriber_by_email')) {
+            wp_send_json_error(array('message' => 'System error. Please try again later.'));
+            return;
+        }
+
+        // Check for duplicate email
+        $existing = $this->subscriber_cpt->get_subscriber_by_email($email);
+        if ($existing) {
+            wp_send_json_error(array('message' => 'This email address is already subscribed.'));
+            return;
+        }
+
+        // Create subscriber via CPT
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
+        $subscriber_id = $this->subscriber_cpt->create_subscriber(
+            $email,
+            $frequency,
+            'website',
+            array(
+                'ip_address'       => $ip,
+                'user_agent'       => $user_agent,
+                'pref_letters'     => in_array('letters', $prefs, true) ? 1 : 0,
+                'pref_newsletters' => in_array('newsletters', $prefs, true) ? 1 : 0,
+            )
+        );
+
+        if (is_wp_error($subscriber_id)) {
+            wp_send_json_error(array('message' => $subscriber_id->get_error_message()));
+            return;
+        }
+
+        // Store preferences explicitly (create_subscriber may use defaults)
+        update_post_meta($subscriber_id, '_rts_pref_letters', in_array('letters', $prefs, true) ? 1 : 0);
+        update_post_meta($subscriber_id, '_rts_pref_newsletters', in_array('newsletters', $prefs, true) ? 1 : 0);
+
+        // Sync to rts_subscribers table for drip scheduling
+        $this->sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs);
+
+        // Send verification or welcome email
+        $require_verification = (bool) get_option('rts_require_email_verification', true);
+
+        if ($require_verification && $this->email_engine && method_exists($this->email_engine, 'send_verification_email')) {
+            $this->email_engine->send_verification_email($subscriber_id);
+            $message = 'Please check your email to verify your subscription.';
+        } else {
+            if ($this->email_engine && method_exists($this->email_engine, 'send_welcome_email')) {
+                $this->email_engine->send_welcome_email($subscriber_id);
+            }
+            $message = 'Thank you for subscribing! Check your inbox for a welcome message.';
+        }
+
+        wp_send_json_success(array('message' => $message));
+    }
+
+    // -----------------------------------------------------------------------
+    // Automated Drip Logic
+    // -----------------------------------------------------------------------
+
+    /**
+     * Process automated drip emails.
+     *
+     * Hooked to rts_automated_drip (hourly cron). Queries the rts_subscribers
+     * table for active subscribers whose next_send_date has passed, selects a
+     * random unsent letter, enqueues it, and calculates the next send date.
+     */
+    public function process_automated_emails() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_subscribers';
+
+        // Ensure table exists
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return;
+        }
+
+        $now = current_time('mysql', true);
+
+        // Get subscribers due for an email (batch of 50)
+        $subscribers = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE status = 'active' AND next_send_date IS NOT NULL AND next_send_date <= %s LIMIT 50",
+            $now
+        ));
+
+        if (empty($subscribers)) {
+            return;
+        }
+
+        // Load dependencies
+        $includes_path = $this->plugin_path . 'includes/';
+        if (!class_exists('RTS_Email_Templates') && file_exists($includes_path . 'class-email-templates.php')) {
+            require_once $includes_path . 'class-email-templates.php';
+        }
+        if (!class_exists('RTS_Email_Queue') && file_exists($includes_path . 'class-email-queue.php')) {
+            require_once $includes_path . 'class-email-queue.php';
+        }
+
+        if (!class_exists('RTS_Email_Templates') || !class_exists('RTS_Email_Queue')) {
+            return;
+        }
+
+        $templates = new RTS_Email_Templates();
+        $queue = new RTS_Email_Queue();
+        $logs_table = $wpdb->prefix . 'rts_email_logs';
+
+        foreach ($subscribers as $sub) {
+            $subscriber_id = intval($sub->post_id);
+
+            // Validate subscriber is still active and verified via CPT (source of truth)
+            $status   = get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+            $verified = (bool) get_post_meta($subscriber_id, '_rts_subscriber_verified', true);
+
+            if ($status !== 'active' || !$verified) {
+                // Update table to match CPT status
+                $wpdb->update($table, array('status' => $status ?: 'inactive'), array('id' => $sub->id), array('%s'), array('%d'));
+                continue;
+            }
+
+            // Check preferences: only send letters if subscriber wants them
+            $pref_letters = (bool) get_post_meta($subscriber_id, '_rts_pref_letters', true);
+            if (!$pref_letters) {
+                // Still advance the next_send_date so we don't re-check every hour
+                $next = $this->calculate_next_send_date($sub->frequency);
+                $wpdb->update($table, array('next_send_date' => $next), array('id' => $sub->id), array('%s'), array('%d'));
+                continue;
+            }
+
+            // Get IDs of letters already sent to this subscriber
+            $sent_ids = array();
+            if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
+                $sent_ids = $wpdb->get_col($wpdb->prepare(
+                    "SELECT DISTINCT letter_id FROM {$logs_table} WHERE subscriber_id = %d AND status = 'sent' AND letter_id IS NOT NULL",
+                    $subscriber_id
+                ));
+                $sent_ids = array_values(array_unique(array_filter(array_map('intval', (array) $sent_ids))));
+            }
+
+            // Select a random published letter they haven't received
+            $letter_args = array(
+                'post_type'      => 'letter',
+                'post_status'    => 'publish',
+                'posts_per_page' => 1,
+                'orderby'        => 'rand',
+                'no_found_rows'  => true,
+                'meta_query'     => array(
+                    array(
+                        'key'   => '_rts_email_ready',
+                        'value' => 1,
+                    ),
+                ),
+            );
+            if (!empty($sent_ids)) {
+                $letter_args['post__not_in'] = $sent_ids;
+            }
+
+            $letters = get_posts($letter_args);
+
+            if (empty($letters)) {
+                // All caught up: send the all_caught_up template
+                $tpl = $templates->render('all_caught_up', $subscriber_id);
+                $queue->enqueue_email($subscriber_id, 'all_caught_up', $tpl['subject'], $tpl['body'], null, 5);
+
+                // Advance next_send_date
+                $next = $this->calculate_next_send_date($sub->frequency);
+                $wpdb->update($table, array('next_send_date' => $next), array('id' => $sub->id), array('%s'), array('%d'));
+                continue;
+            }
+
+            $letter = $letters[0];
+
+            // Render using the frequency-appropriate digest template (reuses existing templates)
+            $template_slug = 'automated_letter';
+
+            // Build the email using the branded renderer
+            $token = get_post_meta($subscriber_id, '_rts_subscriber_token', true);
+            $unsubscribe_url = $this->generate_unsubscribe_url($token);
+
+            // Use the new email renderer for branded output
+            if (!class_exists('RTS_Email_Renderer') && file_exists($includes_path . 'class-email-renderer.php')) {
+                require_once $includes_path . 'class-email-renderer.php';
+            }
+
+            $subject = get_bloginfo('name') . ' - ' . get_the_title($letter);
+            $letter_content = apply_filters('the_content', $letter->post_content);
+
+            if (class_exists('RTS_Email_Renderer')) {
+                $renderer = new RTS_Email_Renderer();
+                $body = $renderer->render('letter', array(
+                    'letter_title'    => esc_html(get_the_title($letter)),
+                    'letter_content'  => wp_kses_post($letter_content),
+                    'unsubscribe_url' => $unsubscribe_url,
+                    'site_name'       => esc_html(get_bloginfo('name')),
+                    'letter_url'      => esc_url(get_permalink($letter)),
+                ));
+            } else {
+                // Fallback: use templates class
+                $tpl = $templates->render('daily_digest', $subscriber_id, array($letter));
+                $body = $tpl['body'];
+                $subject = $tpl['subject'];
+            }
+
+            // Add letter ID marker for granular logging
+            $body .= '<!--RTS_LETTER_IDS:' . intval($letter->ID) . '-->';
+
+            // Enqueue the email
+            $queue->enqueue_email($subscriber_id, $template_slug, $subject, $body, null, 5, intval($letter->ID));
+
+            // Calculate and store new next_send_date
+            $next = $this->calculate_next_send_date($sub->frequency);
+            $wpdb->update($table, array('next_send_date' => $next), array('id' => $sub->id), array('%s'), array('%d'));
+        }
+
+        // Ensure queue processing kicks in
+        if (!wp_next_scheduled('rts_process_email_queue')) {
+            wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Subscriber Table Sync Helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Sync a subscriber to the rts_subscribers scheduling table.
+     *
+     * @param int    $subscriber_id CPT post ID.
+     * @param string $email         Subscriber email.
+     * @param string $frequency     daily|weekly|monthly.
+     * @param array  $prefs         Array of preference strings.
+     */
+    private function sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_subscribers';
+
+        // Ensure table exists
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return;
+        }
+
+        $next_send = $this->calculate_next_send_date($frequency);
+
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE post_id = %d", intval($subscriber_id)));
+
+        if ($exists) {
+            $wpdb->update(
+                $table,
+                array(
+                    'email'          => sanitize_email($email),
+                    'status'         => 'active',
+                    'frequency'      => $frequency,
+                    'preferences'    => wp_json_encode($prefs),
+                    'next_send_date' => $next_send,
+                ),
+                array('post_id' => intval($subscriber_id)),
+                array('%s', '%s', '%s', '%s', '%s'),
+                array('%d')
+            );
+        } else {
+            $wpdb->insert(
+                $table,
+                array(
+                    'post_id'        => intval($subscriber_id),
+                    'email'          => sanitize_email($email),
+                    'status'         => 'active',
+                    'frequency'      => $frequency,
+                    'preferences'    => wp_json_encode($prefs),
+                    'next_send_date' => $next_send,
+                    'created_at'     => current_time('mysql', true),
+                ),
+                array('%d', '%s', '%s', '%s', '%s', '%s', '%s')
+            );
+        }
+    }
+
+    /**
+     * Keep rts_subscribers table in sync when subscriber post meta changes.
+     *
+     * Listens on updated_post_meta / added_post_meta for status, frequency,
+     * and preference meta keys. Debounced per request to avoid multiple writes.
+     */
+    public function sync_subscriber_meta_change($meta_id, $post_id, $meta_key, $meta_value) {
+        static $synced = array();
+
+        $tracked_keys = array(
+            '_rts_subscriber_status',
+            '_rts_subscriber_frequency',
+            '_rts_pref_letters',
+            '_rts_pref_newsletters',
+        );
+
+        if (!in_array($meta_key, $tracked_keys, true)) {
+            return;
+        }
+        if (get_post_type($post_id) !== 'rts_subscriber') {
+            return;
+        }
+        // Debounce: only sync once per request per post
+        if (isset($synced[$post_id])) {
+            return;
+        }
+        $synced[$post_id] = true;
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_subscribers';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return;
+        }
+
+        $email = get_post_meta($post_id, '_rts_subscriber_email', true);
+        if (!$email) {
+            $email = get_the_title($post_id);
+        }
+
+        $frequency = get_post_meta($post_id, '_rts_subscriber_frequency', true) ?: 'weekly';
+        $status    = get_post_meta($post_id, '_rts_subscriber_status', true) ?: 'active';
+
+        $prefs = array();
+        if (get_post_meta($post_id, '_rts_pref_letters', true)) {
+            $prefs[] = 'letters';
+        }
+        if (get_post_meta($post_id, '_rts_pref_newsletters', true)) {
+            $prefs[] = 'newsletters';
+        }
+
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE post_id = %d", intval($post_id)));
+
+        if ($exists) {
+            $wpdb->update(
+                $table,
+                array(
+                    'email'       => sanitize_email($email),
+                    'status'      => $status,
+                    'frequency'   => $frequency,
+                    'preferences' => wp_json_encode($prefs),
+                ),
+                array('post_id' => intval($post_id)),
+                array('%s', '%s', '%s', '%s'),
+                array('%d')
+            );
+        } else {
+            $wpdb->insert(
+                $table,
+                array(
+                    'post_id'        => intval($post_id),
+                    'email'          => sanitize_email($email),
+                    'status'         => $status,
+                    'frequency'      => $frequency,
+                    'preferences'    => wp_json_encode($prefs),
+                    'next_send_date' => $this->calculate_next_send_date($frequency),
+                    'created_at'     => current_time('mysql', true),
+                ),
+                array('%d', '%s', '%s', '%s', '%s', '%s', '%s')
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Utility Methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * Calculate the next send date based on frequency.
+     *
+     * @param string $frequency daily|weekly|monthly.
+     * @return string MySQL datetime (UTC).
+     */
+    private function calculate_next_send_date($frequency) {
+        switch ($frequency) {
+            case 'daily':
+                return gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS);
+            case 'monthly':
+                return gmdate('Y-m-d H:i:s', time() + (30 * DAY_IN_SECONDS));
+            case 'weekly':
+            default:
+                return gmdate('Y-m-d H:i:s', time() + WEEK_IN_SECONDS);
+        }
+    }
+
+    /**
+     * Generate a signed unsubscribe URL for a subscriber token.
+     *
+     * @param string $token Subscriber token.
+     * @return string Full unsubscribe URL.
+     */
+    private function generate_unsubscribe_url($token) {
+        if (!$token) {
+            return home_url('/');
+        }
+        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . date('Y-m-d'), wp_salt('auth'));
+        return add_query_arg(array('rts_unsubscribe' => $token, 'sig' => $sig), home_url('/'));
+    }
+
+    /**
+     * Get client IP with proxy/Cloudflare support.
+     *
+     * @return string Sanitized IP address.
+     */
+    private function get_client_ip() {
+        $keys = array('HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
+        foreach ($keys as $key) {
+            if (!empty($_SERVER[$key])) {
+                $ips = explode(',', sanitize_text_field(wp_unslash($_SERVER[$key])));
+                $ip = trim($ips[0]);
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
+        return '0.0.0.0';
     }
 
 }

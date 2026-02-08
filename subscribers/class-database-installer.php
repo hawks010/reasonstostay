@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 
 class RTS_Database_Installer {
 
-    const VERSION = '1.1.0';
+    const VERSION = '1.2.0';
 
     public static function install() {
         global $wpdb;
@@ -161,6 +161,24 @@ class RTS_Database_Installer {
             KEY date (date)
         ) $charset_collate;";
 
+        // 8. Subscribers (scheduling index for automated drip logic)
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_subscribers (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            post_id bigint(20) UNSIGNED NOT NULL,
+            email varchar(250) NOT NULL,
+            status varchar(20) NOT NULL DEFAULT 'active',
+            frequency varchar(20) NOT NULL DEFAULT 'weekly',
+            preferences text NOT NULL,
+            next_send_date datetime DEFAULT NULL,
+            created_at datetime NOT NULL,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY post_id (post_id),
+            KEY email (email),
+            KEY status_next_send (status, next_send_date),
+            KEY frequency (frequency)
+        ) $charset_collate;";
+
         return $schemas;
     }
 
@@ -174,6 +192,7 @@ class RTS_Database_Installer {
             'rts_email_bounces',
             'rts_rate_limits',
             'rts_engagement',
+            'rts_subscribers',
         );
         
         foreach ($tables as $table) {
@@ -233,6 +252,14 @@ class RTS_Database_Installer {
             if (empty($has_status_scheduled)) {
                 $wpdb->query("ALTER TABLE {$queue} ADD KEY status_scheduled (status, scheduled_at)");
             }
+        }
+
+        // 3) Subscribers table: ensure it exists (added in v1.2.0 for automated drip).
+        // dbDelta in install() handles creation; this ensures the table is present on upgrades.
+        $subs = $wpdb->prefix . 'rts_subscribers';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $subs)) !== $subs) {
+            // Table will be created by dbDelta in the main install() flow.
+            // Nothing extra needed here; just a guard for future column additions.
         }
     }
 }
