@@ -418,6 +418,7 @@ if (file_exists($multilingual_path)) {
 $core_includes = [
     'security.php',
     'cpt-letters-complete.php',
+    'rts-rest-api.php',
     'rts-bulk-jobs.php',
     'shortcodes.php',
     'logger.php',
@@ -441,56 +442,45 @@ foreach ($core_includes as $file) {
  * Use in Elementor: rts_get_stat('letters_delivered')
  */
 function rts_get_stat($stat_type) {
+    global $wpdb;
+
     switch ($stat_type) {
         case 'letters_delivered':
-            // Check manual override first
-            $manual = get_option('rts_manual_stats_letters', 0);
-            if ($manual > 0) {
-                return number_format($manual);
-            }
-            // Otherwise use database count
-            global $wpdb;
-            $count = $wpdb->get_var($wpdb->prepare(
+            // Live count from database
+            $live = (int) $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status = %s",
                 'letter',
                 'publish'
             ));
-            return number_format($count);
-            
+            // Additive offset (manual marketing number added to live data)
+            $offset = (int) get_option('rts_manual_stats_letters', 0);
+            return number_format($live + $offset);
+
         case 'helpful_percentage':
-            // Check manual override first
-            $manual = get_option('rts_manual_stats_helpful', 0);
-            if ($manual > 0) {
-                return $manual . '%';
-            }
-            // Otherwise calculate from database
-            global $wpdb;
-            $thumbs_up = $wpdb->get_var($wpdb->prepare(
-                "SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+            // Live calculation from database
+            $thumbs_up = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(SUM(meta_value), 0) FROM {$wpdb->postmeta} WHERE meta_key = %s",
                 'thumbs_up'
             ));
-            $thumbs_down = $wpdb->get_var($wpdb->prepare(
-                "SELECT SUM(meta_value) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+            $thumbs_down = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(SUM(meta_value), 0) FROM {$wpdb->postmeta} WHERE meta_key = %s",
                 'thumbs_down'
             ));
             $total = $thumbs_up + $thumbs_down;
-            if ($total > 0) {
-                $percent = round(($thumbs_up / $total) * 100);
-                return $percent . '%';
-            }
-            return '0%';
-            
+            $percent = ($total > 0) ? round(($thumbs_up / $total) * 100) : 0;
+            // Additive offset (e.g. +5 to nudge displayed percentage)
+            $offset = (int) get_option('rts_manual_stats_helpful', 0);
+            $percent = max(0, min(100, $percent + $offset));
+            return $percent . '%';
+
         case 'letters_submitted':
-            // Check manual override first
-            $manual = get_option('rts_manual_stats_submissions', 0);
-            if ($manual > 0) {
-                return number_format($manual);
-            }
-            // Otherwise use total count (published + pending)
+            // Live count (published + pending)
             $count = wp_count_posts('letter');
-            $total = $count->publish + $count->pending;
-            return number_format($total);
-            
+            $live = (int) $count->publish + (int) $count->pending;
+            // Additive offset
+            $offset = (int) get_option('rts_manual_stats_submissions', 0);
+            return number_format($live + $offset);
+
         default:
             return '0';
     }

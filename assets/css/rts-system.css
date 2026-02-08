@@ -1993,3 +1993,15 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 .rts-guideline-title{display:flex;gap:10px;align-items:center;font-family:'Special Elite',ui-monospace,monospace;font-size:1.15rem;color:#FCA311;margin:0 0 8px 0;}
 .rts-guideline-text{color:rgba(255,255,255,0.88);line-height:1.55;font-size:0.98rem;}
 .rts-emoji{font-size:1.1rem;line-height:1;}
+
+/* ============================================
+   SKELETON LOADING (Perceived Performance)
+   Shows a shimmer placeholder while the letter
+   is being fetched over the network.
+   ============================================ */
+@keyframes rts-shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.rts-skeleton{animation:rts-shimmer 1.6s ease-in-out infinite;background:linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.10) 50%,rgba(255,255,255,0.04) 75%);background-size:800px 100%;border-radius:12px;}
+.rts-skeleton-line{height:1em;margin-bottom:0.75em;border-radius:8px;}
+.rts-skeleton-line:last-child{width:60%;}
+.rts-skeleton-title{height:1.6em;width:45%;margin-bottom:1.2em;border-radius:10px;}
+.rts-skeleton-block{padding:30px;display:flex;flex-direction:column;gap:0;}

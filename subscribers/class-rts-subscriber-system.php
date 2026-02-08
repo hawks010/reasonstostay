@@ -392,6 +392,12 @@ public function register_letter_cpt() {
         $post_type = isset($_GET['post_type']) ? (string) $_GET['post_type'] : '';
         $page      = isset($_GET['page']) ? (string) $_GET['page'] : '';
 
+        // Also detect post type from the current screen (covers post.php edit screens).
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$post_type && $screen && !empty($screen->post_type)) {
+            $post_type = $screen->post_type;
+        }
+
         $is_subscriber_context = (
             strpos($post_type, 'rts_') === 0
             || strpos($page, 'rts-subscriber') === 0

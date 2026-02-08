@@ -152,12 +152,13 @@ class RTS_Shortcodes {
      * [rts_letter_viewer] - Main letter display
      */
     public function letter_viewer($atts) {
+      try {
         $atts = shortcode_atts([
             'show_helpful' => 'yes',
             'show_share' => 'yes',
             'show_next' => 'yes',
             'show_onboarding' => 'yes'], $atts);
-        
+
         ob_start();
         
         // Only show onboarding if enabled
@@ -267,8 +268,14 @@ class RTS_Shortcodes {
         </div>
         <?php
         return ob_get_clean();
+      } catch (\Throwable $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('RTS letter_viewer shortcode error: ' . $e->getMessage());
+        }
+        return '<div class="rts-letter-viewer"><p>Unable to load the letter viewer. Please refresh the page.</p></div>';
+      }
     }
-    
+
     /**
      * [rts_onboarding] - CSS3 Implementation (Brand Aligned)
      */
@@ -419,6 +426,7 @@ class RTS_Shortcodes {
      * [rts_submit_form]
      */
     public function submit_form($atts) {
+      try {
         ob_start();
         ?>
         <div class="rts-submit-form-wrapper">
@@ -715,9 +723,13 @@ class RTS_Shortcodes {
         </script>
 <?php
         return ob_get_clean();
+      } catch (\Throwable $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('RTS submit_form shortcode error: ' . $e->getMessage());
+        }
+        return '<div class="rts-submit-form-wrapper"><p>Unable to load the submission form. Please refresh the page.</p></div>';
+      }
     }
-    
-    
 
     /**
      * Shared: validate + create a quarantined Letter (pending + needs_review=1), queue moderation scan,
@@ -960,6 +972,7 @@ class RTS_Shortcodes {
      * [rts_site_stats_row]
      */
     public function site_stats_row($atts) {
+      try {
         $atts = shortcode_atts([
             'offset_delivered'  => 0,
             'offset_feelbetter' => 0,
@@ -1018,6 +1031,12 @@ class RTS_Shortcodes {
         </script>
         <?php
         return ob_get_clean();
+      } catch (\Throwable $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('RTS site_stats_row shortcode error: ' . $e->getMessage());
+        }
+        return '';
+      }
     }
 
     /**

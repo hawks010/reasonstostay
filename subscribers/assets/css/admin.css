@@ -1,6 +1,33 @@
 /* RTS SUBSCRIBER ADMIN - COMPLETE STYLING FOR ALL PAGES */
 
 /* ============================================
+   CSS VARIABLE BRIDGE
+   Inherit tokens from rts-admin.css (loaded as dependency).
+   Fallback values ensure the UI works even if the parent
+   stylesheet is missing.
+   ============================================ */
+.post-type-rts_subscriber,
+.post-type-rts_newsletter,
+.rts-subscriber-page,
+.rts-settings-page,
+.rts-analytics-page,
+.rts-templates-page,
+.rts-import-page {
+    --rts-bg:            var(--rts-bg, #0b0f18);
+    --rts-surface:       var(--rts-surface, #0f1626);
+    --rts-surface-2:     var(--rts-surface-2, #111a2c);
+    --rts-surface-3:     var(--rts-surface-3, #16233b);
+    --rts-text:          var(--rts-text, #e8eefc);
+    --rts-text-strong:   var(--rts-text-strong, #f3f6ff);
+    --rts-text-muted:    var(--rts-text-muted, rgba(232,238,252,.74));
+    --rts-border:        var(--rts-border, rgba(255,255,255,.10));
+    --rts-border-strong: var(--rts-border-strong, rgba(255,255,255,.16));
+    --rts-link:          var(--rts-link, #FCA311);
+    --rts-link-hover:    var(--rts-link-hover, #ffd18a);
+    --rts-focus:         var(--rts-focus, rgba(252,163,17,.28));
+}
+
+/* ============================================
    BASE - ALL SUBSCRIBER PAGES
    ============================================ */
 /*
@@ -40,7 +67,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 .rts-analytics-page,
 .rts-templates-page,
 .rts-import-page {
-    background: #070C13 !important;
+    background: var(--rts-bg, #0b0f18) !important;
     padding: 20px !important;
 }
 
@@ -59,7 +86,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 .post-type-rts_subscriber #wpbody-content .wrap > h1,
 .post-type-rts_subscriber .wp-heading-inline,
 .rts-page-header h1 {
-    color: #ffffff !important;
+    color: var(--rts-text-strong, #f3f6ff) !important;
     font-size: 32px !important;
     font-weight: 700 !important;
     margin: 0 0 25px 0 !important;
@@ -420,8 +447,8 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
    ============================================ */
 
 .rts-card {
-    background: #1e293b !important;
-    border: 1px solid #334155 !important;
+    background: var(--rts-surface-2, #111a2c) !important;
+    border: 1px solid var(--rts-border-strong, rgba(255,255,255,.16)) !important;
     border-radius: 35px !important;
     padding: 35px !important;
     margin-bottom: 25px;
@@ -435,16 +462,16 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 
 .rts-card h2,
 .rts-card h3 {
-    color: #f8fafc !important;
+    color: var(--rts-text-strong, #f3f6ff) !important;
     font-size: 20px;
     font-weight: 600;
     margin: 0 0 25px 0;
     padding-bottom: 20px;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid var(--rts-border-strong, rgba(255,255,255,.16));
 }
 
 .rts-card p {
-    color: #cbd5e1 !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     line-height: 1.6;
     margin: 0 0 15px 0;
 }
@@ -457,8 +484,8 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-metric-card {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
-    border: 1px solid #334155 !important;
+    background: linear-gradient(135deg, var(--rts-surface-2, #111a2c) 0%, var(--rts-surface, #0f1626) 100%) !important;
+    border: 1px solid var(--rts-border-strong, rgba(255,255,255,.16)) !important;
     border-radius: 35px !important;
     padding: 35px !important;
     transition: all 0.3s ease;
@@ -489,7 +516,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-metric-label {
-    color: #94a3b8 !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
@@ -499,7 +526,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-metric-value {
-    color: #f8fafc !important;
+    color: var(--rts-text-strong, #f3f6ff) !important;
     font-size: 42px;
     font-weight: 700;
     line-height: 1;
@@ -508,26 +535,26 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-metric-subtitle {
-    color: #64748b !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     font-size: 14px;
     margin-top: 12px;
 }
 
 .rts-form-section {
-    background: #1e293b !important;
-    border: 1px solid #334155 !important;
+    background: var(--rts-surface-2, #111a2c) !important;
+    border: 1px solid var(--rts-border-strong, rgba(255,255,255,.16)) !important;
     border-radius: 35px !important;
     padding: 35px !important;
     margin-bottom: 25px;
 }
 
 .rts-form-section h3 {
-    color: #f8fafc !important;
+    color: var(--rts-text-strong, #f3f6ff) !important;
     font-size: 18px;
     font-weight: 600;
     margin: 0 0 25px 0;
     padding-bottom: 15px;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid var(--rts-border-strong, rgba(255,255,255,.16));
 }
 
 .rts-form-row {
@@ -540,7 +567,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 .rts-form-label {
     display: block;
-    color: #f1f5f9 !important;
+    color: var(--rts-text, #e8eefc) !important;
     font-size: 15px;
     font-weight: 600;
     margin-bottom: 10px;
@@ -548,7 +575,7 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 
 .rts-form-description {
     display: block;
-    color: #94a3b8 !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     font-size: 13px;
     margin-top: 8px;
     line-height: 1.5;
@@ -559,11 +586,11 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 .rts-form-textarea {
     width: 100%;
     max-width: 600px;
-    background: #0f172a !important;
-    border: 2px solid #334155 !important;
+    background: var(--rts-surface, #0f1626) !important;
+    border: 2px solid var(--rts-border-strong, rgba(255,255,255,.16)) !important;
     border-radius: 15px !important;
     padding: 14px 18px !important;
-    color: #f1f5f9 !important;
+    color: var(--rts-text, #e8eefc) !important;
     font-size: 15px;
     transition: all 0.2s ease;
 }
@@ -572,8 +599,8 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 .rts-form-select:focus,
 .rts-form-textarea:focus {
     outline: none !important;
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+    border-color: var(--rts-link, #FCA311) !important;
+    box-shadow: 0 0 0 4px var(--rts-focus, rgba(252,163,17,.28)) !important;
 }
 
 .rts-code-editor {
@@ -631,8 +658,8 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-template-item {
-    background: #1e293b !important;
-    border: 2px solid #334155 !important;
+    background: var(--rts-surface-2, #111a2c) !important;
+    border: 2px solid var(--rts-border-strong, rgba(255,255,255,.16)) !important;
     border-radius: 25px !important;
     padding: 28px !important;
     transition: all 0.2s ease;
@@ -642,13 +669,13 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 }
 
 .rts-template-item:hover {
-    border-color: #3b82f6 !important;
+    border-color: var(--rts-link, #FCA311) !important;
     transform: translateX(5px);
-    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2);
+    box-shadow: 0 4px 16px rgba(252, 163, 17, 0.2);
 }
 
 .rts-template-name {
-    color: #f8fafc !important;
+    color: var(--rts-text-strong, #f3f6ff) !important;
     font-size: 18px;
     font-weight: 600;
     margin: 0 0 8px 0;
@@ -672,13 +699,13 @@ body.post-type-rts_newsletter .wp-core-ui .button-secondary,
 .rts-template-badge.order-3 { background: #f59e0b; }
 
 .rts-template-description {
-    color: #94a3b8 !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     font-size: 14px;
     margin: 0 0 10px 0;
 }
 
 .rts-template-meta {
-    color: #64748b !important;
+    color: var(--rts-text-muted, rgba(232,238,252,.74)) !important;
     font-size: 13px;
     display: flex;
     gap: 20px;
