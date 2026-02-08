@@ -2,13 +2,12 @@
 /**
  * Subscriber List Table
  *
- * NOTE: This file was previously a placeholder. The Subscribers system uses the
- * native CPT list screen for most workflows, but we keep a proper WP_List_Table
- * implementation here so the admin pages can switch to a custom list view
- * without needing to re-architect later.
+ * WP_List_Table implementation with badge-based status output,
+ * bold email display, and clean HTML matching the RTS CSS variables.
  *
- * This class is intentionally conservative: no destructive actions, no bulk
- * sending, no side effects. It only renders a list.
+ * @package    RTS_Subscriber_System
+ * @subpackage Admin
+ * @version    3.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -42,19 +41,66 @@ class RTS_Subscriber_List_Table extends WP_List_Table {
     }
 
     protected function column_default($item, $column_name) {
-        return isset($item[$column_name]) ? $item[$column_name] : '';
+        return isset($item[$column_name]) ? esc_html($item[$column_name]) : '';
     }
 
+    /**
+     * Email column: bold text with edit link.
+     */
     protected function column_email($item) {
         $email = sanitize_email($item['email'] ?? '');
-        if (!$email) return '';
+        if (!$email) {
+            return '';
+        }
 
         $post_id = intval($item['post_id'] ?? 0);
         $edit = $post_id ? get_edit_post_link($post_id, '') : '';
         if ($edit) {
-            return '<a href="' . esc_url($edit) . '">' . esc_html($email) . '</a>';
+            return '<strong><a href="' . esc_url($edit) . '">' . esc_html($email) . '</a></strong>';
         }
-        return esc_html($email);
+        return '<strong>' . esc_html($email) . '</strong>';
+    }
+
+    /**
+     * Status column: render as badge.
+     */
+    protected function column_status($item) {
+        $status = strtolower(trim($item['status'] ?? 'active'));
+
+        $badge_map = array(
+            'active'       => 'rts-badge-active',
+            'inactive'     => 'rts-badge-inactive',
+            'paused'       => 'rts-badge-paused',
+            'unsubscribed' => 'rts-badge-unsub',
+            'bounced'      => 'rts-badge-bounced',
+            'pending'      => 'rts-badge-pending',
+        );
+
+        $class = isset($badge_map[$status]) ? $badge_map[$status] : 'rts-badge-inactive';
+        $label = ucfirst($status);
+
+        return '<span class="rts-badge ' . esc_attr($class) . '">' . esc_html($label) . '</span>';
+    }
+
+    /**
+     * Frequency column: clean text.
+     */
+    protected function column_frequency($item) {
+        return esc_html(ucfirst($item['frequency'] ?? 'weekly'));
+    }
+
+    /**
+     * Subscriptions column.
+     */
+    protected function column_subscriptions($item) {
+        return esc_html($item['subscriptions'] ?? '');
+    }
+
+    /**
+     * Total sent column.
+     */
+    protected function column_total_sent($item) {
+        return number_format(intval($item['total_sent'] ?? 0));
     }
 
     public function prepare_items() {

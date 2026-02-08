@@ -3,10 +3,14 @@
  * RTS SMTP Configuration
  *
  * Handles SMTP settings, password encryption, and WordPress mail integration.
+ * Settings UI is grouped into .rts-card containers:
+ *   - Sender Identity
+ *   - Social Links
+ *   - Branding
  *
  * @package    RTS_Subscriber_System
  * @subpackage SMTP
- * @version    1.0.2
+ * @version    3.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -19,19 +23,15 @@ class RTS_SMTP_Settings {
     const PAGE_SLUG    = 'rts-smtp-settings';
 
     public function __construct() {
-        // Admin Hooks
         if (is_admin()) {
             add_action('admin_menu', array($this, 'add_admin_menu'));
             add_action('admin_init', array($this, 'register_settings'));
             add_action('admin_init', array($this, 'maybe_redirect_legacy_smtp_page'), 1);
             add_action('wp_ajax_rts_test_smtp', array($this, 'ajax_test_smtp'));
             add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
-            
-            // Add settings link to plugins page
             add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_settings_link'));
         }
 
-        // Core Mail Hook
         add_action('phpmailer_init', array($this, 'configure_smtp'));
     }
 
@@ -40,27 +40,24 @@ class RTS_SMTP_Settings {
      */
     public function maybe_redirect_legacy_smtp_page() {
         if (!is_admin()) return;
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
         if ($page !== self::PAGE_SLUG) return;
         if (!current_user_can('manage_options')) return;
-        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard#rts-smtp-card'));
+        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings'));
         exit;
     }
 
     /**
-     * Enqueue JS for the test button using localized data.
+     * Enqueue JS for the test button.
      */
     public function enqueue_scripts($hook) {
-        if (strpos($hook, self::PAGE_SLUG) === false) {
+        if (strpos($hook, 'rts-email-settings') === false && strpos($hook, self::PAGE_SLUG) === false) {
             return;
         }
-        
-        // Register a dummy handle to attach data and scripts to
+
         wp_register_script('rts-smtp-admin', false, array('jquery'), null, true);
         wp_enqueue_script('rts-smtp-admin');
 
-        // Pass PHP data to JS
         wp_localize_script('rts-smtp-admin', 'rtsSMTP', array(
             'nonce'    => wp_create_nonce('rts_test_smtp'),
             'ajax_url' => admin_url('admin-ajax.php')
@@ -73,7 +70,7 @@ class RTS_SMTP_Settings {
                     var email = $('#rts_test_email').val();
                     var btn = $(this);
                     var msg = $('#rts_test_message');
-                    
+
                     if(!email) {
                         alert('Please enter an email address.');
                         return;
@@ -89,9 +86,9 @@ class RTS_SMTP_Settings {
                     }, function(response) {
                         btn.prop('disabled', false).text('Send Test Email');
                         if(response.success) {
-                            msg.html('<p style=\"padding:10px; background:#fff; border-left:4px solid #46b450;\">'+response.data.message+'</p>');
+                            msg.html('<p style=\"padding:10px; background:#1e293b; border-left:4px solid #22c55e; color:#f8fafc;\">'+response.data.message+'</p>');
                         } else {
-                            msg.html('<p style=\"padding:10px; background:#fff; border-left:4px solid #dc3232;\">'+response.data.message+'</p>');
+                            msg.html('<p style=\"padding:10px; background:#1e293b; border-left:4px solid #ef4444; color:#f8fafc;\">'+response.data.message+'</p>');
                         }
                     });
                 });
@@ -99,20 +96,16 @@ class RTS_SMTP_Settings {
         ");
     }
 
-    /**
-     * Add settings link to plugins page.
-     */
     public function add_settings_link($links) {
-        $settings_link = '<a href="' . admin_url('edit.php?post_type=rts_subscriber&page=rts-smtp-settings') . '">SMTP Settings</a>';
+        $settings_link = '<a href="' . admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings') . '">SMTP Settings</a>';
         array_unshift($links, $settings_link);
         return $links;
     }
 
     /**
-     * Register Admin Menu
+     * Menu removed: SMTP now lives on the Subscribers Dashboard for client clarity.
      */
     public function add_admin_menu() {
-        // Menu removed: SMTP now lives on the Subscribers Dashboard for client clarity.
         // Keep settings + hooks active.
     }
 
@@ -173,18 +166,37 @@ class RTS_SMTP_Settings {
             'default' => '',
             'sanitize_callback' => 'sanitize_email'
         ));
-
-        // Optional CC on outgoing subscriber emails
         register_setting(self::OPTION_GROUP, 'rts_smtp_cc_email', array(
             'type' => 'string',
             'default' => '',
             'sanitize_callback' => 'sanitize_email'
         ));
-        // Debug
         register_setting(self::OPTION_GROUP, 'rts_smtp_debug', array(
             'type' => 'boolean',
             'default' => false,
             'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+
+        // Social Links
+        register_setting(self::OPTION_GROUP, 'rts_social_facebook', array(
+            'type' => 'string',
+            'default' => 'https://www.facebook.com/ben.west.56884',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_social_instagram', array(
+            'type' => 'string',
+            'default' => 'https://www.instagram.com/iambenwest/',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_social_linkedin', array(
+            'type' => 'string',
+            'default' => 'https://www.linkedin.com/in/benwest2/',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_social_linktree', array(
+            'type' => 'string',
+            'default' => 'https://linktr.ee/iambenwest',
+            'sanitize_callback' => 'esc_url_raw'
         ));
 
         // Sections
@@ -199,24 +211,20 @@ class RTS_SMTP_Settings {
         add_settings_field('rts_smtp_auth', 'Authentication', array($this, 'render_checkbox'), self::PAGE_SLUG, 'rts_smtp_conn', array('label_for' => 'rts_smtp_auth'));
         add_settings_field('rts_smtp_user', 'Username', array($this, 'render_input'), self::PAGE_SLUG, 'rts_smtp_conn', array('label_for' => 'rts_smtp_user'));
         add_settings_field('rts_smtp_pass', 'Password', array($this, 'render_password'), self::PAGE_SLUG, 'rts_smtp_conn', array('label_for' => 'rts_smtp_pass'));
-        
+
         // Fields - Sender
         add_settings_field('rts_smtp_from_email', 'From Email', array($this, 'render_input'), self::PAGE_SLUG, 'rts_smtp_sender', array('label_for' => 'rts_smtp_from_email'));
         add_settings_field('rts_smtp_from_name', 'From Name', array($this, 'render_input'), self::PAGE_SLUG, 'rts_smtp_sender', array('label_for' => 'rts_smtp_from_name'));
         add_settings_field('rts_smtp_reply_to', 'Reply-To Email', array($this, 'render_input'), self::PAGE_SLUG, 'rts_smtp_sender', array('label_for' => 'rts_smtp_reply_to'));
-        
-        // Fields - Debug
         add_settings_field('rts_smtp_debug', 'Enable Debug Logging', array($this, 'render_checkbox'), self::PAGE_SLUG, 'rts_smtp_sender', array('label_for' => 'rts_smtp_debug'));
     }
 
     /**
-     * Render the settings page HTML.
+     * Render the settings page HTML using .rts-card containers.
      */
     public function render_settings_page() {
         if (!current_user_can('manage_options')) return;
-        // SMTP configuration is consolidated into the Subscribers Dashboard.
-        // Keep this endpoint for backwards compatibility, but redirect for clarity.
-        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard#rts-smtp-card'));
+        wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings'));
         exit;
     }
 
@@ -225,21 +233,21 @@ class RTS_SMTP_Settings {
     public function render_input($args) {
         $option = get_option($args['label_for']);
         $type = isset($args['type']) ? $args['type'] : 'text';
-        echo '<input type="' . esc_attr($type) . '" id="' . esc_attr($args['label_for']) . '" name="' . esc_attr($args['label_for']) . '" value="' . esc_attr($option) . '" class="regular-text">';
+        echo '<input type="' . esc_attr($type) . '" id="' . esc_attr($args['label_for']) . '" name="' . esc_attr($args['label_for']) . '" value="' . esc_attr($option) . '" class="rts-form-input">';
     }
 
     public function render_checkbox($args) {
         $option = get_option($args['label_for']);
         echo '<input type="checkbox" id="' . esc_attr($args['label_for']) . '" name="' . esc_attr($args['label_for']) . '" value="1" ' . checked(1, $option, false) . '>';
         if ($args['label_for'] === 'rts_smtp_debug') {
-            echo ' <span class="description">Logs SMTP conversation (Client + Server) to <code>error_log</code>. Requires <code>WP_DEBUG</code> to be enabled.</span>';
+            echo ' <span class="rts-form-description">Logs SMTP conversation (Client + Server) to <code>error_log</code>. Requires <code>WP_DEBUG</code>.</span>';
         }
     }
 
     public function render_encryption_select($args) {
         $option = get_option($args['label_for']);
         $items = array('tls' => 'TLS (Recommended)', 'ssl' => 'SSL', '' => 'None');
-        echo '<select name="' . esc_attr($args['label_for']) . '" id="' . esc_attr($args['label_for']) . '">';
+        echo '<select name="' . esc_attr($args['label_for']) . '" id="' . esc_attr($args['label_for']) . '" class="rts-form-select">';
         foreach ($items as $val => $label) {
             echo '<option value="' . esc_attr($val) . '" ' . selected($val, $option, false) . '>' . esc_html($label) . '</option>';
         }
@@ -249,57 +257,40 @@ class RTS_SMTP_Settings {
     public function render_password($args) {
         $option = get_option($args['label_for']);
         $val = !empty($option) ? '********' : '';
-        echo '<input type="password" id="' . esc_attr($args['label_for']) . '" name="' . esc_attr($args['label_for']) . '" value="' . esc_attr($val) . '" class="regular-text">';
-        echo '<p class="description">Leave blank to keep existing password.</p>';
+        echo '<input type="password" id="' . esc_attr($args['label_for']) . '" name="' . esc_attr($args['label_for']) . '" value="' . esc_attr($val) . '" class="rts-form-input">';
+        echo '<p class="rts-form-description">Leave blank to keep existing password.</p>';
     }
 
     // --- Logic & Sanitization ---
 
     public function sanitize_password($value) {
-        // If empty, return existing value (preserve old password on save if field left blank)
         if (empty($value)) {
             return get_option('rts_smtp_pass');
         }
-        // If placeholder, return existing (using trim to handle accidental spaces)
         if (trim($value) === '********') {
             return get_option('rts_smtp_pass');
         }
-        // Encrypt new password
         return $this->encrypt($value);
     }
 
-    /**
-     * Encrypt string using AES-256-CBC and WP Salt.
-     */
     private function encrypt($string) {
         if (!extension_loaded('openssl')) return $string;
-        
         $method = 'aes-256-cbc';
         $key = wp_salt('auth');
-        // Generate secure IV
         $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length($method));
         $encrypted = openssl_encrypt($string, $method, $key, 0, $iv);
-        
-        // Store IV with ciphertext
         return base64_encode($iv . $encrypted);
     }
 
-    /**
-     * Decrypt string.
-     */
     private function decrypt($string) {
         if (!extension_loaded('openssl')) return $string;
-        
         $method = 'aes-256-cbc';
         $key = wp_salt('auth');
         $data = base64_decode($string);
         $iv_len = openssl_cipher_iv_length($method);
-        
         if (strlen($data) < $iv_len) return '';
-        
         $iv = substr($data, 0, $iv_len);
         $ciphertext = substr($data, $iv_len);
-        
         return openssl_decrypt($ciphertext, $method, $key, 0, $iv);
     }
 
@@ -315,17 +306,16 @@ class RTS_SMTP_Settings {
         $phpmailer->Host       = get_option('rts_smtp_host');
         $phpmailer->Port       = get_option('rts_smtp_port', 587);
         $phpmailer->SMTPSecure = get_option('rts_smtp_encryption', 'tls');
-        
+
         if (get_option('rts_smtp_auth')) {
             $phpmailer->SMTPAuth = true;
             $phpmailer->Username = get_option('rts_smtp_user');
             $phpmailer->Password = $this->decrypt(get_option('rts_smtp_pass'));
         }
 
-        // Apply From Headers
         $from_email = get_option('rts_smtp_from_email');
         $from_name  = get_option('rts_smtp_from_name');
-        
+
         if ($from_email && is_email($from_email)) {
             $phpmailer->From = $from_email;
             if ($from_name) {
@@ -340,12 +330,11 @@ class RTS_SMTP_Settings {
 
         $cc = get_option('rts_smtp_cc_email');
         if ($cc && is_email($cc)) {
-            // CC all outgoing subscriber emails (use sparingly)
             $phpmailer->addCC($cc);
         }
-        // Debug Logging - Check WP_DEBUG to prevent log spam in production
+
         if (get_option('rts_smtp_debug') && defined('WP_DEBUG') && WP_DEBUG) {
-            $phpmailer->SMTPDebug = 2; // 2 = Client and Server messages
+            $phpmailer->SMTPDebug = 2;
             $phpmailer->Debugoutput = function($str, $level) {
                 error_log("RTS SMTP Debug [$level]: $str");
             };
@@ -355,32 +344,21 @@ class RTS_SMTP_Settings {
     /**
      * AJAX Handler for Test Email.
      */
-
     public function ajax_test_smtp() {
         if (!check_ajax_referer('rts_test_smtp', 'nonce', false) || !current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Security check failed.'));
         }
 
-        $settings = get_option('rts_smtp_settings', array());
-        $to = isset($_POST['to']) ? sanitize_email(wp_unslash($_POST['to'])) : '';
+        $to = isset($_POST['test_email']) ? sanitize_email(wp_unslash($_POST['test_email'])) : '';
+        if (empty($to)) {
+            $to = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
+        }
 
         if (empty($to) || !is_email($to)) {
             wp_send_json_error(array('message' => 'Please provide a valid email address.'));
         }
 
-        // Temporarily add a high priority phpmailer_init hook to ensure HTML and configured SMTP is used
-        add_action('phpmailer_init', function($phpmailer) use ($settings) {
-            if (!empty($settings['host'])) {
-                $phpmailer->isSMTP();
-                $phpmailer->Host = $settings['host'];
-                $phpmailer->SMTPAuth = true;
-                $phpmailer->Port = !empty($settings['port']) ? intval($settings['port']) : 587;
-                $phpmailer->Username = !empty($settings['username']) ? $settings['username'] : '';
-                $phpmailer->Password = !empty($settings['password']) ? $settings['password'] : '';
-                $phpmailer->SMTPSecure = !empty($settings['encryption']) ? $settings['encryption'] : '';
-                $phpmailer->From = !empty($settings['from_email']) ? $settings['from_email'] : get_option('admin_email');
-                $phpmailer->FromName = !empty($settings['from_name']) ? $settings['from_name'] : get_bloginfo('name');
-            }
+        add_action('phpmailer_init', function($phpmailer) {
             $phpmailer->isHTML(true);
         }, 999);
 
@@ -410,14 +388,10 @@ class RTS_SMTP_Settings {
 
     /**
      * Lightweight health check (no email sent).
-     * Attempts a socket connection to mail.smtp2go.com:2525.
-     *
-     * @return array { ok: bool, message: string }
      */
     public function test_smtp_connection() {
-        $host = 'mail.smtp2go.com';
-        $port = 2525;
-
+        $host = get_option('rts_smtp_host', 'mail.smtp2go.com');
+        $port = (int) get_option('rts_smtp_port', 2525);
         $timeout = 3;
         $errno = 0;
         $errstr = '';
