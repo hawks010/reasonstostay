@@ -125,6 +125,7 @@ window.RTS_DISABLE_TRACKING = true;
       prefetchInFlight: false,
       loadingFirstLetter: false,
       viewedLetterIds: [],
+      restBlocked: false,
       sessionStartTime: null,
       debounceTimer: null,
       lastActivityTime: null,
@@ -276,6 +277,12 @@ window.RTS_DISABLE_TRACKING = true;
 
         try {
           this.autoConfigure();
+
+          // If REST is blocked by WAF (403), we remember and go straight to admin-ajax.
+          try {
+            this.restBlocked = (sessionStorage.getItem('rts_rest_blocked') === '1');
+          } catch (e) { this.restBlocked = false; }
+;
           this.setupExperiments();
           this.ensureStyles();
           this.setupPerformanceTracking();
@@ -1230,7 +1237,8 @@ getCacheKey() {
         //             to admin-ajax.php which is never blocked.
         let raw = null;
 
-        try {
+        if (!this.restBlocked) {
+          try {
           const base = (window.RTS_CONFIG && window.RTS_CONFIG.restBase)
             ? window.RTS_CONFIG.restBase.replace(/\/$/, '')
             : '/wp-json/rts/v1';
@@ -1242,10 +1250,16 @@ getCacheKey() {
             headers: { 'X-WP-Nonce': ((window.RTS_CONFIG || {}).nonce || '') }
           });
 
+          if (response && response.status === 403) {
+            this.restBlocked = true;
+            try { sessionStorage.setItem('rts_rest_blocked', '1'); } catch (e) {}
+          }
+
           if (response && response.ok) {
             raw = await this.parseJson(response);
           }
         } catch (e) { /* REST failed – fall through to AJAX */ }
+        }
 
         // Strategy B: AJAX fallback (admin-ajax.php is never blocked by WAF)
         if (!raw || !raw.id) {

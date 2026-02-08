@@ -961,6 +961,8 @@ function rts_allow_rand_orderby( $params ) {
 // =============================================================================
 
 require_once get_stylesheet_directory() . '/embeds/rts-embed-bootloader.php';
+require_once get_stylesheet_directory() . '/inc/rts-embed-shortcodes.php';
+require_once get_stylesheet_directory() . '/inc/rts-admin-manual.php';
 
 /**
  * Admin menu order

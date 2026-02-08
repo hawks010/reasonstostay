@@ -772,7 +772,7 @@ html.rts-onboarding-active .rts-a11y-panel{
 }
 
 .rts-form {
-    background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 20%, rgba(255, 255, 255, 0.6) 100%);
+    background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 20%, rgba(255, 255, 255, 0.6) 100%) !important;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -780,8 +780,8 @@ html.rts-onboarding-active .rts-a11y-panel{
     box-shadow: 
         inset 0 0 80px rgba(160, 140, 100, 0.15),
         0 1px 2px rgba(0, 0, 0, 0.1),            
-        0 20px 40px -10px rgba(0, 0, 0, 0.1);     
-    border-radius: 2px;
+        0 20px 40px -10px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 2px !important;
     border: 1px solid rgba(0, 0, 0, 0.03);
     margin-bottom: 0px;
     padding:50px;
@@ -1950,7 +1950,6 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 .rts-submit-grid{display:grid;grid-template-columns:1fr 360px;gap:30px;align-items:start;}
 @media(max-width:980px){.rts-submit-grid{grid-template-columns:1fr;}.rts-submit-instructions{order:-1;}}
 
-.rts-form{background:#ffffff;border-radius:28px;padding:50px;box-shadow:0 10px 30px rgba(0,0,0,0.08);}
 .rts-form-header{margin-bottom:18px;}
 .rts-title{margin:0 0 6px 0;font-family:'Special Elite',ui-monospace,monospace;font-size:2.2rem;letter-spacing:0.02em;}
 .rts-subtitle{margin:0;color:#4b5563;line-height:1.5;font-size:1rem;}
