@@ -11,9 +11,10 @@
  * - Chinese, Japanese, Korean, Vietnamese, Thai, Indonesian
  *
  * INTEGRATION:
- * - Works with Polylang, WPML, or standalone
+ * - Works with Polylang, WPML, or standalone (via JigsawStack Translation Widget)
  * - Auto-detects language from browser
  * - Translates UI strings, safety keywords, and letter content
+ * - Compatible with rts-google-translate.php (now using JigsawStack, not Google)
  */
 
 if (!defined('ABSPATH')) { exit; }
@@ -60,14 +61,14 @@ class RTS_Multilingual {
 
 			// Middle East
 			'ar' => ['name' => 'العربية', 'flag' => '🇸🇦', 'google_code' => 'ar', 'dir' => 'rtl'],
-			'he' => ['name' => 'עברית', 'flag' => '🇮🇱', 'google_code' => 'iw', 'dir' => 'rtl'],
+			'he' => ['name' => 'עברית', 'flag' => '🇮🇱', 'google_code' => 'he', 'dir' => 'rtl'],
 			'tr' => ['name' => 'Türkçe', 'flag' => '🇹🇷', 'google_code' => 'tr', 'dir' => 'ltr'],
 
 			// South Asia
 			'hi' => ['name' => 'हिन्दी', 'flag' => '🇮🇳', 'google_code' => 'hi', 'dir' => 'ltr'],
 
 			// East + SE Asia
-			'zh' => ['name' => '中文', 'flag' => '🇨🇳', 'google_code' => 'zh-CN', 'dir' => 'ltr'],
+			'zh' => ['name' => '中文', 'flag' => '🇨🇳', 'google_code' => 'zh', 'dir' => 'ltr'],
 			'ja' => ['name' => '日本語', 'flag' => '🇯🇵', 'google_code' => 'ja', 'dir' => 'ltr'],
 			'ko' => ['name' => '한국어', 'flag' => '🇰🇷', 'google_code' => 'ko', 'dir' => 'ltr'],
 			'vi' => ['name' => 'Tiếng Việt', 'flag' => '🇻🇳', 'google_code' => 'vi', 'dir' => 'ltr'],
