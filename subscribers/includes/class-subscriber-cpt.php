@@ -82,13 +82,8 @@ class RTS_Subscriber_CPT {
 
         $ver = defined('RTS_THEME_VERSION') ? RTS_THEME_VERSION : (string) time();
 
-        // Admin UI styling for the subscriber CPT.
-        wp_enqueue_style(
-            'rts-subscriber-admin',
-            RTS_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            $ver
-        );
+        // Admin UI CSS is provided by the theme-level RTS admin skin.
+        // (Avoid enqueuing a missing/duplicate CSS file here.)
 
         // Optional admin JS (safe even if it only contains enhancements).
         wp_enqueue_script(

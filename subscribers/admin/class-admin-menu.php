@@ -19,7 +19,10 @@ class RTS_Admin_Menu {
         add_action('admin_init', array($this, 'redirect_subscriber_post_new'));
 
         // Inject "Add Subscriber" card above the Subscribers list table.
-        add_action('manage_posts_extra_tablenav', array($this, 'render_add_subscriber_above_list'), 5, 1);
+        // IMPORTANT: We do not use `manage_posts_extra_tablenav` because it
+        // renders *inside* the list-table navigation area (filters/pagination)
+        // which can cause the tablenav controls to merge into the card.
+        add_action('admin_notices', array($this, 'render_add_subscriber_card'), 5);
 
         add_action('admin_post_rts_save_template', array($this, 'handle_save_template'));
         add_action('admin_post_rts_test_template', array($this, 'handle_test_template'));
@@ -93,17 +96,13 @@ class RTS_Admin_Menu {
 
         $ver = defined('RTS_THEME_VERSION') ? RTS_THEME_VERSION : (string) time();
 
-        $shared_css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
-        if (file_exists($shared_css_path)) {
-            wp_enqueue_style('rts-admin-shared', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', array(), $ver);
+        // Enqueue master admin CSS (consolidated Inkfire Glass design)
+        $admin_css_path = get_stylesheet_directory() . '/assets/css/rts-admin-complete.css';
+        if (file_exists($admin_css_path)) {
+            wp_enqueue_style('rts-admin-master', get_stylesheet_directory_uri() . '/assets/css/rts-admin-complete.css', array(), $ver);
         }
 
-        $subscriber_css_path = get_stylesheet_directory() . '/subscribers/assets/css/admin.css';
-        if (file_exists($subscriber_css_path)) {
-            $deps = wp_style_is('rts-admin-shared', 'enqueued') ? array('rts-admin-shared') : array();
-            wp_enqueue_style('rts-subscriber-admin', get_stylesheet_directory_uri() . '/subscribers/assets/css/admin.css', $deps, $ver);
-        }
-
+        // Enqueue admin JavaScript
         $subscriber_js_path = get_stylesheet_directory() . '/subscribers/assets/js/admin.js';
         if (file_exists($subscriber_js_path)) {
             wp_enqueue_script('rts-subscriber-admin', get_stylesheet_directory_uri() . '/subscribers/assets/js/admin.js', array('jquery'), $ver, true);
@@ -161,6 +160,18 @@ class RTS_Admin_Menu {
      * "Add Subscriber" card above Subscribers list table
      * ----------------------------------------------------------------*/
 
+    /**
+     * Render the "Add Subscriber" card ABOVE the list table.
+     *
+     * We intentionally render this via `admin_notices` (see constructor)
+     * so it sits on its own row above filters + pagination, rather than
+     * being nested inside the list-table tablenav container.
+     */
+    public function render_add_subscriber_card() {
+        // Reuse the existing renderer; force "top" so it prints.
+        $this->render_add_subscriber_above_list('top');
+    }
+
     public function render_add_subscriber_above_list($which) {
         if ($which !== 'top') return;
         if (!current_user_can('manage_options')) return;
@@ -175,7 +186,7 @@ class RTS_Admin_Menu {
         }
         echo $notice;
         ?>
-        <div class="rts-card" style="padding:25px;border-radius:35px;margin:0 0 20px 0;">
+        <div id="rts-inline-add-subscriber" class="rts-card rts-card--green" style="padding:25px;border-radius:35px;margin:0 0 20px 0;">
             <h2 style="margin:0 0 10px 0;">Add Subscriber</h2>
             <p style="margin:0 0 15px 0;color:#ffffff;opacity:0.95;">Quickly add a subscriber without leaving this list.</p>
 
@@ -975,7 +986,7 @@ class RTS_Admin_Menu {
             </div>
 
             <form method="post" action="options.php">
-                <?php settings_fields('rts_smtp_settings'); ?>
+                        <?php settings_fields('rts_smtp_settings_group'); ?>
 
                 <!-- Card: Sender Identity -->
                 <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">

@@ -97,4 +97,18 @@
       setBusy($(this), false);
     });
   });
+
+  // Move the inline "Add Subscriber" card underneath the Subscribers title
+  // (it is rendered via an admin notice hook, which can place it too high).
+  $(function () {
+    var $card = $('#rts-inline-add-subscriber');
+    if (!$card.length) return;
+
+    var $title = $('.wrap h1.wp-heading-inline').first();
+    if (!$title.length) $title = $('.wrap h1').first();
+    if (!$title.length) return;
+
+    // Insert right after the title line (and before notices/search/table UI)
+    $card.insertAfter($title);
+  });
 })(jQuery);

@@ -522,10 +522,10 @@ class RTS_CPT_Letters_System {
             return;
         }
 
-        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+        $css_path = get_stylesheet_directory() . '/assets/css/rts-admin-complete.css';
         if (file_exists($css_path)) {
             $css_ver = (string) filemtime($css_path);
-            wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], $css_ver);
+            wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin-complete.css', [], $css_ver);
         }
 
         

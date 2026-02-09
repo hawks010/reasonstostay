@@ -93,6 +93,108 @@ if ( ! function_exists( 'child_theme_configurator_css' ) ) {
 add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
 // =============================================================================
+// 3A. RTS ADMIN UI SCOPE (Prevents CSS bleed across wp-admin)
+// =============================================================================
+
+if ( ! function_exists( 'rts_is_admin_screen' ) ) {
+    /**
+     * Detect whether the current admin request is an RTS screen.
+     *
+     * We intentionally over-match here to ensure every RTS endpoint is covered,
+     * while still keeping styles scoped to those pages only.
+     */
+    function rts_is_admin_screen( $hook = '' ) {
+        if ( ! is_admin() ) {
+            return false;
+        }
+
+        // Safe guards
+        $post_type = '';
+        $taxonomy  = '';
+        $page      = '';
+
+        if ( function_exists( 'get_current_screen' ) ) {
+            $screen = get_current_screen();
+            if ( $screen ) {
+                $post_type = isset( $screen->post_type ) ? (string) $screen->post_type : '';
+                $taxonomy  = isset( $screen->taxonomy ) ? (string) $screen->taxonomy : '';
+            }
+        }
+
+        $page = isset( $_GET['page'] ) ? (string) $_GET['page'] : '';
+
+        // RTS post types + taxonomies
+        $rts_post_types = array( 'letter', 'rts_feedback', 'rts_subscriber', 'rts_newsletter' );
+        $rts_taxonomies = array( 'rts_feeling', 'rts_tone' );
+
+        if ( $post_type && in_array( $post_type, $rts_post_types, true ) ) {
+            return true;
+        }
+
+        if ( $taxonomy && in_array( $taxonomy, $rts_taxonomies, true ) ) {
+            return true;
+        }
+
+        // Known RTS admin pages
+        if ( $page && ( strpos( $page, 'rts-' ) === 0 || strpos( $page, 'rts_' ) === 0 ) ) {
+            return true;
+        }
+
+        // Hook based fallback (covers edit.php?post_type=... and letter subpages)
+        if ( $hook && ( strpos( $hook, 'rts-' ) !== false || strpos( $hook, 'letter_page_' ) !== false || strpos( $hook, 'rts_subscriber_page_' ) !== false ) ) {
+            return true;
+        }
+
+        // URL fallback (last resort)
+        if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+            $uri = (string) $_SERVER['REQUEST_URI'];
+            if ( strpos( $uri, 'post_type=letter' ) !== false ||
+                 strpos( $uri, 'post_type=rts_feedback' ) !== false ||
+                 strpos( $uri, 'post_type=rts_subscriber' ) !== false ||
+                 strpos( $uri, 'post_type=rts_newsletter' ) !== false ||
+                 strpos( $uri, 'page=rts-' ) !== false ||
+                 strpos( $uri, 'page=rts_' ) !== false ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+add_filter( 'admin_body_class', function( $classes ) {
+    $hook = isset( $GLOBALS['hook_suffix'] ) ? (string) $GLOBALS['hook_suffix'] : '';
+    if ( rts_is_admin_screen( $hook ) ) {
+        $classes .= ' rts-admin-scope';
+    }
+    return $classes;
+} );
+
+add_action( 'admin_enqueue_scripts', function( $hook ) {
+    if ( ! function_exists( 'rts_is_admin_screen' ) || ! rts_is_admin_screen( (string) $hook ) ) {
+        return;
+    }
+
+    $css_rel  = '/assets/css/rts-admin-complete.css';
+    $css_path = get_stylesheet_directory() . $css_rel;
+    if ( ! file_exists( $css_path ) ) {
+        return;
+    }
+
+    // Avoid double-enqueue from subsystem files.
+    if ( wp_style_is( 'rts-admin-complete', 'enqueued' ) ) {
+        return;
+    }
+
+    wp_enqueue_style(
+        'rts-admin-complete',
+        get_stylesheet_directory_uri() . $css_rel,
+        array(),
+        (string) filemtime( $css_path )
+    );
+}, 20 );
+
+// =============================================================================
 // 4. MAINTENANCE: WEEKLY DEBUG LOG WIPE
 // Empties debug.log once a week. Fixes 'as_next_scheduled_action' crash.
 // =============================================================================

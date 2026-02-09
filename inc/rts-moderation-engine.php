@@ -1165,9 +1165,9 @@ if (!class_exists('RTS_Engine_Dashboard')) {
             // Load CSS and JS on all RTS admin pages
             if (isset($_GET['page']) && strpos($_GET['page'], 'rts-') !== false) {
                 // Main Admin Styles (includes dashboard styles) - cache-bust via filemtime
-                $css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
+                $css_path = get_stylesheet_directory() . '/assets/css/rts-admin-complete.css';
                 $css_ver  = file_exists($css_path) ? (string) filemtime($css_path) : null;
-                wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', [], $css_ver);
+                wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin-complete.css', [], $css_ver);
 
                 // Dashboard Logic Script - cache-bust via filemtime
                 $js_path = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';

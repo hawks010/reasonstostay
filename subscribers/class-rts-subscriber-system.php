@@ -387,12 +387,11 @@ public function register_letter_cpt() {
     }
     
     public function enqueue_admin_assets($hook) {
-        // Only load subscriber admin assets on subscriber/newsletter screens.
-        // Avoid loading on Letters dashboard pages (they also use `rts-*` page slugs).
+        // Only load subscriber admin assets on subscriber/newsletter screens
         $post_type = isset($_GET['post_type']) ? (string) $_GET['post_type'] : '';
         $page      = isset($_GET['page']) ? (string) $_GET['page'] : '';
 
-        // Also detect post type from the current screen (covers post.php edit screens).
+        // Detect post type from current screen
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         if (!$post_type && $screen && !empty($screen->post_type)) {
             $post_type = $screen->post_type;
@@ -408,17 +407,13 @@ public function register_letter_cpt() {
             return;
         }
 
-        // Shared admin styling (Letters dashboard look) + subscriber-specific styling.
-        $shared_css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
-        if (file_exists($shared_css_path)) {
-            wp_enqueue_style('rts-admin-shared', get_stylesheet_directory_uri() . '/assets/css/rts-admin.css', array(), self::VERSION);
+        // Enqueue master admin CSS (consolidated Inkfire Glass design)
+        $admin_css_path = get_stylesheet_directory() . '/assets/css/rts-admin-complete.css';
+        if (file_exists($admin_css_path)) {
+            wp_enqueue_style('rts-admin-master', get_stylesheet_directory_uri() . '/assets/css/rts-admin-complete.css', array(), self::VERSION);
         }
 
-        if (file_exists($this->plugin_path . 'assets/css/admin.css')) {
-            $deps = wp_style_is('rts-admin-shared', 'enqueued') ? array('rts-admin-shared') : array();
-            wp_enqueue_style('rts-subscriber-admin', $this->plugin_url . 'assets/css/admin.css', $deps, self::VERSION);
-        }
-
+        // Enqueue admin JavaScript
         if (file_exists($this->plugin_path . 'assets/js/admin.js')) {
             wp_enqueue_script('rts-subscriber-admin', $this->plugin_url . 'assets/js/admin.js', array('jquery'), self::VERSION, true);
             wp_localize_script('rts-subscriber-admin', 'rtsAdmin', array(

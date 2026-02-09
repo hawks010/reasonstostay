@@ -78,12 +78,7 @@ class RTS_Newsletter_CPT {
             return;
         }
 
-        wp_enqueue_style(
-            'rts-subscriber-admin',
-            get_stylesheet_directory_uri() . '/subscribers/assets/css/admin.css',
-            array(),
-            filemtime(get_stylesheet_directory() . '/subscribers/assets/css/admin.css')
-        );
+        // Styling is handled globally by the theme's RTS admin stylesheet.
 
         wp_register_script('rts-newsletter-admin', false, array('jquery'), null, true);
         wp_enqueue_script('rts-newsletter-admin');
