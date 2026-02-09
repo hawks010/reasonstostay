@@ -3855,6 +3855,16 @@ public static function rest_track_share(\WP_REST_Request $req): \WP_REST_Respons
 }
 
 public static function ajax_get_next_letter(): void {
+				// Check if onboarder is enabled
+				if ( ! get_option( 'rts_onboarder_enabled', true ) ) {
+					wp_send_json([
+						'success' => false,
+						'letter'   => null,
+						'message'  => 'The letter onboarder is currently disabled.',
+					], 403);
+					return;
+				}
+
 				// Nonce is optional here because some caches / aggressive security setups strip headers.
 				// IMPORTANT: The frontend posts a JSON string in `payload`, so we must decode it.
 				$payload = [];

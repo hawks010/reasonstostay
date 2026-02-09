@@ -90,7 +90,7 @@ class RTS_Subscription_Form {
                             </span>
                             <span class="rts-checkbox-text">
                                 <strong>Project Updates</strong><br>
-                                <small>Occasional news & features.</small>
+                                <small>Updates about new resources (podcast episodes, articles, etc.)</small>
                             </span>
                         </label>
                     </div>

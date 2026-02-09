@@ -50,7 +50,7 @@ body.rts-admin-scope #wpbody-content {
   color: var(--rts-txt);
 }
 
-/* Admin notices: option B (always above content) with a yellow glass treatment */
+/* Admin notices: yellow glass treatment */
 body.rts-admin-scope .notice,
 body.rts-admin-scope div.updated,
 body.rts-admin-scope div.error,
@@ -97,13 +97,6 @@ body.rts-admin-scope #wpbody-content .alternate,
 body.rts-admin-scope #wpbody-content .striped>tbody>:nth-child(odd),
 body.rts-admin-scope #wpbody-content ul.striped>:nth-child(odd) {
   background: rgba(255, 255, 255, 0.03) !important;
-}
-
-/* Admin menu readability (do not inherit muted colors) */
-body.rts-admin-scope #adminmenu a,
-body.rts-admin-scope #adminmenu .wp-submenu a,
-body.rts-admin-scope #adminmenu .wp-submenu-head {
-  color: #e2e8f0 !important;
 }
 
 body.rts-admin-scope #wpbody-content a {
@@ -992,7 +985,8 @@ body.rts-admin-scope #wpbody-content .wp-list-table .row-actions {
 /* 3.5 Custom badges & table elements */
 body.rts-admin-scope #wpbody-content .rts-score,
 body.rts-admin-scope #wpbody-content .rts-safety,
-body.rts-admin-scope #wpbody-content .rts-tag {
+body.rts-admin-scope #wpbody-content .rts-tag,
+body.rts-admin-scope #wpbody-content .rts-tone {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1032,12 +1026,19 @@ body.rts-admin-scope #wpbody-content .rts-tags {
 
 /* 3.6 Table navigation & filters */
 body.rts-admin-scope #wpbody-content .subsubsub a {
-  color: var(--rts-txt-mute);
+  color: var(--rts-txt-soft);
 }
 
 body.rts-admin-scope #wpbody-content .subsubsub a.current {
   color: var(--rts-cyan);
   font-weight: 800;
+}
+
+/* Count badges in filter links */
+body.rts-admin-scope #wpbody-content .subsubsub a .count,
+body.rts-admin-scope #wpbody-content .subsubsub a.current .count {
+  color: var(--rts-txt-soft) !important;
+  font-weight: 700;
 }
 
 body.rts-admin-scope #wpbody-content .tablenav {
@@ -1080,7 +1081,7 @@ body.rts-admin-scope #wpbody-content .form-table td {
 }
 
 
-/* Fix “floating injected containers” by ensuring wrappers clear */
+/* Fix "floating injected containers" by ensuring wrappers clear */
 body.rts-admin-scope #wpbody-content .wrap::after,
 body.rts-admin-scope #wpbody-content .rts-card::after,
 body.rts-admin-scope #wpbody-content .rts-dashboard::after {
@@ -1139,7 +1140,7 @@ body.rts-admin-scope #wpbody-content .rts-btn[disabled] {
   transform: none !important;
 }
 
-/* WP “Add New” button often uses .page-title-action */
+/* WP "Add New" button often uses .page-title-action */
 body.rts-admin-scope #wpbody-content .page-title-action {
   margin-left: 10px !important;
   border-radius: 999px !important;
@@ -1204,14 +1205,36 @@ body.rts-admin-scope #wpbody-content .wp-list-table tbody tr:hover {
 }
 
 body.rts-admin-scope #wpbody-content .tablenav,
-body.rts-admin-scope #wpbody-content .tablenav .actions,
-body.rts-admin-scope #wpbody-content .tablenav-pages {
-  color: var(--rts-txt-mute) !important;
+body.rts-admin-scope #wpbody-content .tablenav .actions {
+  color: var(--rts-txt-soft) !important;
 }
 
 /* Bulk actions + filter row alignment */
 body.rts-admin-scope #wpbody-content .tablenav .actions {
   padding: 10px 0 !important;
+}
+
+/* Table navigation pagination */
+body.rts-admin-scope #wpbody-content .tablenav-pages {
+  color: var(--rts-txt-soft) !important;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .displaying-num {
+  color: var(--rts-txt-soft) !important;
+  font-weight: 700;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .paging-input,
+body.rts-admin-scope #wpbody-content .tablenav-pages .tablenav-paging-text {
+  color: var(--rts-txt-soft) !important;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .current-page {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--rts-line) !important;
+  color: var(--rts-txt) !important;
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
 }
 
 /* Pagination chips */
@@ -1260,7 +1283,7 @@ body.rts-admin-scope #wpbody-content .notice p {
 /* -------------------------------------------------------------------------
    Small responsive tweaks
    ------------------------------------------------------------------------- */
-.rts-card {margin: 0 20px 20px 0;!important; }
+.rts-card {margin: 0 20px 20px 0 !important; }
 
 @media (max-width: 782px) {
   body.rts-admin-scope #wpbody-content .rts-card { padding: 18px !important;}
@@ -1582,4 +1605,3 @@ body.post-type-rts_subscriber.edit-php.rts-admin-scope #wpbody-content #rts_freq
   border: 1px solid rgba(255,255,255,0.14) !important;
   color: var(--rts-txt) !important;
 }
-
