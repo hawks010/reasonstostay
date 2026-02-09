@@ -985,7 +985,8 @@ body.rts-admin-scope #wpbody-content .wp-list-table .row-actions {
 /* 3.5 Custom badges & table elements */
 body.rts-admin-scope #wpbody-content .rts-score,
 body.rts-admin-scope #wpbody-content .rts-safety,
-body.rts-admin-scope #wpbody-content .rts-tag {
+body.rts-admin-scope #wpbody-content .rts-tag,
+body.rts-admin-scope #wpbody-content .rts-tone {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1025,12 +1026,19 @@ body.rts-admin-scope #wpbody-content .rts-tags {
 
 /* 3.6 Table navigation & filters */
 body.rts-admin-scope #wpbody-content .subsubsub a {
-  color: var(--rts-txt-mute);
+  color: var(--rts-txt-soft);
 }
 
 body.rts-admin-scope #wpbody-content .subsubsub a.current {
   color: var(--rts-cyan);
   font-weight: 800;
+}
+
+/* Count badges in filter links */
+body.rts-admin-scope #wpbody-content .subsubsub a .count,
+body.rts-admin-scope #wpbody-content .subsubsub a.current .count {
+  color: var(--rts-txt-soft) !important;
+  font-weight: 700;
 }
 
 body.rts-admin-scope #wpbody-content .tablenav {
@@ -1197,14 +1205,36 @@ body.rts-admin-scope #wpbody-content .wp-list-table tbody tr:hover {
 }
 
 body.rts-admin-scope #wpbody-content .tablenav,
-body.rts-admin-scope #wpbody-content .tablenav .actions,
-body.rts-admin-scope #wpbody-content .tablenav-pages {
-  color: var(--rts-txt-mute) !important;
+body.rts-admin-scope #wpbody-content .tablenav .actions {
+  color: var(--rts-txt-soft) !important;
 }
 
 /* Bulk actions + filter row alignment */
 body.rts-admin-scope #wpbody-content .tablenav .actions {
   padding: 10px 0 !important;
+}
+
+/* Table navigation pagination */
+body.rts-admin-scope #wpbody-content .tablenav-pages {
+  color: var(--rts-txt-soft) !important;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .displaying-num {
+  color: var(--rts-txt-soft) !important;
+  font-weight: 700;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .paging-input,
+body.rts-admin-scope #wpbody-content .tablenav-pages .tablenav-paging-text {
+  color: var(--rts-txt-soft) !important;
+}
+
+body.rts-admin-scope #wpbody-content .tablenav-pages .current-page {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--rts-line) !important;
+  color: var(--rts-txt) !important;
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
 }
 
 /* Pagination chips */
