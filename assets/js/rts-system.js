@@ -17,6 +17,23 @@ window.RTS_DISABLE_TRACKING = true;
         return;
     }
 
+    // Stable per-page-load nonce for view de-duplication.
+    // This survives duplicate script execution and allows the server to ignore
+    // accidental double-posts for the same page load.
+    if (!window.__RTS_PAGE_LOAD_NONCE) {
+        try {
+            if (window.crypto && crypto.getRandomValues) {
+                const buf = new Uint32Array(4);
+                crypto.getRandomValues(buf);
+                window.__RTS_PAGE_LOAD_NONCE = Array.from(buf).map(n => n.toString(16)).join('');
+            } else {
+                window.__RTS_PAGE_LOAD_NONCE = String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+            }
+        } catch (e) {
+            window.__RTS_PAGE_LOAD_NONCE = String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+        }
+    }
+
     // Main System Definition attached directly to window
     window.RTSLetterSystem = {
       loaded: true, // Flag to prevent re-init
@@ -328,11 +345,9 @@ try {
           this.setupMemoryWatchdog();
 
           window.addEventListener('beforeunload', () => this.cleanup());
-          // Notify any UI widgets (e.g., stats row) that a view was recorded
-          try {
-            const safeLetterId = (this.currentLetter && this.currentLetter.id) ? this.currentLetter.id : null;
-            window.dispatchEvent(new CustomEvent('rts:letterViewed', { detail: { letterId: safeLetterId } }));
-          } catch (e) {}
+          // Intentionally do NOT dispatch any "letterViewed" event here.
+          // A view should only be recorded (and broadcast) when a specific letter
+          // is actually rendered and tracked.
 
         } catch (error) {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
@@ -1340,7 +1355,7 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackViewOnce(letter.id);
+            this.trackViewOnce(letter ? (letter.id || letter.ID) : null);
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1357,7 +1372,7 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackViewOnce(letter.id);
+            this.trackViewOnce(letter ? (letter.id || letter.ID) : null);
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1397,7 +1412,7 @@ getCacheKey() {
                   this.letterCache[cacheKey] = { letter: nativeLetter, timestamp: Date.now() };
 
                   this.renderLetter(nativeLetter);
-                  this.trackViewOnce(nativeLetter.id);
+                  this.trackViewOnce(nativeLetter ? (nativeLetter.id || nativeLetter.ID) : null);
                   this.trackSuccess('nextLetter');
 
                   loadedOk = true;
@@ -1469,7 +1484,7 @@ getCacheKey() {
                     this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
 
                     this.renderLetter(normalized.letter);
-                    this.trackViewOnce(normalized.letter.id);
+                    this.trackViewOnce(normalized && normalized.letter ? (normalized.letter.id || normalized.letter.ID) : null);
                     this.trackSuccess('nextLetter');
 
                     loadedOk = true;
@@ -1712,16 +1727,17 @@ progressiveRender(contentEl, html) {
 
       async trackView(letterId) {
         if (!this.features.analytics || !letterId) return;
+        const pageNonce = (window.__RTS_PAGE_LOAD_NONCE) ? String(window.__RTS_PAGE_LOAD_NONCE) : '';
         try {
           if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
             await this.robustFetch(this.getRestBase() + 'track/view', {
               method: 'POST',
               headers: this.getHeaders(),
               credentials: 'same-origin',
-              body: JSON.stringify({ letter_id: letterId })
+              body: JSON.stringify({ letter_id: letterId, view_nonce: pageNonce })
             });
           } else {
-            await this.ajaxPost('rts_track_view', { letter_id: letterId });
+            await this.ajaxPost('rts_track_view', { letter_id: letterId, view_nonce: pageNonce });
           }
         } catch (error) {
           this.logError('trackView', error);
@@ -1736,8 +1752,8 @@ progressiveRender(contentEl, html) {
         if (this._viewCountedFor === idStr) return;
 
         // Global guard (prevents double increments if this script is accidentally
-        // initialised twice on the same page load). Uses a per-page-load ID from PHP.
-        const pv = (window.RTS_CONFIG && window.RTS_CONFIG.pageViewId) ? String(window.RTS_CONFIG.pageViewId) : 'no-pv';
+        // initialised twice on the same page load). Uses a stable per-load nonce.
+        const pv = (window.__RTS_PAGE_LOAD_NONCE) ? String(window.__RTS_PAGE_LOAD_NONCE) : 'no-pv';
         const globalKey = pv + '::' + idStr;
         window.__RTS_VIEW_ONCE = window.__RTS_VIEW_ONCE || Object.create(null);
         if (window.__RTS_VIEW_ONCE[globalKey]) return;
@@ -1745,6 +1761,11 @@ progressiveRender(contentEl, html) {
 
         this._viewCountedFor = idStr;
         await this.trackView(letterId);
+
+        // Notify other UI widgets (e.g., [rts_site_stats_row]) that a view was recorded
+        try {
+          window.dispatchEvent(new CustomEvent('rts:letterViewed', { detail: { letterId: idStr } }));
+        } catch (e) {}
       },
 
       async trackHelpful() {

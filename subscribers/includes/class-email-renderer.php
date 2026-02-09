@@ -74,10 +74,10 @@ class RTS_Email_Renderer {
         body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
         table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
         img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
-        body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #0f172a; }
+        body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #F8F1E9; }
 
-        /* Dark outer wrapper */
-        .email-wrapper { background-color: #0f172a; width: 100%; padding: 40px 0; }
+        /* Outer wrapper (cream) */
+        .email-wrapper { background-color: #F8F1E9; width: 100%; padding: 25px; }
 
         /* Paper card */
         .paper-card {
@@ -90,7 +90,8 @@ class RTS_Email_Renderer {
         /* Header row */
         .header-table { width: 100%; }
         .header-table td { padding: 28px 32px; vertical-align: middle; }
-        .header-logo img { height: 55px; width: auto; display: block; }
+        /* Logo is wordmark, not icon: let it breathe and scale down on mobile */
+        .header-logo img { max-width: 240px; width: 100%; height: auto; display: block; }
         .header-text {
             font-family: Georgia, 'Times New Roman', serif;
             font-size: 12px;
@@ -163,11 +164,12 @@ class RTS_Email_Renderer {
             .header-table td { padding: 20px !important; }
             .footer-wrapper { padding: 28px 20px !important; }
             .header-text { font-size: 11px !important; }
+            .email-wrapper { padding: 16px !important; }
         }
     </style>
 </head>
-<body style="margin:0;padding:0;background-color:#0f172a;">
-    <div class="email-wrapper" style="background-color:#0f172a;width:100%;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:#F8F1E9;">
+    <div class="email-wrapper" style="background-color:#F8F1E9;width:100%;padding:25px;">
         <!--[if mso]>
         <table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8F1E9;">
         <tr><td>
@@ -178,7 +180,7 @@ class RTS_Email_Renderer {
             <table class="header-table" role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                     <td class="header-logo" style="padding:28px 32px;vertical-align:middle;width:50%;">
-                        <img src="<?php echo esc_url($this->logo_url); ?>" alt="Reasons to Stay" style="height:55px;width:auto;display:block;" />
+                        <img src="<?php echo esc_url($this->logo_url); ?>" alt="Reasons to Stay" style="max-width:240px;width:100%;height:auto;display:block;" />
                     </td>
                     <td class="header-text" style="padding:28px 32px;vertical-align:middle;width:50%;font-family:Georgia,'Times New Roman',serif;font-size:12px;font-style:italic;color:#6b7280;line-height:1.5;text-align:right;">
                         This letter was written by someone in the world that cares. It was delivered to you at random.

@@ -3777,9 +3777,23 @@ private static function analytics_throttle(string $action, int $post_id): bool {
 
 public static function rest_track_view(\WP_REST_Request $req): \WP_REST_Response {
     $letter_id = (int) ($req->get_param('letter_id') ?? 0);
+    $view_nonce = trim((string) ($req->get_param('view_nonce') ?? ''));
     if ($letter_id <= 0 || get_post_type($letter_id) !== 'letter') {
         return new \WP_REST_Response(['ok' => false], 200);
     }
+
+	// Strict de-duplication: if the frontend provides a per-page-load nonce,
+	// only count that nonce once for this letter. This prevents accidental
+	// double-counting due to duplicate script execution / double event binding.
+	if ($view_nonce !== '') {
+		$nonce_key = 'rts_view_nonce_' . md5($view_nonce . '|' . $letter_id);
+		if (get_transient($nonce_key)) {
+			return new \WP_REST_Response(['ok' => true], 200);
+		}
+		set_transient($nonce_key, 1, DAY_IN_SECONDS);
+	}
+
+	    
     if (!self::analytics_throttle('view', $letter_id)) {
         return new \WP_REST_Response(['ok' => true, 'throttled' => true], 200);
     }

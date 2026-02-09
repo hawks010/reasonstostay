@@ -86,6 +86,11 @@ class RTS_Admin_Menu {
             return;
         }
 
+        // Email template editor uses wp_editor (Visual + Text tabs)
+        if ($page === 'rts-email-templates') {
+            wp_enqueue_editor();
+        }
+
         $ver = defined('RTS_THEME_VERSION') ? RTS_THEME_VERSION : (string) time();
 
         $shared_css_path = get_stylesheet_directory() . '/assets/css/rts-admin.css';
@@ -1249,9 +1254,46 @@ class RTS_Admin_Menu {
                         <span class="rts-form-description">The email subject line subscribers will see</span>
                     </div>
                     <div class="rts-form-row">
-                        <label class="rts-form-label">Email Body (HTML)</label>
-                        <textarea name="template_body" class="rts-code-editor" required><?php echo esc_textarea($current_body); ?></textarea>
-                        <span class="rts-form-description">Use HTML for formatting. Click variables below to copy.</span>
+                        <label class="rts-form-label">Email Body</label>
+                        <div class="rts-wp-editor-wrap">
+                            <?php
+                            // Use the built-in WordPress editor so the client can switch between Visual and HTML.
+                            $editor_id = 'rts_template_body_' . sanitize_key($template_key);
+                            wp_editor(
+                                $current_body,
+                                $editor_id,
+                                [
+                                    'textarea_name' => 'template_body',
+                                    'textarea_rows' => 18,
+                                    'media_buttons' => false,
+                                    'teeny'         => false,
+                                    'tinymce'       => true,
+                                    'quicktags'     => true,
+                                ]
+                            );
+                            ?>
+                        </div>
+                        <span class="rts-form-description">Use Visual for quick edits or Text (HTML) for full control. Click variables below to copy.</span>
+
+                        <?php
+                        // Lightweight preview using example values. (This does not send an email.)
+                        $preview_map = [
+                            '{subscriber_email}'  => 'name@example.com',
+                            '{verify_url}'        => home_url('/?rts_verify=example'),
+                            '{unsubscribe_url}'   => home_url('/?rts_unsubscribe=example'),
+                            '{site_name}'         => get_bloginfo('name'),
+                            '{site_url}'          => home_url('/'),
+                            '{letter_link}'       => home_url('/letters/example'),
+                            '{story_link}'        => home_url('/letters/example'),
+                        ];
+                        $preview_body = strtr((string) $current_body, $preview_map);
+                        ?>
+                        <details class="rts-template-preview">
+                            <summary>Preview</summary>
+                            <div class="rts-template-preview-inner">
+                                <?php echo wp_kses_post($preview_body); ?>
+                            </div>
+                        </details>
                     </div>
                 </div>
 

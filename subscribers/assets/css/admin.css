@@ -921,6 +921,53 @@ a.rts-button.danger:hover {
 }
 
 /* ==========================================================================
+   14b. COMPONENTS - Email Template Visual/HTML Editor (wp_editor)
+   ========================================================================== */
+.rts-email-editor .wp-editor-wrap {
+    background: var(--rts-bg-input);
+    border: 1px solid var(--rts-border);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.rts-email-editor .wp-editor-tabs {
+    padding: 8px 8px 0;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.rts-email-editor .wp-switch-editor {
+    border-radius: 12px;
+    border: 1px solid var(--rts-border);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--rts-text);
+    padding: 6px 12px;
+    margin-right: 8px;
+}
+
+.rts-email-editor .wp-switch-editor:hover {
+    border-color: var(--rts-primary);
+}
+
+.rts-email-editor .wp-editor-container {
+    border: none;
+}
+
+.rts-email-editor .wp-editor-container textarea {
+    background: var(--rts-bg-input) !important;
+    color: var(--rts-text) !important;
+    border: none !important;
+}
+
+.rts-email-preview {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--rts-border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-top: 16px;
+    overflow: auto;
+}
+
+/* ==========================================================================
    15. COMPONENTS - Variable Tags
    ========================================================================== */
 .rts-variables-list {
