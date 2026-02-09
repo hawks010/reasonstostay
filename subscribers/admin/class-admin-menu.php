@@ -1132,6 +1132,20 @@ class RTS_Admin_Menu {
                     </div>
                 </div>
 
+                <!-- Card: Letter Settings -->
+                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
+                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-edit"></span> Letter Settings</h3>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Enable Onboarder</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_onboarder_enabled" value="1" <?php checked(get_option('rts_onboarder_enabled', 1), 1); ?>>
+                            <span style="color:#ffffff;">Allow subscribers to view and match letters based on preferences</span>
+                        </label>
+                        <span class="rts-form-description">When enabled, subscribers can browse random letters with tone and feeling matching during onboarding.</span>
+                    </div>
+                </div>
+
                 <div class="rts-button-group">
                     <button type="submit" class="rts-button success">
                         <span class="dashicons dashicons-yes"></span> Save Settings
