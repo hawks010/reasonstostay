@@ -280,6 +280,11 @@ class RTS_Shortcodes {
      * [rts_onboarding] - CSS3 Implementation (Brand Aligned)
      */
     public function onboarding($atts) {
+        // Check if onboarder is enabled
+        if ( ! get_option( 'rts_onboarder_enabled', true ) ) {
+            return '';
+        }
+
         if (self::$onboarding_rendered) {
             return '';
         }
