@@ -50,7 +50,7 @@ body.rts-admin-scope #wpbody-content {
   color: var(--rts-txt);
 }
 
-/* Admin notices: option B (always above content) with a yellow glass treatment */
+/* Admin notices: yellow glass treatment */
 body.rts-admin-scope .notice,
 body.rts-admin-scope div.updated,
 body.rts-admin-scope div.error,
@@ -97,13 +97,6 @@ body.rts-admin-scope #wpbody-content .alternate,
 body.rts-admin-scope #wpbody-content .striped>tbody>:nth-child(odd),
 body.rts-admin-scope #wpbody-content ul.striped>:nth-child(odd) {
   background: rgba(255, 255, 255, 0.03) !important;
-}
-
-/* Admin menu readability (do not inherit muted colors) */
-body.rts-admin-scope #adminmenu a,
-body.rts-admin-scope #adminmenu .wp-submenu a,
-body.rts-admin-scope #adminmenu .wp-submenu-head {
-  color: #e2e8f0 !important;
 }
 
 body.rts-admin-scope #wpbody-content a {
@@ -1080,7 +1073,7 @@ body.rts-admin-scope #wpbody-content .form-table td {
 }
 
 
-/* Fix “floating injected containers” by ensuring wrappers clear */
+/* Fix "floating injected containers" by ensuring wrappers clear */
 body.rts-admin-scope #wpbody-content .wrap::after,
 body.rts-admin-scope #wpbody-content .rts-card::after,
 body.rts-admin-scope #wpbody-content .rts-dashboard::after {
@@ -1139,7 +1132,7 @@ body.rts-admin-scope #wpbody-content .rts-btn[disabled] {
   transform: none !important;
 }
 
-/* WP “Add New” button often uses .page-title-action */
+/* WP "Add New" button often uses .page-title-action */
 body.rts-admin-scope #wpbody-content .page-title-action {
   margin-left: 10px !important;
   border-radius: 999px !important;
@@ -1260,7 +1253,7 @@ body.rts-admin-scope #wpbody-content .notice p {
 /* -------------------------------------------------------------------------
    Small responsive tweaks
    ------------------------------------------------------------------------- */
-.rts-card {margin: 0 20px 20px 0;!important; }
+.rts-card {margin: 0 20px 20px 0 !important; }
 
 @media (max-width: 782px) {
   body.rts-admin-scope #wpbody-content .rts-card { padding: 18px !important;}
@@ -1582,4 +1575,3 @@ body.post-type-rts_subscriber.edit-php.rts-admin-scope #wpbody-content #rts_freq
   border: 1px solid rgba(255,255,255,0.14) !important;
   color: var(--rts-txt) !important;
 }
-
