@@ -1139,6 +1139,7 @@ class RTS_Admin_Menu {
                     <div class="rts-form-row">
                         <label class="rts-form-label">Enable Onboarder</label>
                         <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="hidden" name="rts_onboarder_enabled" value="0">
                             <input type="checkbox" name="rts_onboarder_enabled" value="1" <?php checked(get_option('rts_onboarder_enabled', 1), 1); ?>>
                             <span style="color:#ffffff;">Allow subscribers to view and match letters based on preferences</span>
                         </label>
