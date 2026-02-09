@@ -99,9 +99,9 @@ add_action('wp_footer', function () {
             .rts-quick-exit:active{ transform: none; }
         }
 
-        /* Mobile: bottom-left */
-        @media (max-width: 768px){
-            #rts-quick-exit-wrap{ right: auto; left: 10px; bottom: 10px; }
+        /* Hide on tablet and mobile - only show on desktop */
+        @media (max-width: 1024px){
+            #rts-quick-exit-wrap{ display: none !important; }
         }
     </style>
 
