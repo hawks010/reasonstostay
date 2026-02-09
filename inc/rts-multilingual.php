@@ -568,10 +568,10 @@ class RTS_Multilingual {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 8px 12px;
-	background: transparent;
-	color: #F1E3D3;
-	border: 1px solid rgba(252, 163, 17, 0.3);
+	padding: 2px 5px;
+	background: #ffffff;
+	color: #000000;
+	border: 1px solid #000000;
 	border-radius: 6px;
 	cursor: pointer;
 	font-size: 0.9rem;
@@ -673,12 +673,12 @@ class RTS_Multilingual {
 
 /* Light mode for compact */
 body:not(.rts-dark-mode) .rts-lang-compact-button {
-	color: #2A2A2A;
-	border-color: rgba(0, 0, 0, 0.15);
+	color: #000000;
+	background: #ffffff;
 }
 
 body:not(.rts-dark-mode) .rts-lang-compact-button:hover {
-	background: rgba(252, 163, 17, 0.08);
+	background: #ffffff;
 	border-color: #FCA311;
 }
 
