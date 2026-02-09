@@ -461,6 +461,14 @@ class RTS_Shortcodes {
                         </label>
                     </div>
 
+                    <div class="rts-field rts-consent-field">
+                        <label class="rts-consent-label" for="rts-subscribe-opt-in">
+                            <input type="checkbox" id="rts-subscribe-opt-in" name="subscribe_opt_in" value="1">
+                            <span>Yes, send me letters and updates about new resources (podcast episodes, articles, etc.)</span>
+                        </label>
+                        <small class="rts-help-text">Optional: Get supportive letters plus news on helpful content we create</small>
+                    </div>
+
                     <!-- anti-bot honeypots (must remain empty) -->
                     <div class="rts-honeypot" aria-hidden="true">
                         <label>Website</label>
@@ -480,7 +488,8 @@ class RTS_Shortcodes {
 
                     <div id="rts-submit-success" class="rts-submit-success" role="status" aria-live="polite" style="display:none;">
                         <h3 class="rts-success-title">Thank you for your letter 💛</h3>
-                        <p class="rts-success-text">Your letter has been received and will be reviewed before it can be published and delivered to someone who needs it.</p>
+                        <p class="rts-success-text" id="rts-success-message">Your letter has been received and will be reviewed before it can be published and delivered to someone who needs it.</p>
+                        <p class="rts-success-text" id="rts-subscription-message" style="display:none;"></p>
                         <div class="rts-success-share">
                             <p class="rts-success-text"><strong>Want to help more people find Reasons to Stay?</strong> Sharing the site is a huge gift.</p>
                             <div class="rts-share-buttons" role="group" aria-label="Share Reasons to Stay">
@@ -675,6 +684,7 @@ class RTS_Shortcodes {
                         author_email: (document.getElementById('author-email')||{}).value || '',
                         letter_text: (textEl||{}).value || '',
                         consent: (document.getElementById('rts-consent')||{}).checked ? 1 : 0,
+                        subscribe_opt_in: (document.getElementById('rts-subscribe-opt-in')||{}).checked ? 1 : 0,
                         website: (document.getElementById('rts-website')||{}).value || '',
                         company: (document.getElementById('rts-company')||{}).value || '',
                         confirm_email: (document.getElementById('rts-confirm-email')||{}).value || '',
@@ -701,7 +711,18 @@ class RTS_Shortcodes {
                         // so the success box (which is inside the form) stays visible.
                         Array.prototype.forEach.call(form.querySelectorAll('.rts-field, .rts-honeypot, .rts-consent-field, #rts-submit-btn, #rts-form-message'), function(el){ el.style.display='none'; });
                         if(formHeader) formHeader.style.display = 'none';
-                        if(successBox){ successBox.style.display = 'block'; setupShareButtons(); }
+                        if(successBox){
+                            successBox.style.display = 'block';
+                            setupShareButtons();
+
+                            // Update subscription message if user opted in
+                            var subMessage = document.getElementById('rts-subscription-message');
+                            var optedIn = (document.getElementById('rts-subscribe-opt-in')||{}).checked;
+                            if(subMessage && optedIn && data && data.subscribed){
+                                subMessage.textContent = "You're subscribed and will receive letters and occasional updates.";
+                                subMessage.style.display = 'block';
+                            }
+                        }
 
                         // Guidelines sidebar stays visible beneath the success box.
                         if(sidebar){
@@ -850,7 +871,19 @@ class RTS_Shortcodes {
             $this->send_letter_thank_you_email($author_email, $author_name);
         }
 
-        return ['success' => true, 'letter_id' => (int) $post_id, 'status' => 200];
+        // Handle subscription opt-in
+        $subscribed = false;
+        $subscribe_opt_in = isset($payload['subscribe_opt_in']) ? (int) $payload['subscribe_opt_in'] : 0;
+        if ($subscribe_opt_in && $author_email && is_email($author_email)) {
+            $subscribed = $this->add_letter_writer_to_subscribers($author_email, $ip);
+        }
+
+        return [
+            'success' => true,
+            'letter_id' => (int) $post_id,
+            'subscribed' => $subscribed,
+            'status' => 200
+        ];
     }
 
     /**
@@ -873,6 +906,81 @@ class RTS_Shortcodes {
             wp_send_json_success($result, $status);
         }
         wp_send_json_error($result, $status);
+    }
+
+    /**
+     * Add letter writer to subscriber list.
+     *
+     * @param string $email Email address
+     * @param string $ip IP address for consent logging
+     * @return bool True if subscribed successfully, false otherwise
+     */
+    private function add_letter_writer_to_subscribers(string $email, string $ip = ''): bool {
+        // Get the subscriber system instance
+        $subscriber_system = class_exists('RTS_Subscriber_System') ? RTS_Subscriber_System::get_instance() : null;
+        if (!$subscriber_system || !isset($subscriber_system->subscriber_cpt)) {
+            return false;
+        }
+
+        $subscriber_cpt = $subscriber_system->subscriber_cpt;
+
+        // Check if already subscribed (don't create duplicates)
+        if (method_exists($subscriber_cpt, 'get_subscriber_by_email')) {
+            $existing = $subscriber_cpt->get_subscriber_by_email($email);
+            if ($existing) {
+                // Already subscribed - update consent log with new write_a_letter source
+                if (method_exists($subscriber_cpt, 'update_consent_log')) {
+                    $subscriber_cpt->update_consent_log($existing, 'write_a_letter_form', [
+                        'timestamp'  => current_time('mysql'),
+                        'ip'         => $ip,
+                        'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '',
+                        'via'        => 'write_a_letter'
+                    ]);
+                }
+                return true; // Already subscribed, so return true
+            }
+        }
+
+        // Create new subscriber
+        if (!method_exists($subscriber_cpt, 'create_subscriber')) {
+            return false;
+        }
+
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
+        $subscriber_id = $subscriber_cpt->create_subscriber(
+            $email,
+            'monthly', // Default to monthly frequency (safe default)
+            'write_a_letter', // Source for tracking
+            [
+                'ip_address'       => $ip,
+                'user_agent'       => $user_agent,
+                'pref_letters'     => 1, // Enable letters
+                'pref_newsletters' => 1, // Enable newsletters
+            ]
+        );
+
+        if (is_wp_error($subscriber_id) || !$subscriber_id) {
+            return false;
+        }
+
+        // Store explicit preferences
+        update_post_meta($subscriber_id, '_rts_pref_letters', 1);
+        update_post_meta($subscriber_id, '_rts_pref_newsletters', 1);
+
+        // Sync to rts_subscribers table for drip scheduling
+        if (method_exists($subscriber_system, 'sync_subscriber_to_table')) {
+            $subscriber_system->sync_subscriber_to_table($subscriber_id, $email, 'monthly', ['letters', 'newsletters']);
+        }
+
+        // Send verification or welcome email
+        $require_verification = (bool) get_option('rts_require_email_verification', true);
+        if ($require_verification && isset($subscriber_system->email_engine) && method_exists($subscriber_system->email_engine, 'send_verification_email')) {
+            $subscriber_system->email_engine->send_verification_email($subscriber_id);
+        } elseif (isset($subscriber_system->email_engine) && method_exists($subscriber_system->email_engine, 'send_welcome_email')) {
+            $subscriber_system->email_engine->send_welcome_email($subscriber_id);
+        }
+
+        return true;
     }
 
     /**

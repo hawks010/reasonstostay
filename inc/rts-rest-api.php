@@ -92,6 +92,14 @@ function rts_register_random_letter_route() {
  *   { id, title, content, date, link }
  */
 function rts_rest_random_letter( WP_REST_Request $request ) {
+    // Check if onboarder is enabled
+    if ( ! get_option( 'rts_onboarder_enabled', true ) ) {
+        return new WP_REST_Response( [
+            'error'   => 'onboarder_disabled',
+            'message' => 'The letter onboarder is currently disabled.'
+        ], 403 );
+    }
+
     $exclude_raw = $request->get_param( 'exclude' );
     $exclude_ids = [];
 

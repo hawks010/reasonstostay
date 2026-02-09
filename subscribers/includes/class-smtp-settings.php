@@ -199,6 +199,52 @@ class RTS_SMTP_Settings {
             'sanitize_callback' => 'esc_url_raw'
         ));
 
+        // Email Sending Controls
+        register_setting(self::OPTION_GROUP, 'rts_email_sending_enabled', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_email_demo_mode', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_email_reconsent_required', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_email_daily_time', array(
+            'type' => 'string',
+            'default' => '09:00',
+            'sanitize_callback' => 'sanitize_text_field'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_email_batch_size', array(
+            'type' => 'integer',
+            'default' => 100,
+            'sanitize_callback' => 'absint'
+        ));
+
+        // Branding
+        register_setting(self::OPTION_GROUP, 'rts_email_logo_url', array(
+            'type' => 'string',
+            'default' => '',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_privacy_url', array(
+            'type' => 'string',
+            'default' => '',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+
+        // Letter Settings
+        register_setting(self::OPTION_GROUP, 'rts_onboarder_enabled', array(
+            'type' => 'boolean',
+            'default' => true,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+
         // Sections
         add_settings_section('rts_smtp_conn', 'Connection Configuration', '__return_empty_string', self::PAGE_SLUG);
         add_settings_section('rts_smtp_sender', 'Sender Details', '__return_empty_string', self::PAGE_SLUG);
