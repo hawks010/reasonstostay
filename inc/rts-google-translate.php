@@ -90,8 +90,9 @@ class RTS_Google_Translate {
 
 				function setCookie(name, value, maxAgeSeconds) {
 					try {
-						var parts = [name + '=' + value, 'path=/'];
+						var parts = [name + '=' + value, 'path=/', 'SameSite=Lax'];
 						if (typeof maxAgeSeconds === 'number') parts.push('max-age=' + maxAgeSeconds);
+						// Don't set Secure flag to allow http in dev, Google Translate handles this
 						document.cookie = parts.join('; ');
 					} catch (e) {}
 				}
@@ -126,18 +127,34 @@ class RTS_Google_Translate {
 					var cookieValue = '/en/' + targetLang;
 
 					try {
-						// Host-only + domain cookies (covers most setups)
-						document.cookie = 'googtrans=' + cookieValue + '; path=/';
-						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + document.domain;
-						
+						// Host-only + domain cookies with SameSite for mobile compatibility
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; SameSite=Lax';
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + document.domain + '; SameSite=Lax';
+
 						// Handle subdomains/root domain logic (Crucial for mobile redirecting)
 						var rootDomain2 = ('.' + document.domain).replace(/^\.www\./, '.');
-						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + rootDomain2;
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + rootDomain2 + '; SameSite=Lax';
+
+						// Mobile Safari fix: Also try setting with explicit expiry
+						var expire = new Date();
+						expire.setTime(expire.getTime() + (365 * 24 * 60 * 60 * 1000));
+						document.cookie = 'googtrans=' + cookieValue + '; path=/; expires=' + expire.toUTCString() + '; SameSite=Lax';
 					} catch (e) {}
 
-					// IPHONE FIX: Increased timeout to 500ms.
-					// iOS Safari sometimes fails to write cookies if the page reloads too instantly.
-					setTimeout(function() { window.location.reload(); }, 500);
+					// Show loading indicator
+					var body = document.body;
+					if (body) {
+						body.style.opacity = '0.6';
+						body.style.pointerEvents = 'none';
+						body.style.transition = 'opacity 0.3s ease';
+					}
+
+					// MOBILE FIX: Increased timeout to 800ms for iOS/Android.
+					// Mobile Safari & Chrome sometimes fail to write cookies if page reloads too instantly.
+					// Also force hard reload to bypass cache
+					setTimeout(function() {
+						window.location.reload(true);
+					}, 800);
 					return true;
 				}
 
