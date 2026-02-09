@@ -599,21 +599,31 @@ class RTS_Multilingual {
 	position: absolute;
 	top: calc(100% + 6px);
 	right: 0;
-	min-width: 360px;
-	max-width: calc(100vw - 20px);
+	min-width: 280px;
+	max-width: calc(100vw - 30px);
 	background: #182437;
 	border: 2px solid #FCA311;
 	border-radius: 12px;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 	list-style: none;
 	margin: 0;
-	padding: 10px;
-	z-index: 9999;
+	padding: 6px;
+	z-index: 99999;
 	max-height: 420px;
 	overflow-y: auto;
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 8px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 4px;
+}
+
+/* Tablet and mobile: align dropdown left to prevent off-screen overflow */
+@media (max-width: 1024px) {
+	.rts-lang-compact-menu {
+		left: 0;
+		right: auto;
+		min-width: 260px;
+		max-width: min(320px, calc(100vw - 30px));
+	}
 }
 
 .rts-lang-compact-menu li {
@@ -626,12 +636,12 @@ class RTS_Multilingual {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
-	padding: 10px 8px;
+	gap: 4px;
+	padding: 8px 4px;
 	color: #F1E3D3;
 	text-decoration: none;
 	transition: background 0.15s ease, transform 0.15s ease;
-	font-size: 0.85rem;
+	font-size: 0.8rem;
 	text-align: center;
 	border-radius: 10px;
 	line-height: 1.1;
@@ -661,13 +671,26 @@ class RTS_Multilingual {
 	font-weight: 700;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 640px) {
 	.rts-lang-compact-menu {
-		left: 0;
-		right: auto;
 		min-width: 0;
-		width: calc(100vw - 20px);
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: min(300px, calc(100vw - 30px));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		padding: 5px;
+		gap: 3px;
+	}
+
+	.rts-lang-compact-option {
+		padding: 6px 2px;
+		font-size: 0.75rem;
+		gap: 3px;
+	}
+}
+
+@media (max-width: 480px) {
+	.rts-lang-compact-menu {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: min(280px, calc(100vw - 30px));
 	}
 }
 
