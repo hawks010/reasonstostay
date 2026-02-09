@@ -4,10 +4,8 @@
  *
  * GET /wp-json/rts/v1/embed/random?exclude=1,2,3
  *
- * Returns a single random published letter as lightweight JSON:
- *   { id, title, content_html, author, date, link, site_url, logo_url }
- *
- * CORS is explicitly enabled for this endpoint so partner sites can fetch it.
+ * Returns a single random published letter as lightweight JSON.
+ * CORS and Caching headers are handled centrally in functions.php (RTS API Safeguards).
  *
  * @package ReasonsToStay
  */
@@ -17,14 +15,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 add_action( 'rest_api_init', 'rts_register_embed_routes' );
-add_filter( 'rest_pre_serve_request', 'rts_embed_cors_headers', 10, 4 );
+add_action( 'init', 'rts_serve_stable_widget_js' );
 
 /**
  * Register public embed routes.
  */
 function rts_register_embed_routes() {
-
-    // Data route.
     register_rest_route( 'rts/v1', '/embed/random', [
         'methods'             => [ 'GET', 'OPTIONS' ],
         'callback'            => 'rts_embed_random_letter',
@@ -40,37 +36,7 @@ function rts_register_embed_routes() {
 }
 
 /**
- * Add explicit CORS headers for the embed endpoint.
- *
- * @param bool             $served  Whether the request has already been served.
- * @param WP_HTTP_Response $result  Result to send to the client.
- * @param WP_REST_Request  $request Request object.
- * @param WP_REST_Server   $server  Server instance.
- * @return bool
- */
-function rts_embed_cors_headers( $served, $result, $request, $server ) {
-    $route = $request->get_route();
-
-    // Only affect our public embed endpoint.
-    if ( 0 !== strpos( $route, '/rts/v1/embed/random' ) ) {
-        return $served;
-    }
-
-    // Allow any origin to read this public endpoint.
-    // If you want to restrict, swap "*" for a whitelist.
-    header( 'Access-Control-Allow-Origin: *' );
-    header( 'Access-Control-Allow-Methods: GET, OPTIONS' );
-    header( 'Access-Control-Allow-Headers: Content-Type, X-WP-Nonce' );
-    header( 'Access-Control-Max-Age: 600' );
-
-    return $served;
-}
-
-/**
  * Parse a comma-separated exclude list into a sanitized integer array.
- *
- * @param string $exclude_raw
- * @return int[]
  */
 function rts_embed_parse_exclude( $exclude_raw ) {
     if ( ! is_string( $exclude_raw ) || $exclude_raw === '' ) {
@@ -92,13 +58,10 @@ function rts_embed_parse_exclude( $exclude_raw ) {
 
 /**
  * Return a random published letter for the embed widget.
- *
- * @param  WP_REST_Request $request
- * @return WP_REST_Response
  */
 function rts_embed_random_letter( WP_REST_Request $request ) {
 
-    // Handle preflight.
+    // Handle preflight (Standard 200 OK)
     if ( strtoupper( $request->get_method() ) === 'OPTIONS' ) {
         return new WP_REST_Response( [ 'ok' => true ], 200 );
     }
@@ -142,6 +105,7 @@ function rts_embed_random_letter( WP_REST_Request $request ) {
     $content_html = apply_filters( 'the_content', $post->post_content );
     $content_html = wp_kses_post( $content_html );
 
+    // Use specific size for performance
     $logo_url = get_site_icon_url( 96 );
     if ( ! $logo_url ) {
         $logo_url = get_site_icon_url( 32 );
@@ -158,10 +122,33 @@ function rts_embed_random_letter( WP_REST_Request $request ) {
         'logo_url'     => $logo_url ? esc_url_raw( $logo_url ) : '',
     ];
 
-    // Cache for 15 minutes to protect the DB from embed traffic spikes.
-    set_transient( $transient_key, $data, 15 * MINUTE_IN_SECONDS );
+    // Cache this specific letter query result for 5 minutes
+    set_transient( $transient_key, $data, 5 * MINUTE_IN_SECONDS );
 
     $response = new WP_REST_Response( $data, 200 );
     $response->header( 'X-RTS-Cache', 'MISS' );
     return $response;
+}
+
+/**
+ * Stable Asset Loader (Virtual URL)
+ * * Intercepts requests to /rts-widget.js and serves the file from the current theme directory.
+ * This hides the theme path/version from the public URL.
+ */
+function rts_serve_stable_widget_js() {
+    // Check if the request URL ends with /rts-widget.js
+    if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/rts-widget.js' ) !== false ) {
+        
+        $js_file = __DIR__ . '/assets/rts-widget.js';
+        
+        if ( file_exists( $js_file ) ) {
+            // Serve as JS with CORS enabled so it works on external sites
+            header( 'Content-Type: application/javascript; charset=utf-8' );
+            header( 'Access-Control-Allow-Origin: *' );
+            header( 'Cache-Control: public, max-age=3600, stale-while-revalidate=86400' );
+            
+            readfile( $js_file );
+            exit;
+        }
+    }
 }

@@ -780,15 +780,22 @@ class RTS_Shortcodes {
         }
 
         // --- Idempotency guard ---
-        // Hash the email + stripped content + 5-minute time bucket to detect duplicate submissions.
-        $time_bucket = (string) floor(time() / 300);
-        $submission_hash = hash('sha256', strtolower(trim($author_email)) . '|' . trim($letter_text_stripped) . '|' . $time_bucket);
+        // Prevent duplicate letters if the browser retries, a CDN replays the request, or both REST + AJAX fire.
+        // We use a stable hash (no short time bucket), then only allow the same hash once within a reasonable window.
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+        $submission_hash = hash('sha256', strtolower(trim($author_email)) . '|' . trim($letter_text_stripped) . '|' . $ip);
 
         $existing = get_posts([
             'post_type'      => 'letter',
             'post_status'    => ['pending', 'draft', 'publish'],
             'meta_key'       => '_rts_submission_hash',
             'meta_value'     => $submission_hash,
+            'date_query'     => [
+                [
+                    'after'     => gmdate('Y-m-d H:i:s', time() - DAY_IN_SECONDS * 30),
+                    'inclusive' => true,
+                ],
+            ],
             'posts_per_page' => 1,
             'fields'         => 'ids',
         ]);
@@ -1102,16 +1109,25 @@ class RTS_Shortcodes {
         try {
             global $wpdb;
 
-            // 1) Letters Submitted: Count published + pending letters (matches admin wording)
+            // 1) Letters Submitted: Count everything that exists in the system (submitted,
+            // imported, queued for review, etc.). Exclude auto-drafts and trash.
             $letters_submitted = (int) $wpdb->get_var(
-                "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'letter' AND post_status IN ('publish','pending')"
+                "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'letter' AND post_status NOT IN ('trash','auto-draft')"
             );
 
-            // 2) Letters Delivered: Sum of view_count meta
-            $letters_delivered = (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT COALESCE(SUM(meta_value), 0) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+            // 2) Letters Delivered: Sum of per-letter view counters.
+            // Canonical key used by the viewer is `rts_views` (REST: /rts/v1/track/view).
+            // Legacy installs may have `view_count`.
+            $sum_rts_views = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(SUM(CAST(meta_value AS UNSIGNED)), 0) FROM {$wpdb->postmeta} WHERE meta_key = %s",
+                'rts_views'
+            ));
+            $sum_view_count = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COALESCE(SUM(CAST(meta_value AS UNSIGNED)), 0) FROM {$wpdb->postmeta} WHERE meta_key = %s",
                 'view_count'
             ));
+            // Prefer live metric. If rts_views is still zero, fall back to legacy.
+            $letters_delivered = ($sum_rts_views > 0) ? $sum_rts_views : $sum_view_count;
 
             // 3) Helpful count: sum help_count meta
             $help_count = (int) $wpdb->get_var($wpdb->prepare(

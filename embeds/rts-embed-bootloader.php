@@ -23,9 +23,13 @@ require_once __DIR__ . '/api.php';
  */
 add_action( 'wp_enqueue_scripts', 'rts_enqueue_embed_widget' );
 function rts_enqueue_embed_widget() {
+    // UPDATED: Use the virtual stable URL to hide theme paths/versions
+    // This matches the clean URL provided to external partners.
+    $js_url = home_url( '/rts-widget.js' );
+
     wp_register_script(
         'rts-embed-widget',
-        get_stylesheet_directory_uri() . '/embeds/assets/rts-widget.js',
+        $js_url,
         [],
         defined( 'RTS_THEME_VERSION' ) ? RTS_THEME_VERSION : '1.0',
         true

@@ -307,6 +307,10 @@ try {
 
           this.cacheDomElements();
           this.loadState();
+
+          // View counting guard (prevents double increments when multiple code paths render the same letter)
+          this._viewCountedFor = null;
+
           this.checkOnboarding();
           this.bindEvents();
 
@@ -1336,7 +1340,7 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackView(letter.id);
+            this.trackViewOnce(letter.id);
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1353,7 +1357,7 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackView(letter.id);
+            this.trackViewOnce(letter.id);
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1393,7 +1397,7 @@ getCacheKey() {
                   this.letterCache[cacheKey] = { letter: nativeLetter, timestamp: Date.now() };
 
                   this.renderLetter(nativeLetter);
-                  this.trackView(nativeLetter.id);
+                  this.trackViewOnce(nativeLetter.id);
                   this.trackSuccess('nextLetter');
 
                   loadedOk = true;
@@ -1465,7 +1469,7 @@ getCacheKey() {
                     this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
 
                     this.renderLetter(normalized.letter);
-                    this.trackView(normalized.letter.id);
+                    this.trackViewOnce(normalized.letter.id);
                     this.trackSuccess('nextLetter');
 
                     loadedOk = true;
@@ -1722,6 +1726,25 @@ progressiveRender(contentEl, html) {
         } catch (error) {
           this.logError('trackView', error);
         }
+      },
+
+      // Track exactly one view per rendered letter (prevents double increments).
+      async trackViewOnce(letterId) {
+        if (!letterId) return;
+        const idStr = String(letterId);
+        // Instance guard (prevents repeated increments within the same viewer instance)
+        if (this._viewCountedFor === idStr) return;
+
+        // Global guard (prevents double increments if this script is accidentally
+        // initialised twice on the same page load). Uses a per-page-load ID from PHP.
+        const pv = (window.RTS_CONFIG && window.RTS_CONFIG.pageViewId) ? String(window.RTS_CONFIG.pageViewId) : 'no-pv';
+        const globalKey = pv + '::' + idStr;
+        window.__RTS_VIEW_ONCE = window.__RTS_VIEW_ONCE || Object.create(null);
+        if (window.__RTS_VIEW_ONCE[globalKey]) return;
+        window.__RTS_VIEW_ONCE[globalKey] = true;
+
+        this._viewCountedFor = idStr;
+        await this.trackView(letterId);
       },
 
       async trackHelpful() {
@@ -1990,6 +2013,12 @@ showRatePrompt() {
       async submitFeedback(formEl) {
         if (!formEl) return;
 
+        // Idempotency guard: prevents double inserts if the handler fires twice.
+        if (formEl.dataset.rtsSubmitting === '1') {
+          return;
+        }
+        formEl.dataset.rtsSubmitting = '1';
+
         const formData = new FormData(formEl);
         const payload = {};
         formData.forEach((v, k) => { payload[k] = v; });
@@ -2052,6 +2081,10 @@ showRatePrompt() {
           this.logError('submitFeedback', err);
           window.RTSLetterSystem.safeToast('Network issue. Please try again.');
           if (submitBtn) submitBtn.disabled = false;
+        } finally {
+          // Always clear submit lock so a user can re-try.
+          delete formEl.dataset.rtsSubmitting;
+          if (submitBtn) submitBtn.removeAttribute('aria-busy');
         }
       },
 

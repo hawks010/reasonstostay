@@ -1,13 +1,13 @@
 /*
-Theme Name: Hello Elementor Child RTS v5.1.9
+Theme Name: Hello-Elementor-Child-RTS-v5.1.35
 Theme URI: https://reasonstostay.co.uk
 Template: hello-elementor
 Author: Inkfire
 Author URI: https://inkfire.co.uk
 Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools.
 Tags: mental-health,accessibility-ready,flexible-header,custom-colors,custom-menu,custom-logo,featured-images,rtl-language-support,threaded-comments,translation-ready
-Version: 5.1.9
-Updated: 2026-02-07 HOTFIX30: Live stats + styled stats row + onboarding redesign
+Version: 5.1.37
+Updated: 2026-02-08 HOTFIX: Add save_metaboxes() back-compat wrapper to stop fatal save_post callback error
 */
 
 /* =====================================================

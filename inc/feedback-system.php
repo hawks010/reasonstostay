@@ -15,6 +15,25 @@ class RTS_Feedback_System {
 
     private static $instance = null;
 
+    /**
+     * Build a short-lived dedupe key to avoid double inserts if the browser
+     * submits twice (double JS init, accidental double-click, etc.).
+     */
+    private function build_dedupe_key($letter_id, $rating, $mood_change, $triggered, $comment, $ip, $ua) {
+        $comment_snip = mb_substr(trim((string) $comment), 0, 200);
+        $ip_hash = $ip ? md5((string) $ip) : '';
+        $ua_snip = mb_substr((string) $ua, 0, 120);
+        return 'rts_fb_' . md5(implode('|', [
+            (int) $letter_id,
+            (string) $rating,
+            (string) $mood_change,
+            (string) $triggered,
+            $comment_snip,
+            $ip_hash,
+            $ua_snip,
+        ]));
+    }
+
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -97,6 +116,19 @@ class RTS_Feedback_System {
 
         $triggered = (string) $request->get_param('triggered');
         $triggered = ($triggered === '1' || $triggered === 'true' || $triggered === 'yes') ? '1' : '0';
+
+        // Server-side idempotency: block duplicate inserts for the same payload
+        // within a short window. This protects against double-submit bugs.
+        $ip = $this->get_client_ip();
+        $ua = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
+        $dedupe_key = $this->build_dedupe_key($letter_id, $rating, $mood_change, $triggered, (string) $request->get_param('comment'), $ip, $ua);
+        if (get_transient($dedupe_key)) {
+            return new WP_REST_Response([
+                'success' => true,
+                'duplicate' => true,
+            ], 200);
+        }
+        set_transient($dedupe_key, 1, 120);
 
         $comment = wp_kses_post((string) $request->get_param('comment'));
         $comment = trim($comment);

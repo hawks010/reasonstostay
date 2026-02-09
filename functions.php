@@ -9,6 +9,10 @@
  * 4. Maintenance (Weekly Debug Log Wipe)
  * 5. Auto-Migration (Self-healing URLs for Elementor)
  * 6. Reasons to Stay - Letter System (Core Includes & Logic)
+ * 7. RTS Subscriber System
+ * 8. Performance
+ * 9. RTS API SAFEGUARDS (NEW - Embed Protection)
+ * 10. Syndication Engine
  */
 
 // =============================================================================
@@ -37,6 +41,13 @@ add_action( 'send_headers', 'inkfire_add_cors_headers' );
 function inkfire_add_cors_headers() {
     // Only run if we are sending headers (not CLI) and not already sent
     if ( headers_sent() ) {
+        return;
+    }
+
+    // [SAFEGUARD MODIFICATION]
+    // Skip this general logic for the Embed API. We handle that specifically 
+    // in Section 9 to ensure wildcard (*) access for Wix/Squarespace.
+    if ( isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/rts/v1/embed') !== false ) {
         return;
     }
 
@@ -493,6 +504,61 @@ add_shortcode('rts_stat', function($atts) {
 });
 
 /**
+ * Get site statistics with manual override support
+ * Use this function in shortcodes/templates to get consistent stats
+ */
+function rts_get_site_stats() {
+    // Manual offsets (legacy-compatible)
+    $stats_override = get_option('rts_stats_override', ['enabled' => 0]);
+
+    global $wpdb;
+
+    // Live totals (always calculated)
+    $live_letters_submitted = (int) wp_count_posts('letter')->publish;
+
+    $live_letters_delivered = (int) $wpdb->get_var("
+        SELECT SUM(meta_value)
+        FROM {$wpdb->postmeta}
+        WHERE meta_key = 'view_count'
+    ");
+
+    // Feel better percentage (stored option, or sensible default)
+    $live_feel_better_percent = (float) get_option('rts_feel_better_percentage', 85.7);
+
+    // If "override" is enabled, treat provided values as OFFSETS (never as replacements),
+    // so the counters remain live and continue to increase.
+    if (!empty($stats_override['enabled'])) {
+        $off_submitted = (int) ($stats_override['offset_submitted'] ?? $stats_override['total_letters'] ?? 0);
+        $off_delivered = (int) ($stats_override['offset_delivered'] ?? $stats_override['letters_delivered'] ?? 0);
+
+        // Feel-better can be overridden as an absolute percentage (if provided), otherwise use live option.
+        $feel_better_percent = isset($stats_override['feel_better_percent']) && $stats_override['feel_better_percent'] !== ''
+            ? (float) $stats_override['feel_better_percent']
+            : $live_feel_better_percent;
+
+        return [
+            // legacy keys
+            'total_letters'       => $live_letters_submitted + $off_submitted,
+            // preferred keys
+            'letters_submitted'   => $live_letters_submitted + $off_submitted,
+            'letters_delivered'   => $live_letters_delivered + $off_delivered,
+            'feel_better_percent' => (float) $feel_better_percent,
+            'using_override'      => true,
+        ];
+    }
+
+    return [
+        // legacy key
+        'total_letters'       => $live_letters_submitted,
+        // preferred keys
+        'letters_submitted'   => $live_letters_submitted,
+        'letters_delivered'   => $live_letters_delivered,
+        'feel_better_percent' => (float) $live_feel_better_percent,
+        'using_override'      => false,
+    ];
+}
+
+/**
  * Export letters to CSV
  */
 // NOTE: Manual processing admin-post handlers are registered inside inc/cron-processing.php
@@ -522,7 +588,7 @@ function rts_enqueue_frontend_assets() {
         '6.5.1'
     );
 
-wp_enqueue_style(
+    wp_enqueue_style(
         'rts-google-fonts',
         'https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600&display=swap',
         [],
@@ -570,6 +636,8 @@ wp_enqueue_style(
         'ajaxUrl'   => esc_url_raw(admin_url('admin-ajax.php')),
         // Optional, but helps in setups where security layers expect a REST nonce.
         'nonce'     => wp_create_nonce('wp_rest'),
+        // Unique per page load; lets us de-dupe analytics if this script is initialised twice.
+        'pageViewId' => function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : (string) (microtime(true) . '-' . wp_rand()),
         'timeoutMs' => 9000,
     ]);
 }
@@ -623,61 +691,6 @@ function rts_initialize_taxonomies() {
     
     // Mark as initialized
     update_option('rts_taxonomies_initialized', true);
-}
-
-/**
- * Get site statistics with manual override support
- * Use this function in shortcodes/templates to get consistent stats
- */
-function rts_get_site_stats() {
-    // Manual offsets (legacy-compatible)
-    $stats_override = get_option('rts_stats_override', ['enabled' => 0]);
-
-    global $wpdb;
-
-    // Live totals (always calculated)
-    $live_letters_submitted = (int) wp_count_posts('letter')->publish;
-
-    $live_letters_delivered = (int) $wpdb->get_var("
-        SELECT SUM(meta_value)
-        FROM {$wpdb->postmeta}
-        WHERE meta_key = 'view_count'
-    ");
-
-    // Feel better percentage (stored option, or sensible default)
-    $live_feel_better_percent = (float) get_option('rts_feel_better_percentage', 85.7);
-
-    // If "override" is enabled, treat provided values as OFFSETS (never as replacements),
-    // so the counters remain live and continue to increase.
-    if (!empty($stats_override['enabled'])) {
-        $off_submitted = (int) ($stats_override['offset_submitted'] ?? $stats_override['total_letters'] ?? 0);
-        $off_delivered = (int) ($stats_override['offset_delivered'] ?? $stats_override['letters_delivered'] ?? 0);
-
-        // Feel-better can be overridden as an absolute percentage (if provided), otherwise use live option.
-        $feel_better_percent = isset($stats_override['feel_better_percent']) && $stats_override['feel_better_percent'] !== ''
-            ? (float) $stats_override['feel_better_percent']
-            : $live_feel_better_percent;
-
-        return [
-            // legacy keys
-            'total_letters'       => $live_letters_submitted + $off_submitted,
-            // preferred keys
-            'letters_submitted'   => $live_letters_submitted + $off_submitted,
-            'letters_delivered'   => $live_letters_delivered + $off_delivered,
-            'feel_better_percent' => (float) $feel_better_percent,
-            'using_override'      => true,
-        ];
-    }
-
-    return [
-        // legacy key
-        'total_letters'       => $live_letters_submitted,
-        // preferred keys
-        'letters_submitted'   => $live_letters_submitted,
-        'letters_delivered'   => $live_letters_delivered,
-        'feel_better_percent' => (float) $live_feel_better_percent,
-        'using_override'      => false,
-    ];
 }
 
 // =============================================================================
@@ -957,7 +970,69 @@ function rts_allow_rand_orderby( $params ) {
 }
 
 // =============================================================================
-// 9. SYNDICATION ENGINE (Embed Widgets)
+// 9. RTS API SAFEGUARDS (Embed Widget Compatibility)
+// Fixes CORS for Wix, bypasses aggressive caching (Hostinger/LiteSpeed)
+// =============================================================================
+
+add_action('rest_api_init', function() {
+    // 1. FORCE CORS for Embeds (allows * origin for Wix/Squarespace/Etc)
+    // Priority 15 runs after most standard headers
+    add_filter('rest_pre_serve_request', function($value, $result, $request) {
+        if (strpos($request->get_route(), '/rts/v1/embed') !== false) {
+            // Remove standard headers if already set to avoid duplication/conflict
+            header_remove('Access-Control-Allow-Origin');
+            header_remove('Access-Control-Allow-Methods');
+            header_remove('Access-Control-Allow-Headers');
+            
+            // Force permissive headers specifically for the widget
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+            header('Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept');
+            // Cache the pre-flight check for 24h to reduce server load
+            header('Access-Control-Max-Age: 86400'); 
+        }
+        return $value;
+    }, 15, 3);
+});
+
+// 2. BYPASS SERVER CACHING (LiteSpeed/WP Rocket) for "Random" endpoint
+// This ensures the "Random" button actually works and doesn't serve the same letter repeatedly.
+add_action('rest_post_dispatch', function($result, $server, $request) {
+    if (strpos($request->get_route(), '/rts/v1/embed/random') !== false) {
+        // Standard headers to kill browser/proxy cache
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+        
+        // Hostinger / LiteSpeed specific bypass
+        if (defined('LSCWP_V')) {
+            do_action('litespeed_disable_cache');
+            header('X-LiteSpeed-Cache-Control: no-cache');
+        }
+        
+        // WP Rocket specific bypass
+        if (function_exists('rocket_clean_domain')) {
+            header('X-Rocket-Cache: miss');
+        }
+    }
+    return $result;
+}, 10, 3);
+
+// 3. ALLOW PUBLIC ACCESS (Bypass "Require Login" / Security plugins)
+// Whitelists the embed endpoint so it works even if the main site is locked down.
+add_filter('rest_authentication_errors', function($result) {
+    if (!empty($result)) {
+        return $result;
+    }
+    // If request matches our embed API, allow it through
+    if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/rts/v1/embed') !== false) {
+        return true; 
+    }
+    return $result;
+});
+
+// =============================================================================
+// 10. SYNDICATION ENGINE (Embed Widgets)
 // =============================================================================
 
 require_once get_stylesheet_directory() . '/embeds/rts-embed-bootloader.php';

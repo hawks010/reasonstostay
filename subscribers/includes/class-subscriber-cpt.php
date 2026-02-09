@@ -1079,6 +1079,20 @@ if (!empty($_GET['subscriber_segment'])) {
     }
 
     /**
+     * Back-compat alias.
+     *
+     * Some versions of the theme hooked save_post to save_metaboxes().
+     * The actual save logic lives in save_subscriber_details().
+     *
+     * @param int     $post_id
+     * @param WP_Post $post
+     * @return void
+     */
+    public function save_metaboxes($post_id, $post) {
+        $this->save_subscriber_details($post_id, $post);
+    }
+
+    /**
      * Inline admin CSS tweaks to make Add/Edit Subscriber feel like a form.
      */
     public function admin_ui_css_tweaks() {

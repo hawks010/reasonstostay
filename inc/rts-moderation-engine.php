@@ -3783,7 +3783,14 @@ public static function rest_track_view(\WP_REST_Request $req): \WP_REST_Response
     if (!self::analytics_throttle('view', $letter_id)) {
         return new \WP_REST_Response(['ok' => true, 'throttled' => true], 200);
     }
+    // Canonical metric (used by [rts_site_stats_row]).
     self::bump_counter($letter_id, 'rts_views', 1);
+
+    // Back-compat: older builds summed 'view_count'. Keep it in sync.
+    self::bump_counter($letter_id, 'view_count', 1);
+
+    // Make the stats row feel "live".
+    delete_transient('rts_site_stats_v1');
     return new \WP_REST_Response(['ok' => true], 200);
 }
 
@@ -4244,7 +4251,12 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
 		public static function handle_aggregate_analytics(): void { RTS_Analytics_Aggregator::aggregate(); }
 
 		public static function on_save_post_letter(int $post_id, \WP_Post $post, bool $update): void {
-			if (!rts_as_available() || wp_is_post_revision($post_id) || wp_is_post_autosave($post_id) || $post->post_type !== 'letter' || $post->post_status === 'publish') return;
+			// Always keep site stats near real-time when letters are created/imported/updated.
+			if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id) || $post->post_type !== 'letter') return;
+			delete_transient('rts_site_stats_v1');
+
+			// Only queue moderation for non-published letters (published letters are handled elsewhere).
+			if (!rts_as_available() || $post->post_status === 'publish') return;
 
 			// Skip empty posts (auto-drafts converted to drafts, etc.)
 			if (empty(trim($post->post_content ?? ''))) return;

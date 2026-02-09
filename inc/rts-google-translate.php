@@ -42,7 +42,9 @@ class RTS_Google_Translate {
 
 					new google.translate.TranslateElement({
 						pageLanguage: 'en',
-						includedLanguages: 'en,es,fr,zh-CN,zh-TW,hi,ru,pt,ja,de,ar',
+						// SYNCED: Full list matching rts-multilingual.php
+						// Hebrew is 'iw' in Google Translate, Chinese is 'zh-CN'
+						includedLanguages: 'en,es,fr,de,it,pt,nl,pl,ro,hu,cs,sv,no,da,fi,el,ru,uk,ar,iw,tr,hi,zh-CN,ja,ko,vi,th,id',
 						autoDisplay: false
 					}, 'google_translate_element');
 				} catch (e) {}
@@ -54,18 +56,36 @@ class RTS_Google_Translate {
 		<script type="text/javascript">
 			(function() {
 				// Map theme language codes to Google Translate codes
+				// SYNCED: Matches rts-multilingual.php keys
 				var langMap = {
 					'en': 'en',
 					'es': 'es',
 					'fr': 'fr',
-					'zh': 'zh-CN',
-					'zh-TW': 'zh-TW',
-					'hi': 'hi',
-					'ru': 'ru',
-					'pt': 'pt',
-					'ja': 'ja',
 					'de': 'de',
-					'ar': 'ar'
+					'it': 'it',
+					'pt': 'pt',
+					'nl': 'nl',
+					'pl': 'pl',
+					'ro': 'ro',
+					'hu': 'hu',
+					'cs': 'cs',
+					'sv': 'sv',
+					'no': 'no',
+					'da': 'da',
+					'fi': 'fi',
+					'el': 'el',
+					'ru': 'ru',
+					'uk': 'uk',
+					'ar': 'ar',
+					'he': 'iw', // Google uses 'iw' for Hebrew
+					'tr': 'tr',
+					'hi': 'hi',
+					'zh': 'zh-CN', // Generic 'zh' -> Simplified
+					'ja': 'ja',
+					'ko': 'ko',
+					'vi': 'vi',
+					'th': 'th',
+					'id': 'id'
 				};
 
 				function setCookie(name, value, maxAgeSeconds) {
@@ -95,8 +115,10 @@ class RTS_Google_Translate {
 					// Always persist theme preference for UI consistency
 					setCookie('rts_language', themeLang, 365 * 24 * 60 * 60);
 
-					// If GT script isn't ready yet, do NOT block anything. Let normal navigation happen.
-					if (!window.RTSGoogleTranslate || !window.RTSGoogleTranslate.isReady) return false;
+					// If GT script isn't ready yet, allow setting cookie but warn/wait
+					if (!window.RTSGoogleTranslate || !window.RTSGoogleTranslate.isReady) {
+						// Proceeding anyway as the reload often fixes the load state
+					}
 
 					clearGoogTransCookie();
 
@@ -107,11 +129,15 @@ class RTS_Google_Translate {
 						// Host-only + domain cookies (covers most setups)
 						document.cookie = 'googtrans=' + cookieValue + '; path=/';
 						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + document.domain;
+						
+						// Handle subdomains/root domain logic (Crucial for mobile redirecting)
 						var rootDomain2 = ('.' + document.domain).replace(/^\.www\./, '.');
 						document.cookie = 'googtrans=' + cookieValue + '; path=/; domain=' + rootDomain2;
 					} catch (e) {}
 
-					setTimeout(function() { window.location.reload(); }, 80);
+					// IPHONE FIX: Increased timeout to 500ms.
+					// iOS Safari sometimes fails to write cookies if the page reloads too instantly.
+					setTimeout(function() { window.location.reload(); }, 500);
 					return true;
 				}
 

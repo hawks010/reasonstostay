@@ -3,16 +3,12 @@
  * RTS Multilingual Support Framework
  *
  * Supports translation for:
- * - English (primary)
- * - Spanish
- * - French
- * - Chinese (Simplified & Traditional)
+ * - English, Spanish, French, German, Italian, Portuguese
+ * - Dutch, Polish, Romanian, Hungarian, Czech, Swedish, Norwegian, Danish, Finnish, Greek
+ * - Russian, Ukrainian
+ * - Arabic, Hebrew, Turkish
  * - Hindi
- * - Russian
- * - Portuguese
- * - Japanese
- * - German
- * - Arabic
+ * - Chinese, Japanese, Korean, Vietnamese, Thai, Indonesian
  *
  * INTEGRATION:
  * - Works with Polylang, WPML, or standalone
@@ -79,20 +75,19 @@ class RTS_Multilingual {
 			'id' => ['name' => 'Bahasa Indonesia', 'flag' => '🇮🇩', 'google_code' => 'id', 'dir' => 'ltr'],
 		];
 
-// Normalise language definitions for backwards-compatibility.
-// Some renderers expect `native` but older configs only define `name`.
-foreach ($this->supported_languages as $code => $lang) {
-    if (!isset($lang['native']) || $lang['native'] === '') {
-        $this->supported_languages[$code]['native'] = $lang['name'] ?? strtoupper((string) $code);
-    }
-    if (!isset($lang['name']) || $lang['name'] === '') {
-        $this->supported_languages[$code]['name'] = $this->supported_languages[$code]['native'];
-    }
-    if (!isset($lang['flag'])) {
-        $this->supported_languages[$code]['flag'] = '🌐';
-    }
-}
-
+        // Normalise language definitions for backwards-compatibility.
+        // Some renderers expect `native` but older configs only define `name`.
+        foreach ($this->supported_languages as $code => $lang) {
+            if (!isset($lang['native']) || $lang['native'] === '') {
+                $this->supported_languages[$code]['native'] = $lang['name'] ?? strtoupper((string) $code);
+            }
+            if (!isset($lang['name']) || $lang['name'] === '') {
+                $this->supported_languages[$code]['name'] = $this->supported_languages[$code]['native'];
+            }
+            if (!isset($lang['flag'])) {
+                $this->supported_languages[$code]['flag'] = '🌐';
+            }
+        }
 
 		$this->current_language = $this->detect_language();
 		$this->load_translations();
@@ -905,10 +900,10 @@ body:not(.rts-dark-mode) .rts-lang-flag.active {
 
 /* Click safety */
 .rts-language-switcher, .rts-language-switcher * {
-    pointer-events: auto !important;
+    pointer-events: auto !important;
 }
 .rts-lang-compact-menu, .rts-lang-dropdown-menu {
-    z-index: 99999 !important;
+    z-index: 99999 !important;
 }
 ');
 

@@ -499,6 +499,7 @@
     text-decoration: none;
     font-weight: 700;
     font-size: 0.95rem;
+    gap: 10px;
     border: 1px solid rgba(17, 24, 39, 0.12);
     background: #111827;
     color: #ffffff;
@@ -923,12 +924,7 @@ html.rts-onboarding-active .rts-a11y-panel{
 /* Success message */
 .rts-submit-success {
     text-align: center;
-    padding: 60px 40px;
     background: var(--rts-white);
-    border-radius: 2px;
-    box-shadow: 
-        0 1px 3px rgba(0,0,0,0.26),
-        0 4px 8px rgba(0,0,0,0.24);
 }
 
 .rts-success-icon {
@@ -1198,9 +1194,9 @@ body.rts-modal-open{overflow:hidden;}
 }
 
 .rts-submit-instructions{
-    background: #182437;
+    background: #000000;
     color: #F1E3D3;
-    border-radius: 16px;
+    border-radius: 5px;
     padding: 22px 20px;
     box-shadow: 0 14px 34px rgba(0,0,0,0.10);
 }
@@ -1975,7 +1971,7 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 .rts-form-message.error{color:#b91c1c;}
 
 /* Success box */
-.rts-submit-success{margin-top:18px;border:1px solid #e5e7eb;border-radius:16px;padding:16px 16px 14px 16px;background:linear-gradient(180deg,#ffffff,#fff7ea);}
+.rts-submit-success{margin-top:18px;padding:16px 16px 14px 16px;}
 .rts-success-title{margin:0 0 8px 0;font-family:'Special Elite',ui-monospace,monospace;font-size:1.35rem;color:#111827;}
 .rts-success-text{margin:0 0 10px 0;color:#374151;line-height:1.55;font-size:1rem;}
 .rts-success-share{margin-top:10px;padding-top:12px;border-top:1px solid rgba(17,24,39,0.10);}
@@ -1985,7 +1981,7 @@ html.rts-onboarding-active .rts-onboarding-overlay {
 .rts-share-btn:focus{outline:none;box-shadow:0 0 0 3px rgba(252,163,17,0.28);}
 
 /* Instructions sidebar */
-.rts-submit-instructions{background:#0f1b2d;border-radius:28px;padding:26px;box-shadow:0 10px 30px rgba(0,0,0,0.10);border:1px solid rgba(255,255,255,0.06);}
+.rts-submit-instructions{background:#000000;border-radius:5px;padding:26px;box-shadow:0 10px 30px rgba(0,0,0,0.10);border:1px solid rgba(255,255,255,0.06);}
 .rts-submit-instructions h3{margin:0;font-family:'Special Elite',ui-monospace,monospace;font-size:1.55rem;color:#fff;letter-spacing:0.04em;}
 .rts-instructions-divider{height:1px;background:linear-gradient(90deg,rgba(252,163,17,0.7),rgba(255,255,255,0.08));margin:14px 0 18px 0;}
 .rts-guideline + .rts-guideline{margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);}

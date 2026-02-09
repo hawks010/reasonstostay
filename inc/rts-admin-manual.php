@@ -18,6 +18,7 @@ define('RTS_SITE_MANUAL_OPTION', 'rts_site_manual_html');
 
 /**
  * Register admin menu (top-level).
+ * Priority 60 (default) - we let the filter below handle the exact positioning.
  */
 add_action('admin_menu', function () {
     add_menu_page(
@@ -32,49 +33,58 @@ add_action('admin_menu', function () {
 });
 
 /**
- * Force menu position: directly under top-level Subscribers (edit.php?post_type=rts_subscriber).
+ * Force menu position: directly under top-level Subscribers.
  */
 add_filter('menu_order', function ($menu_order) {
     if (!is_array($menu_order)) {
         return $menu_order;
     }
 
-    $manual_slug = 'admin.php?page=rts-site-manual';
+    // CORRECTED: The slug in the menu array is just the ID, not the full URL.
+    $manual_slug = 'rts-site-manual'; 
+
+    // Candidates for the "Subscribers" menu item to sit underneath.
     $subs_candidates = [
-        'admin.php?page=rts-subscribers-dashboard',
-        'edit.php?post_type=rts_subscriber',
-        'edit.php?post_type=rts_subscriber',
-        'admin.php?page=rts-subscribers',
-        'admin.php?page=rts-subscribers-list',
+        'rts-subscribers-dashboard',       // Top level page slug
+        'edit.php?post_type=rts_subscriber', // Standard CPT slug
+        'rts_subscriber',                  // Fallback CPT slug
+        'rts-subscribers',
+        'admin.php?page=rts-subscribers-dashboard', // Legacy check
     ];
 
     $subs_index = false;
+    
+    // 1. Try exact matches
     foreach ($subs_candidates as $cand) {
         $idx = array_search($cand, $menu_order, true);
-        if ($idx !== false) { $subs_index = $idx; break; }
-    }
-
-    // Fallback: try fuzzy match for anything containing 'rts-subscrib'
-    if ($subs_index === false) {
-        foreach ($menu_order as $i => $slug) {
-            if (is_string($slug) && strpos($slug, 'rts-subscrib') !== false) { $subs_index = $i; break; }
+        if ($idx !== false) { 
+            $subs_index = $idx; 
+            break; 
         }
     }
 
+    // 2. Fallback: fuzzy match for anything looking like a subscriber menu
+    if ($subs_index === false) {
+        foreach ($menu_order as $i => $slug) {
+            if (is_string($slug) && (strpos($slug, 'rts-subscrib') !== false || strpos($slug, 'subscriber') !== false)) { 
+                $subs_index = $i; 
+                break; 
+            }
+        }
+    }
 
-    // Remove existing manual position if present.
+    // Remove our manual from its current random spot in the list
     $menu_order = array_values(array_filter($menu_order, function ($slug) use ($manual_slug) {
         return $slug !== $manual_slug;
     }));
-
     
-    // If we can't find Subscribers, append manual near the end.
+    // If we absolutely can't find Subscribers, place it at position 3 (after Dashboard/SiteKit)
     if ($subs_index === false) {
-        $menu_order[] = $manual_slug;
+        array_splice($menu_order, 2, 0, [$manual_slug]);
         return $menu_order;
     }
 
-    // Insert right after Subscribers.
+    // Insert right after Subscribers
     array_splice($menu_order, $subs_index + 1, 0, [$manual_slug]);
 
     return $menu_order;
@@ -900,13 +910,12 @@ function rts_render_site_manual_page() {
             <div id="rts-site-manual-render">
                 <?php
                 // Render the stored manual HTML as-is (admin-only).
-                // We intentionally do not sanitize here, because the guide includes scoped <style> and rich layout HTML.
                 echo $manual_html;
                 ?>
             </div>
 
             <?php
-                // Place System Reference under the manual for now (requested).
+                // Place System Reference under the manual.
                 echo rts_site_manual_get_system_reference_html();
             ?>
         <?php endif; ?>

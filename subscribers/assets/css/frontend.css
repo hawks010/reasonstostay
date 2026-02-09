@@ -7,17 +7,17 @@
     --rts-color-text: #1A1A1A;
     --rts-color-muted: #515962;
     --rts-color-cream: #F1E3D3;
-    --rts-color-paper: #F8F1E9; /* Lighter cream for contrast against site bg */
+    --rts-color-paper: #F8F1E9;
     --rts-color-orange: #FCA311;
     --rts-border-radius: 8px;
-    --rts-focus-ring: rgba(252, 163, 17, 0.5); /* High vis focus for a11y */
+    --rts-focus-ring: rgba(252, 163, 17, 0.5);
 }
 
 /* Wrapper */
 .rts-subscribe-wrapper {
     background-color: var(--rts-color-paper);
     width: 100%;
-    max-width: 600px; /* Constrain max width for readability */
+    max-width: 600px;
     margin: 2rem auto;
     padding: 3rem 2.5rem;
     border: 1px solid rgba(0,0,0,0.03);
@@ -30,7 +30,6 @@
     box-sizing: border-box;
 }
 
-/* Mobile Response for Wrapper */
 @media (max-width: 600px) {
     .rts-subscribe-wrapper {
         padding: 1.5rem 1.25rem;
@@ -93,8 +92,8 @@
 .rts-form-input,
 .rts-form-select {
     width: 100%;
-    padding: 0.85rem 1rem; /* Generous touch target */
-    font-size: 1rem; /* Min 16px to prevent iOS zoom */
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
     font-family: var(--rts-font-body);
     color: var(--rts-color-dark);
     background-color: #fff;
@@ -104,7 +103,6 @@
     box-sizing: border-box;
 }
 
-/* Focus States - High Visibility for A11y */
 .rts-form-input:focus,
 .rts-form-select:focus {
     outline: none;
@@ -112,12 +110,17 @@
     box-shadow: 0 0 0 4px var(--rts-focus-ring);
 }
 
-/* Checkboxes */
+/* Checkboxes Grid */
 .rts-checkbox-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    margin-top: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+/* Preferences spacing (label looked squished against the cards) */
+.rts-prefs-group .rts-form-label {
+    margin-bottom: 0.75rem;
 }
 
 @media (max-width: 500px) {
@@ -126,67 +129,111 @@
     }
 }
 
-.rts-checkbox-label {
+/* Checkbox Labels (The clickable card) */
+.rts-subscribe-checkbox-label {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
     cursor: pointer;
     padding: 0.75rem;
-    border: 1px solid transparent; /* Keeps layout stable on hover/focus */
+    border: 1px solid transparent;
     border-radius: var(--rts-border-radius);
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
+    position: relative;
+    z-index: 1; 
 }
 
-.rts-checkbox-label:hover {
+.rts-subscribe-checkbox-label:hover {
     background-color: rgba(0,0,0,0.03);
 }
 
-.rts-checkbox-label input[type="checkbox"] {
-    appearance: none;
-    background-color: #fff;
-    margin-top: 0.2rem;
-    font: inherit;
-    color: currentColor;
-    /* WCAG Target Size: Min 24px */
+/* Visually hide the real input, but keep it keyboard-focusable and clickable via label */
+.rts-subscribe-wrapper .rts-real-checkbox {
+    position: absolute !important;
+    opacity: 0 !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
+
+/* Custom Visual Checkbox Box */
+.rts-checkbox-visual {
     width: 1.5rem;
     height: 1.5rem;
     border: 2px solid var(--rts-color-muted);
+    background: #fff;
     border-radius: 4px;
-    display: grid;
-    place-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    color: var(--rts-color-dark);
+    margin-top: 2px;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
-/* Focus state for checkboxes */
-.rts-checkbox-label input[type="checkbox"]:focus {
+/* SVG Icon inside Checkbox */
+.rts-checkbox-visual svg {
+    width: 0.85em;
+    height: 0.85em;
+    transform: scale(0);
+    transition: transform 0.15s ease-in-out;
+}
+
+/* Checked State - Input */
+.rts-real-checkbox:checked + .rts-checkbox-visual,
+.rts-subscribe-checkbox-label.rts-checked .rts-checkbox-visual {
+    background-color: #fff;
+    border-color: var(--rts-color-dark);
+}
+
+/* Checked State - Icon */
+.rts-real-checkbox:checked + .rts-checkbox-visual svg,
+.rts-subscribe-checkbox-label.rts-checked .rts-checkbox-visual svg {
+    transform: scale(1);
+}
+
+/* Checked State - Label Card */
+.rts-real-checkbox:checked ~ .rts-checkbox-text,
+.rts-subscribe-checkbox-label.rts-checked {
+    border-color: rgba(7, 12, 19, 0.1);
+}
+
+/* Focus State */
+.rts-real-checkbox:focus-visible + .rts-checkbox-visual {
     outline: none;
     border-color: var(--rts-color-orange);
     box-shadow: 0 0 0 4px var(--rts-focus-ring);
 }
 
-.rts-checkbox-label input[type="checkbox"]::before {
-    content: "";
-    width: 0.85em;
-    height: 0.85em;
-    transform: scale(0);
-    transition: 120ms transform ease-in-out;
-    box-shadow: inset 1em 1em var(--rts-color-dark);
-    transform-origin: center;
-    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-}
-
-.rts-checkbox-label input[type="checkbox"]:checked::before {
-    transform: scale(1);
-}
-
-.rts-checkbox-label input[type="checkbox"]:checked {
-    border-color: var(--rts-color-dark);
-}
-
-.rts-checkbox-label span {
+.rts-checkbox-text {
     font-size: 0.95rem;
     line-height: 1.4;
     color: var(--rts-color-text);
+}
+
+/* Privacy block spacing (was too far from the preference cards) */
+.rts-privacy-group {
+    margin-top: 1.15rem;
+    margin-bottom: 0.25rem;
+}
+
+.rts-privacy-group .rts-subscribe-checkbox-label {
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+}
+
+.rts-privacy-group .rts-checkbox-visual {
+    margin-top: 0;
 }
 
 /* Privacy Text */
@@ -215,7 +262,7 @@
     color: #fff;
     border: none;
     padding: 1rem 2rem;
-    min-height: 44px; /* WCAG Touch Target */
+    min-height: 44px;
     font-family: var(--rts-font-heading);
     font-size: 1.2rem;
     border-radius: var(--rts-border-radius);
