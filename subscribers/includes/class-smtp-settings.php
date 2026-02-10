@@ -341,9 +341,6 @@ class RTS_SMTP_Settings {
     }
 
     /**
-     * Apply SMTP settings to PHPMailer.
-     */
-    /**
      * Apply mail settings to PHPMailer.
      *
      * Sender details (From, Reply-To, CC) are applied in BOTH Testing and
