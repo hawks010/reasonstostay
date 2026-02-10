@@ -264,6 +264,82 @@ class RTS_Admin_Menu {
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-dashboard"></span>Subscriber Dashboard</h1>
                 <p class="rts-page-description">A single place to manage sending, SMTP, and imports.</p>
+                <?php
+                // Preference + eligibility breakdown (clarity for admins)
+                $require_consent = (bool) get_option('rts_email_reconsent_required', true);
+
+                $count_query = function($meta_query) {
+                    $q = new WP_Query(array(
+                        'post_type'              => 'rts_subscriber',
+                        'post_status'            => 'publish',
+                        'fields'                 => 'ids',
+                        'posts_per_page'         => 1,
+                        'no_found_rows'          => false,
+                        'update_post_meta_cache' => false,
+                        'update_post_term_cache' => false,
+                        'meta_query'             => $meta_query,
+                    ));
+                    return (int) $q->found_posts;
+                };
+
+                $letters_optin_total = $count_query(array(
+                    array('key' => '_rts_pref_letters', 'value' => '1', 'compare' => '='),
+                ));
+
+                $news_optin_total = $count_query(array(
+                    array('key' => '_rts_pref_newsletters', 'value' => '1', 'compare' => '='),
+                ));
+
+                $verified_total = $count_query(array(
+                    array('key' => '_rts_subscriber_verified', 'value' => '1', 'compare' => '='),
+                ));
+
+                $eligible_letters_mq = array(
+                    'relation' => 'AND',
+                    array('key' => '_rts_subscriber_status', 'value' => 'active', 'compare' => '='),
+                    array('key' => '_rts_subscriber_verified', 'value' => '1', 'compare' => '='),
+                    array('key' => '_rts_pref_letters', 'value' => '1', 'compare' => '='),
+                );
+                if ($require_consent) {
+                    $eligible_letters_mq[] = array('key' => '_rts_subscriber_consent_confirmed', 'compare' => 'EXISTS');
+                }
+                $eligible_letters = $count_query($eligible_letters_mq);
+
+                $eligible_news_mq = array(
+                    'relation' => 'AND',
+                    array('key' => '_rts_subscriber_status', 'value' => 'active', 'compare' => '='),
+                    array('key' => '_rts_subscriber_verified', 'value' => '1', 'compare' => '='),
+                    array('key' => '_rts_pref_newsletters', 'value' => '1', 'compare' => '='),
+                );
+                if ($require_consent) {
+                    $eligible_news_mq[] = array('key' => '_rts_subscriber_consent_confirmed', 'compare' => 'EXISTS');
+                }
+                $eligible_news = $count_query($eligible_news_mq);
+                ?>
+
+                <div class="rts-card" style="margin-top:18px;">
+                    <h2 style="margin:0 0 10px 0;">How subscriptions work</h2>
+                    <div style="color:rgba(255,255,255,0.86);line-height:1.6;">
+                        Every subscriber can choose Letters, Newsletters, or both.<br>
+                        When you send a newsletter or the system sends letter digests, it automatically excludes anyone who did not tick the relevant option, and anyone not verified (and consent-confirmed if enabled).<br>
+                        This keeps Letters and Newsletters as one list, but with strict opt-in filters.
+                    </div>
+
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+                        <span class="rts-badge" style="background:rgba(244,201,70,0.18);color:#F4C946;">Letters opted-in: <?php echo number_format($letters_optin_total); ?></span>
+                        <span class="rts-badge" style="background:rgba(223,21,124,0.18);color:#DF157C;">Newsletters opted-in: <?php echo number_format($news_optin_total); ?></span>
+                        <span class="rts-badge" style="background:rgba(23,154,214,0.18);color:#179AD6;">Verified: <?php echo number_format($verified_total); ?></span>
+                        <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Letters right now: <?php echo number_format($eligible_letters); ?></span>
+                        <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Newsletters right now: <?php echo number_format($eligible_news); ?></span>
+                    </div>
+
+                    <?php if ($require_consent) : ?>
+                        <div style="margin-top:10px;color:rgba(255,255,255,0.78);">
+                            Consent mode is enabled. Subscribers must also confirm consent in the preference centre before they are eligible.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
             </div>
 
             <!-- ── Stats Grid ── -->

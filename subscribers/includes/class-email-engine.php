@@ -317,6 +317,22 @@ class RTS_Email_Engine {
             wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
         }
 
+        // On some hosts WP-Cron is slow to spawn (or disabled). For transactional
+        // emails like verification/welcome we want best-effort immediate delivery.
+        // Process a small batch right now when we're not already inside cron.
+        if (!defined('DOING_CRON') || !DOING_CRON) {
+            /**
+             * Process queue immediately to avoid "stuck pending verification".
+             * Safe because it only sends pending items and has its own time guard.
+             */
+            do_action('rts_process_email_queue');
+
+            // Nudge WP-Cron as well for any follow-up items.
+            if (function_exists('spawn_cron')) {
+                @spawn_cron(time());
+            }
+        }
+
         return $queued_id;
     }
 
@@ -344,6 +360,14 @@ class RTS_Email_Engine {
 
         if (!wp_next_scheduled('rts_process_email_queue')) {
             wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
+        }
+
+        // Same best-effort immediate delivery approach as verification.
+        if (!defined('DOING_CRON') || !DOING_CRON) {
+            do_action('rts_process_email_queue');
+            if (function_exists('spawn_cron')) {
+                @spawn_cron(time());
+            }
         }
 
         return $queued_id;

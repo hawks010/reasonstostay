@@ -469,7 +469,7 @@ class RTS_Shortcodes {
                     <div class="rts-field rts-consent-field">
                         <label class="rts-consent-label" for="rts-subscribe-opt-in">
                             <input type="checkbox" id="rts-subscribe-opt-in" name="subscribe_opt_in" value="1">
-                            <span>Yes, send me letters and updates about new resources (podcast episodes, articles, etc.)</span>
+                            <span>Yes, send me letters including updates, occasional podcasts and other promos.</span>
                         </label>
                         <small class="rts-help-text">Optional: Get supportive letters plus news on helpful content we create</small>
                     </div>

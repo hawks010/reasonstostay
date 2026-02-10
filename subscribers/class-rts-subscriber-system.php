@@ -336,6 +336,12 @@ public function register_letter_cpt() {
         if (!wp_next_scheduled('rts_monthly_digest')) wp_schedule_event(strtotime('first day of next month 09:00:00'), 'monthly', 'rts_monthly_digest');
         if (!wp_next_scheduled('rts_queue_cleanup')) wp_schedule_event(time(), 'daily', 'rts_queue_cleanup');
         if (!wp_next_scheduled('rts_cron_health_check')) wp_schedule_event(time(), 'hourly', 'rts_cron_health_check');
+        // Queue runner: process queued transactional + digest emails frequently.
+        // This was previously only scheduled when the health check detected a stale queue,
+        // which meant fresh installs could enqueue verification emails but never send them.
+        if (!wp_next_scheduled('rts_process_email_queue')) {
+            wp_schedule_event(time() + 60, 'rts_5min', 'rts_process_email_queue');
+        }
         // Automated drip: process personalized letter delivery hourly
         if (!wp_next_scheduled('rts_automated_drip')) wp_schedule_event(time(), 'hourly', 'rts_automated_drip');
     }
@@ -481,8 +487,9 @@ public function register_letter_cpt() {
 
     public function cron_health_check() {
         update_option('rts_last_cron_health_check', current_time('mysql'));
-        $last_run = get_option('rts_last_queue_run', '');
-        if ($last_run && (time() - strtotime($last_run) > 1800) && !wp_next_scheduled('rts_process_email_queue')) {
+        // Always ensure the queue runner exists.
+        // On new installs rts_last_queue_run can be empty, which previously prevented scheduling.
+        if (!wp_next_scheduled('rts_process_email_queue')) {
             wp_schedule_event(time() + 60, 'rts_5min', 'rts_process_email_queue');
         }
     }

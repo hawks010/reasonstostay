@@ -298,6 +298,11 @@ class RTS_Newsletter_CPT {
         $status = get_post_meta($post->ID, '_rts_newsletter_send_status', true);
         ?>
         <div class="rts-nl-card">
+            <div style="margin:0 0 10px 0;color:rgba(255,255,255,0.84);line-height:1.5;">
+                Recipients are filtered automatically: Active + Verified + Newsletters ticked<?php echo get_option('rts_email_reconsent_required') ? ' + consent confirmed' : ''; ?>.<br>
+                The send count you see is the number of eligible subscribers after those rules are applied.
+            </div>
+
             <span class="rts-nl-card__title">Test Email</span>
             <div class="rts-nl-field">
                 <input type="email" id="rts-test-email" class="rts-nl-input"

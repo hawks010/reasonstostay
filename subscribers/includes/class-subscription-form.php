@@ -89,8 +89,8 @@ class RTS_Subscription_Form {
                                 <svg width="12" height="10" viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 5L4.5 8.5L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </span>
                             <span class="rts-checkbox-text">
-                                <strong>Project Updates</strong><br>
-                                <small>Updates about new resources (podcast episodes, articles, etc.)</small>
+                                <strong>Project updates </strong><br>
+                                <small>Including occasional podcast episodes and other promos.</small>
                             </span>
                         </label>
                     </div>

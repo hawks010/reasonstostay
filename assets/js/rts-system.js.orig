@@ -2488,56 +2488,7 @@ bindEvents() {
             this.diagLog('lang_option', { lang: langOption.getAttribute('data-lang'), href: langOption.getAttribute('href') });
             try {
               const lang = langOption.getAttribute('data-lang');
-              
               if (lang) {
-                // Always persist preference for UI consistency.
-                document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
-
-                // iPhone Safari: guide user to use Safari’s built-in Translate (cannot be triggered programmatically).
-                try {
-                  const ua = navigator.userAgent || '';
-                  const isIOS = /iP(hone|od)/.test(ua);
-                  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-                  if (isIOS && isSafari) {
-                    if (e.cancelable) e.preventDefault();
-                    e.stopPropagation();
-
-                    // Hint language + direction for better Safari Translate prompts
-                    document.documentElement.setAttribute('lang', lang || 'en');
-                    const rtl = (lang === 'ar' || lang === 'he');
-                    document.documentElement.setAttribute('dir', rtl ? 'rtl' : 'ltr');
-                    if (document.body) document.body.classList.toggle('rts-rtl', rtl);
-
-                    // Minimal helper overlay
-                    const existing = document.getElementById('rts-iphone-translate-helper');
-                    if (existing) existing.remove();
-                    const styleId = 'rts-iphone-translate-style';
-                    if (!document.getElementById(styleId)) {
-                      const st = document.createElement('style');
-                      st.id = styleId;
-                      st.textContent = '#rts-iphone-translate-helper{position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;} .rts-iphone-translate-card{width:100%;max-width:520px;background:#fff;border-radius:18px;padding:16px 16px 14px;box-shadow:0 14px 40px rgba(0,0,0,0.25);position:relative;font-family:inherit;color:#111;} .rts-iphone-translate-close{position:absolute;top:8px;right:10px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(0,0,0,0.06);font-size:22px;line-height:34px;cursor:pointer;} .rts-iphone-translate-title{font-weight:700;font-size:16px;margin-bottom:8px;padding-right:36px;} .rts-iphone-translate-steps{font-size:14px;line-height:1.45;margin-bottom:10px;} .rts-iphone-translate-tip{font-size:12.5px;opacity:0.8;}';
-                      document.head.appendChild(st);
-                    }
-                    const langNameMap = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',pt:'Portuguese',nl:'Dutch',pl:'Polish',ro:'Romanian',hu:'Hungarian',cs:'Czech',sv:'Swedish',no:'Norwegian',da:'Danish',fi:'Finnish',el:'Greek',ru:'Russian',uk:'Ukrainian',ar:'Arabic',he:'Hebrew',tr:'Turkish',hi:'Hindi',zh:'Chinese',ja:'Japanese',ko:'Korean',vi:'Vietnamese',th:'Thai',id:'Indonesian'};
-                    const langName = langNameMap[lang] || lang;
-                    const wrap = document.createElement('div');
-                    wrap.id = 'rts-iphone-translate-helper';
-                    wrap.setAttribute('role', 'dialog');
-                    wrap.setAttribute('aria-modal', 'true');
-                    wrap.innerHTML = '<div class="rts-iphone-translate-card">' +
-                      '<button class="rts-iphone-translate-close" aria-label="Close">×</button>' +
-                      '<div class="rts-iphone-translate-title">Translate on iPhone</div>' +
-                      '<div class="rts-iphone-translate-steps">1) Tap the <strong>AA</strong> button in Safari’s address bar<br>2) Tap <strong>Translate to ' + langName + '</strong></div>' +
-                      '<div class="rts-iphone-translate-tip">Tip: If you can’t see “Translate”, make sure you’re not in Private Browsing.</div>' +
-                      '</div>';
-                    document.body.appendChild(wrap);
-                    wrap.addEventListener('click', (ev) => { if (ev.target === wrap) wrap.remove(); });
-                    const btn = wrap.querySelector('.rts-iphone-translate-close');
-                    if (btn) btn.addEventListener('click', () => wrap.remove());
-                    return;
-                  }
-                } catch (err3) {}
-
                 // Prefer Google Translate integration when available (cookie method + reload).
                 if (window.RTSGoogleTranslate && typeof window.RTSGoogleTranslate.setLang === 'function' && window.RTSGoogleTranslate.isReady) {
                   if (e.cancelable) e.preventDefault();
@@ -2545,8 +2496,10 @@ bindEvents() {
                   try { window.RTSGoogleTranslate.setLang(lang); } catch (err2) {}
                   return;
                 }
-              }
 
+                // Persist preference for UI consistency even when navigating normally.
+                document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
+              }
             } catch (err) {}
             // Allow default navigation (?rts_lang=xx) if GT isn't ready/available.
             return;
@@ -2587,65 +2540,9 @@ bindEvents() {
           if (langDropdownOption) {
             try {
               const lang = langDropdownOption.getAttribute('data-lang');
-              
               if (lang) {
-                // Always persist preference for UI consistency.
                 document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
-
-                // iPhone Safari: guide user to use Safari’s built-in Translate (cannot be triggered programmatically).
-                try {
-                  const ua = navigator.userAgent || '';
-                  const isIOS = /iP(hone|od)/.test(ua);
-                  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-                  if (isIOS && isSafari) {
-                    if (e.cancelable) e.preventDefault();
-                    e.stopPropagation();
-
-                    // Hint language + direction for better Safari Translate prompts
-                    document.documentElement.setAttribute('lang', lang || 'en');
-                    const rtl = (lang === 'ar' || lang === 'he');
-                    document.documentElement.setAttribute('dir', rtl ? 'rtl' : 'ltr');
-                    if (document.body) document.body.classList.toggle('rts-rtl', rtl);
-
-                    // Minimal helper overlay
-                    const existing = document.getElementById('rts-iphone-translate-helper');
-                    if (existing) existing.remove();
-                    const styleId = 'rts-iphone-translate-style';
-                    if (!document.getElementById(styleId)) {
-                      const st = document.createElement('style');
-                      st.id = styleId;
-                      st.textContent = '#rts-iphone-translate-helper{position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;} .rts-iphone-translate-card{width:100%;max-width:520px;background:#fff;border-radius:18px;padding:16px 16px 14px;box-shadow:0 14px 40px rgba(0,0,0,0.25);position:relative;font-family:inherit;color:#111;} .rts-iphone-translate-close{position:absolute;top:8px;right:10px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(0,0,0,0.06);font-size:22px;line-height:34px;cursor:pointer;} .rts-iphone-translate-title{font-weight:700;font-size:16px;margin-bottom:8px;padding-right:36px;} .rts-iphone-translate-steps{font-size:14px;line-height:1.45;margin-bottom:10px;} .rts-iphone-translate-tip{font-size:12.5px;opacity:0.8;}';
-                      document.head.appendChild(st);
-                    }
-                    const langNameMap = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',pt:'Portuguese',nl:'Dutch',pl:'Polish',ro:'Romanian',hu:'Hungarian',cs:'Czech',sv:'Swedish',no:'Norwegian',da:'Danish',fi:'Finnish',el:'Greek',ru:'Russian',uk:'Ukrainian',ar:'Arabic',he:'Hebrew',tr:'Turkish',hi:'Hindi',zh:'Chinese',ja:'Japanese',ko:'Korean',vi:'Vietnamese',th:'Thai',id:'Indonesian'};
-                    const langName = langNameMap[lang] || lang;
-                    const wrap = document.createElement('div');
-                    wrap.id = 'rts-iphone-translate-helper';
-                    wrap.setAttribute('role', 'dialog');
-                    wrap.setAttribute('aria-modal', 'true');
-                    wrap.innerHTML = '<div class="rts-iphone-translate-card">' +
-                      '<button class="rts-iphone-translate-close" aria-label="Close">×</button>' +
-                      '<div class="rts-iphone-translate-title">Translate on iPhone</div>' +
-                      '<div class="rts-iphone-translate-steps">1) Tap the <strong>AA</strong> button in Safari’s address bar<br>2) Tap <strong>Translate to ' + langName + '</strong></div>' +
-                      '<div class="rts-iphone-translate-tip">Tip: If you can’t see “Translate”, make sure you’re not in Private Browsing.</div>' +
-                      '</div>';
-                    document.body.appendChild(wrap);
-                    wrap.addEventListener('click', (ev) => { if (ev.target === wrap) wrap.remove(); });
-                    const btn = wrap.querySelector('.rts-iphone-translate-close');
-                    if (btn) btn.addEventListener('click', () => wrap.remove());
-                    return;
-                  }
-                } catch (err3) {}
-
-                // Prefer Google Translate integration when available (cookie method + reload).
-                if (window.RTSGoogleTranslate && typeof window.RTSGoogleTranslate.setLang === 'function' && window.RTSGoogleTranslate.isReady) {
-                  if (e.cancelable) e.preventDefault();
-                  e.stopPropagation();
-                  try { window.RTSGoogleTranslate.setLang(lang); } catch (err2) {}
-                  return;
-                }
               }
-
             } catch (err) {}
             return;
           }

@@ -1,19 +1,20 @@
 /*
-Theme Name: Hello-Elementor-Child-RTS-v5.2.6
+Theme Name: Hello-Elementor-Child-RTS-v5.2.10
 Theme URI: https://reasonstostay.co.uk
 Template: hello-elementor
 Author: Inkfire
 Author URI: https://inkfire.co.uk
 Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools.
 Tags: mental-health,accessibility-ready,flexible-header,custom-colors,custom-menu,custom-logo,featured-images,rtl-language-support,threaded-comments,translation-ready
-Version: 5.2.6
-Updated: 2026-02-09 RTS Admin UI: Fix MIME errors (remove missing subscriber/newsletter admin.css enqueues) and harden subscriber/editor layout.
+Version: 5.2.11
+Updated: 2026-02-10 Fix: schedule email queue runner + best-effort immediate processing for verification/welcome emails.
 */
 
 /* =====================================================
    GLOBAL BUTTON ACCESSIBILITY – WCAG 2.2 AA
    Clean, keyboard-only, design-safe
    ===================================================== */
+
 
 /* 1. Remove default browser focus (mouse users) */
 .elementor-button:focus {

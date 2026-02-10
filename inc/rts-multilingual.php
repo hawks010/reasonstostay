@@ -61,14 +61,14 @@ class RTS_Multilingual {
 
 			// Middle East
 			'ar' => ['name' => 'العربية', 'flag' => '🇸🇦', 'google_code' => 'ar', 'dir' => 'rtl'],
-			'he' => ['name' => 'עברית', 'flag' => '🇮🇱', 'google_code' => 'he', 'dir' => 'rtl'],
+			'he' => ['name' => 'עברית', 'flag' => '🇮🇱', 'google_code' => 'iw', 'dir' => 'rtl'],
 			'tr' => ['name' => 'Türkçe', 'flag' => '🇹🇷', 'google_code' => 'tr', 'dir' => 'ltr'],
 
 			// South Asia
 			'hi' => ['name' => 'हिन्दी', 'flag' => '🇮🇳', 'google_code' => 'hi', 'dir' => 'ltr'],
 
 			// East + SE Asia
-			'zh' => ['name' => '中文', 'flag' => '🇨🇳', 'google_code' => 'zh', 'dir' => 'ltr'],
+			'zh' => ['name' => '中文', 'flag' => '🇨🇳', 'google_code' => 'zh-CN', 'dir' => 'ltr'],
 			'ja' => ['name' => '日本語', 'flag' => '🇯🇵', 'google_code' => 'ja', 'dir' => 'ltr'],
 			'ko' => ['name' => '한국어', 'flag' => '🇰🇷', 'google_code' => 'ko', 'dir' => 'ltr'],
 			'vi' => ['name' => 'Tiếng Việt', 'flag' => '🇻🇳', 'google_code' => 'vi', 'dir' => 'ltr'],
@@ -572,7 +572,7 @@ class RTS_Multilingual {
 	padding: 2px 5px;
 	background: #ffffff;
 	color: #000000;
-	border: 1px solid #000000;
+	border: 2px solid #000000;
 	border-radius: 6px;
 	cursor: pointer;
 	font-size: 0.9rem;
@@ -695,14 +695,9 @@ class RTS_Multilingual {
 	}
 }
 
-/* Light mode for compact */
-body:not(.rts-dark-mode) .rts-lang-compact-button {
-	color: #000000;
-	background: #ffffff;
-}
-
 body:not(.rts-dark-mode) .rts-lang-compact-button:hover {
 	background: #ffffff;
+	color: #000000;
 	border-color: #FCA311;
 }
 
