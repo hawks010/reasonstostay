@@ -317,27 +317,36 @@ class RTS_Admin_Menu {
                 $eligible_news = $count_query($eligible_news_mq);
                 ?>
 
-                <div class="rts-card" style="margin-top:18px;">
-                    <h2 style="margin:0 0 10px 0;">How subscriptions work</h2>
-                    <div style="color:rgba(255,255,255,0.86);line-height:1.6;">
-                        Every subscriber can choose Letters, Newsletters, or both.<br>
-                        When you send a newsletter or the system sends letter digests, it automatically excludes anyone who did not tick the relevant option, and anyone not verified (and consent-confirmed if enabled).<br>
-                        This keeps Letters and Newsletters as one list, but with strict opt-in filters.
-                    </div>
-
-                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
-                        <span class="rts-badge" style="background:rgba(244,201,70,0.18);color:#F4C946;">Letters opted-in: <?php echo number_format($letters_optin_total); ?></span>
-                        <span class="rts-badge" style="background:rgba(223,21,124,0.18);color:#DF157C;">Newsletters opted-in: <?php echo number_format($news_optin_total); ?></span>
-                        <span class="rts-badge" style="background:rgba(23,154,214,0.18);color:#179AD6;">Verified: <?php echo number_format($verified_total); ?></span>
-                        <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Letters right now: <?php echo number_format($eligible_letters); ?></span>
-                        <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Newsletters right now: <?php echo number_format($eligible_news); ?></span>
-                    </div>
-
-                    <?php if ($require_consent) : ?>
-                        <div style="margin-top:10px;color:rgba(255,255,255,0.78);">
-                            Consent mode is enabled. Subscribers must also confirm consent in the preference centre before they are eligible.
+                <!-- ── 50/50: How Subscriptions Work + Email Delivery ── -->
+                <div class="rts-two-col-top" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:start;margin-top:18px;">
+                    <div class="rts-card" style="padding:35px;border-radius:35px;">
+                        <h2 style="margin:0 0 10px 0;">How subscriptions work</h2>
+                        <div style="color:rgba(255,255,255,0.86);line-height:1.6;font-size:14px;">
+                            Every subscriber can choose Letters, Newsletters, or both.<br>
+                            When you send a newsletter or the system sends letter digests, it automatically excludes anyone who did not tick the relevant option, and anyone not verified (and consent-confirmed if enabled).<br>
+                            This keeps Letters and Newsletters as one list, but with strict opt-in filters.
                         </div>
-                    <?php endif; ?>
+
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+                            <span class="rts-badge" style="background:rgba(244,201,70,0.18);color:#F4C946;">Letters opted-in: <?php echo number_format($letters_optin_total); ?></span>
+                            <span class="rts-badge" style="background:rgba(223,21,124,0.18);color:#DF157C;">Newsletters opted-in: <?php echo number_format($news_optin_total); ?></span>
+                            <span class="rts-badge" style="background:rgba(23,154,214,0.18);color:#179AD6;">Verified: <?php echo number_format($verified_total); ?></span>
+                            <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Letters right now: <?php echo number_format($eligible_letters); ?></span>
+                            <span class="rts-badge" style="background:rgba(131,190,86,0.18);color:#83BE56;">Eligible for Newsletters right now: <?php echo number_format($eligible_news); ?></span>
+                        </div>
+
+                        <?php if ($require_consent) : ?>
+                            <div style="margin-top:10px;color:rgba(255,255,255,0.78);font-size:13px;">
+                                Consent mode is enabled. Subscribers must also confirm consent in the preference centre before they are eligible.
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="rts-card" style="padding:35px;border-radius:35px;">
+                        <h2 style="margin-top:0;">Email Delivery</h2>
+                        <p style="margin-top:6px;opacity:0.9;">Current mode, connection status, and quick test.</p>
+                        <?php $this->render_smtp_and_sending_inner(); ?>
+                    </div>
                 </div>
 
             </div>
@@ -511,7 +520,7 @@ class RTS_Admin_Menu {
                 </div>
             </div>
 
-            <style>@media (max-width:900px){ .rts-two-col{ grid-template-columns:1fr !important; } }</style>
+            <style>@media (max-width:900px){ .rts-two-col-top{ grid-template-columns:1fr !important; } }</style>
         </div>
         <?php
     }
