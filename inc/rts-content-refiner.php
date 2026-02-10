@@ -117,12 +117,29 @@ class RTS_Content_Refiner {
     private static function pipeline_heuristics(string $c): string {
         $ignore_caps  = class_exists('RTS_Learning_Cache') ? (array) RTS_Learning_Cache::get_patterns('ignore_cap') : [];
         $proper_nouns = class_exists('RTS_Learning_Cache') ? (array) RTS_Learning_Cache::get_patterns('proper_noun') : [];
+        $ignore_space_before_punct = class_exists('RTS_Learning_Cache') ? (array) RTS_Learning_Cache::get_patterns('ignore_punct_space_before_punct') : [];
+        $ignore_missing_space_after = class_exists('RTS_Learning_Cache') ? (array) RTS_Learning_Cache::get_patterns('ignore_punct_missing_space_after_punct') : [];
 
         // Normalize spacing
         $c = preg_replace('/\h+/u', ' ', $c);
 
-        // Ensure space after punctuation
-        $c = preg_replace('/([.,!?;:])([^\s\d])/', '$1 $2', $c);
+        // Remove space(s) before punctuation, unless learned as an allowed style.
+        $c = preg_replace_callback('/\s+([.,!?;:])/u', function ($m) use ($ignore_space_before_punct) {
+            // $m[0] includes the whitespace + punctuation, e.g. " ,"
+            if (!empty($ignore_space_before_punct) && in_array($m[0], $ignore_space_before_punct, true)) {
+                return $m[0];
+            }
+            return $m[1];
+        }, (string) $c);
+
+        // Ensure space after punctuation, unless learned as an allowed style.
+        $c = preg_replace_callback('/([.,!?;:])([^\s\d])/u', function ($m) use ($ignore_missing_space_after) {
+            // $m[0] is the full match, e.g. ".W"
+            if (!empty($ignore_missing_space_after) && in_array($m[0], $ignore_missing_space_after, true)) {
+                return $m[0];
+            }
+            return $m[1] . ' ' . $m[2];
+        }, (string) $c);
 
         // Adaptive capitalization at sentence starts
         $c = preg_replace_callback('/(?:^|[\.\!\?]\s+)(\p{L}+)/u', function ($m) use ($ignore_caps, $proper_nouns) {

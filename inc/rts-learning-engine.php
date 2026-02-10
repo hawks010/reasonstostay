@@ -21,8 +21,8 @@ class RTS_Learning_Engine {
         add_action('admin_init', [__CLASS__, 'check_db']);
         add_action('transition_post_status', [__CLASS__, 'on_post_status_transition'], 10, 3);
 
-        // Daily cleanup hook (scheduled below)
-        add_action('rts_daily_learning_cleanup', [__CLASS__, 'cleanup_low_confidence_patterns']);
+        // Daily maintenance hook (scheduled below)
+        add_action('rts_daily_learning_cleanup', [__CLASS__, 'daily_maintenance']);
 
         // Ensure cleanup is scheduled (fail-soft; uses WP-Cron)
         if (!wp_next_scheduled('rts_daily_learning_cleanup')) {
@@ -139,9 +139,33 @@ class RTS_Learning_Engine {
     }
 
     private static function detect_punctuation_changes(string $auto_text, string $human_text, int $post_id): void {
-        // Placeholder: kept intentionally light.
-        // (This can be expanded later without breaking the workflow.)
-        return;
+        global $wpdb;
+
+        // If the human *re-introduces* a punctuation style the refiner removed, learn it as an exception.
+        // Example: some writers deliberately keep a space before punctuation for stylistic effect.
+        $patterns = [
+            'space_before_punct'        => '/\s+([.,!?;:])/u',
+            'missing_space_after_punct' => '/([.,!?;:])([^\s\d])/u',
+        ];
+
+        foreach ($patterns as $key => $regex) {
+            $am = []; $hm = [];
+            preg_match_all($regex, $auto_text, $am);
+            preg_match_all($regex, $human_text, $hm);
+
+            // Auto (cleaned) does not contain the pattern, but human final does -> human prefers it.
+            if (empty($am[0]) && !empty($hm[0])) {
+                $example = (string) $hm[0][0];
+                self::register_pattern('ignore_punct_' . $key, $example, 'failure');
+
+                $wpdb->insert($wpdb->prefix . self::TABLE_LOGS, [
+                    'post_id' => $post_id,
+                    'change_type' => 'punct_' . $key,
+                    'value_from' => 'clean',
+                    'value_to'   => $example,
+                ], ['%d','%s','%s','%s']);
+            }
+        }
     }
 
     private static function detect_html_changes(string $auto_html, string $human_html, int $post_id): void {
@@ -213,9 +237,38 @@ class RTS_Learning_Engine {
         return round((float) $conf, 3);
     }
 
-    public static function cleanup_low_confidence_patterns(): void {
-        // Conservative placeholder. (We keep patterns active unless explicitly managed in UI.)
-        return;
+    /**
+     * Daily maintenance:
+     * - Disable noisy patterns (fail-safe thresholds)
+     * - Cleanup stale snapshots to prevent DB bloat
+     * - Clear cache
+     */
+    public static function daily_maintenance(): void {
+        global $wpdb;
+
+        $table = $wpdb->prefix . self::TABLE_PATTERNS;
+
+        // Disable patterns that are consistently "wrong": more than 2x failures vs successes and 6+ total samples.
+        // This is intentionally conservative.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $wpdb->query(
+            "UPDATE {$table} SET is_active = 0 WHERE (failure_count > (success_count * 2)) AND (failure_count + success_count) >= 6"
+        );
+
+        // Cleanup stale snapshots older than 30 days on letters not yet published.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $wpdb->query(
+            "DELETE pm FROM {$wpdb->postmeta} pm\n" .
+            "INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id\n" .
+            "WHERE pm.meta_key = '_rts_bot_snapshot'\n" .
+            "AND p.post_type = 'letter'\n" .
+            "AND p.post_status IN ('pending','draft','auto-draft')\n" .
+            "AND p.post_modified < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        );
+
+        if (class_exists('RTS_Learning_Cache')) {
+            RTS_Learning_Cache::invalidate_cache();
+        }
     }
 
     // ---------------------------------------------------------------------

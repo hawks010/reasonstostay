@@ -1611,3 +1611,80 @@ body.post-type-rts_subscriber.edit-php.rts-admin-scope #wpbody-content #rts_freq
   border: 1px solid rgba(255,255,255,0.14) !important;
   color: var(--rts-txt) !important;
 }
+
+/* ==============================
+   Admin Clarity Pack: AI badges
+   ============================== */
+.rts-badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:600;
+  line-height:1.2;
+  margin-right:4px;
+  border:1px solid rgba(255,255,255,0.18);
+  white-space:nowrap;
+}
+.rts-locked{ background:rgba(214,54,56,0.16); color:#ffb4b4; border-color:rgba(214,54,56,0.55); }
+.rts-refined{ background:rgba(0,133,186,0.18); color:#bdeaff; border-color:rgba(0,133,186,0.55); }
+.rts-learning{ background:rgba(244,201,70,0.18); color:#ffe9a3; border-color:rgba(244,201,70,0.55); }
+.rts-neutral{ background:rgba(255,255,255,0.08); color:#d0d7de; border-color:rgba(255,255,255,0.14); }
+
+/* ==============================
+   Review Console (Finder-style)
+   ============================== */
+.rts-review-console .rts-review-toolbar{
+  display:flex;
+  gap:14px;
+  align-items:center;
+  justify-content:space-between;
+  margin:12px 0 16px;
+}
+.rts-review-console .rts-review-toolbar-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.rts-review-split{
+  display:flex;
+  gap:12px;
+  min-height:68vh;
+}
+.rts-review-list{
+  width:360px;
+  max-width:40vw;
+  border:1px solid rgba(255,255,255,0.10);
+  border-radius:14px;
+  overflow:auto;
+  background:rgba(0,0,0,0.08);
+}
+.rts-review-item{
+  display:block;
+  padding:10px 12px;
+  text-decoration:none;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.rts-review-item:hover{ background:rgba(255,255,255,0.06); }
+.rts-review-item.is-active{ background:rgba(223,21,124,0.14); border-left:3px solid #DF157C; }
+.rts-review-item-title{ font-weight:600; color:inherit; }
+.rts-review-item-meta{ font-size:12px; opacity:0.78; margin-top:2px; }
+.rts-review-editor{
+  flex:1;
+  border:1px solid rgba(255,255,255,0.10);
+  border-radius:14px;
+  overflow:hidden;
+  background:rgba(0,0,0,0.08);
+}
+.rts-review-iframe{
+  width:100%;
+  height:100%;
+  min-height:68vh;
+  border:0;
+  background:#fff;
+}
+@media (max-width: 1100px){
+  .rts-review-split{ flex-direction:column; }
+  .rts-review-list{ width:100%; max-width:100%; max-height:34vh; }
+  .rts-review-iframe{ min-height:60vh; }
+}

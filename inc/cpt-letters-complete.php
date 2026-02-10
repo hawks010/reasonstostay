@@ -84,6 +84,13 @@ class RTS_CPT_Letters_System {
 
         // Custom CSS
         add_action('admin_head', [$this, 'admin_css']);
+        
+        // Admin clarity helpers
+        add_action('admin_notices', [$this, 'admin_notices']);
+        add_action('current_screen', [$this, 'add_help_tabs']);
+
+        // Unlock handler (allows re-running AI refine after manual edits)
+        add_action('admin_post_rts_unlock_letter', [$this, 'handle_unlock_letter']);
         // Legacy quick-approve removed.
     }
     
@@ -951,6 +958,7 @@ class RTS_CPT_Letters_System {
         return [
             'cb' => $columns['cb'],
             'title' => 'Letter',
+            'rts_ai_status' => 'AI Status',
             'letter_quality' => 'Quality',
             'letter_safety' => 'Safety',
             'letter_rating' => 'User Rating',
@@ -961,6 +969,25 @@ class RTS_CPT_Letters_System {
     
     public function render_column($column, $post_id) {
         switch ($column) {
+            case 'rts_ai_status':
+                $locked  = get_post_meta($post_id, '_rts_manual_lock', true);
+                $refined = get_post_meta($post_id, '_rts_refined', true);
+                $snap    = get_post_meta($post_id, '_rts_bot_snapshot', true);
+                $status  = get_post_status($post_id);
+
+                if ($locked) {
+                    echo '<span class="rts-badge rts-locked" title="Manually edited">🔒 Locked</span> ';
+                }
+                if ($refined) {
+                    echo '<span class="rts-badge rts-refined" title="Processed by AI">✨ Refined</span> ';
+                }
+                if (!empty($snap) && $status !== 'publish') {
+                    echo '<span class="rts-badge rts-learning" title="Will learn when you publish">🧠 Learning</span>';
+                }
+                if (!$locked && !$refined && empty($snap)) {
+                    echo '<span class="rts-badge rts-neutral" title="No AI actions yet">—</span>';
+                }
+                break;
             case 'letter_quality':
                 $score = get_post_meta($post_id, 'quality_score', true);
                 if ($score) {
@@ -1081,6 +1108,15 @@ class RTS_CPT_Letters_System {
     
     public function row_actions($actions, $post) {
         if ($post->post_type !== 'letter') return $actions;
+
+        // Unlock: allow the AI refiner to run again after a manual edit
+        if (get_post_meta($post->ID, '_rts_manual_lock', true)) {
+            $unlock_url = wp_nonce_url(
+                admin_url('admin-post.php?action=rts_unlock_letter&post=' . $post->ID),
+                'rts_unlock_' . $post->ID
+            );
+            $actions['rts_unlock'] = '<a href="' . esc_url($unlock_url) . '" style="color:#2271b1">🔓 Unlock</a>';
+        }
         
         if ($post->post_status === 'pending') {
             $approve_link = '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=rts_quick_approve&post=' . $post->ID), 'approve_' . $post->ID) . '">✓ Approve</a>';
@@ -1163,6 +1199,87 @@ class RTS_CPT_Letters_System {
         // Provide UI feedback via query args.
         $redirect_to = add_query_arg('bulk_scheduled', count($ids), $redirect_to);
         return add_query_arg('bulk_processed', 0, $redirect_to);
+    }
+
+    /**
+     * Unlock a letter so the AI refiner can run again.
+     */
+    public function handle_unlock_letter() {
+        $id = isset($_GET['post']) ? absint($_GET['post']) : 0;
+        if (!$id) {
+            wp_die('Invalid request.');
+        }
+
+        check_admin_referer('rts_unlock_' . $id);
+
+        if (get_post_type($id) !== 'letter') {
+            wp_die('Invalid post type.');
+        }
+        if (!current_user_can('edit_post', $id)) {
+            wp_die('Permission denied.');
+        }
+
+        delete_post_meta($id, '_rts_manual_lock');
+
+        $ref = wp_get_referer();
+        if (!$ref) {
+            $ref = admin_url('edit.php?post_type=letter');
+        }
+        wp_safe_redirect(add_query_arg('rts_msg', 'unlocked', $ref));
+        exit;
+    }
+
+    /**
+     * Inline help tabs to make the workflow self-explanatory for admins.
+     */
+    public function add_help_tabs() {
+        if (!function_exists('get_current_screen')) return;
+        $screen = get_current_screen();
+        if (!$screen) return;
+        if ($screen->post_type !== 'letter') return;
+
+        $screen->add_help_tab([
+            'id'      => 'rts_workflow',
+            'title'   => '🟢 Review workflow',
+            'content' => '<p><strong>1. Auto-Refine:</strong> Fixes obvious spelling/grammar, removes unsafe HTML, adds "Dear Stranger" if missing.</p>' .
+                         '<p><strong>2. Pending Review:</strong> Refined letters move to <em>Pending</em>. Review and edit.</p>' .
+                         '<p><strong>3. Publish & Learn:</strong> When you hit Publish, the system compares your final version to the AI snapshot and learns from your changes.</p>',
+        ]);
+
+        $screen->add_help_tab([
+            'id'      => 'rts_locking',
+            'title'   => '🔒 Locked letters',
+            'content' => '<p>If you manually edit a letter, it becomes <strong>Locked</strong> so the AI will not overwrite your work. Use the "Unlock" row action to allow Auto-Refine again.</p>',
+        ]);
+    }
+
+    /**
+     * Clear, friendly admin notices for the new workflow.
+     */
+    public function admin_notices() {
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->post_type !== 'letter') {
+            return;
+        }
+
+        $msg = isset($_GET['rts_msg']) ? sanitize_key(wp_unslash($_GET['rts_msg'])) : '';
+        $map = [
+            'started'  => '🚀 Bulk Auto-Refine started. Refined letters will appear in Pending shortly.',
+            'unlocked' => '🔓 Letter unlocked. You can now run Auto-Refine again.',
+            'reverted' => '↩️ Refinement reverted to the previous revision.',
+        ];
+
+        if ($msg && isset($map[$msg])) {
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($map[$msg]) . '</p></div>';
+        }
+
+        // Back-compat: bulk scheduled feedback.
+        if (isset($_GET['bulk_scheduled']) && is_numeric($_GET['bulk_scheduled'])) {
+            $count = absint($_GET['bulk_scheduled']);
+            if ($count > 0) {
+                echo '<div class="notice notice-info is-dismissible"><p>' . esc_html("🧾 Scheduled background job for {$count} letters.") . '</p></div>';
+            }
+        }
     }
 
 public function admin_css(): void {
@@ -1343,12 +1460,129 @@ public function admin_css(): void {
     public function register_admin_pages(): void {
         add_submenu_page(
             'edit.php?post_type=letter',
+            'Review Console',
+            'Review Console',
+            'edit_others_posts',
+            'rts_review_console',
+            [$this, 'render_review_console_page']
+        );
+
+        add_submenu_page(
+            'edit.php?post_type=letter',
             'Learned Patterns',
             'Patterns (AI)',
             'manage_options',
             'rts_patterns',
             [$this, 'render_patterns_page']
         );
+    }
+
+    /**
+     * Review Console: Finder-style split view for faster manual review.
+     * Left column: Pending letters list. Right column: WP editor in an iframe.
+     */
+    public function render_review_console_page(): void {
+        if (!current_user_can('edit_others_posts')) {
+            wp_die('You do not have permission to access this page.');
+        }
+
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $per_page = 60;
+
+        $args = [
+            'post_type'      => 'letter',
+            'post_status'    => 'pending',
+            'posts_per_page' => $per_page,
+            'orderby'        => 'date',
+            'order'          => 'ASC',
+            'no_found_rows'  => true,
+        ];
+        if ($search !== '') {
+            $args['s'] = $search;
+        }
+
+        $q = new WP_Query($args);
+        $first_id = $q->posts ? (int) $q->posts[0]->ID : 0;
+
+        // Default editor target.
+        $active_id = isset($_GET['post']) ? absint($_GET['post']) : 0;
+        if (!$active_id && $first_id) {
+            $active_id = $first_id;
+        }
+
+        $editor_url = $active_id ? admin_url('post.php?post=' . $active_id . '&action=edit') : '';
+
+        echo '<div class="wrap rts-review-console">';
+        echo '<h1 style="display:flex; align-items:center; gap:12px;">Review Console <span style="font-size:12px; font-weight:600; opacity:.8;">(Pending letters)</span></h1>';
+
+        echo '<div class="rts-review-toolbar">';
+        echo '<form method="get" style="margin:0; display:flex; gap:8px; align-items:center;">';
+        echo '<input type="hidden" name="post_type" value="letter" />';
+        echo '<input type="hidden" name="page" value="rts_review_console" />';
+        echo '<input type="search" name="s" value="' . esc_attr($search) . '" placeholder="Search pending letters" class="regular-text" />';
+        echo '<button class="button">Search</button>';
+        echo '</form>';
+
+        if ($active_id) {
+            echo '<div class="rts-review-toolbar-actions">';
+            echo '<a class="button" href="' . esc_url($editor_url) . '" target="_blank" rel="noopener">Open editor in new tab</a>';
+            echo '<a class="button button-primary" href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=pending')) . '">Open full Pending list</a>';
+            echo '</div>';
+        }
+        echo '</div>';
+
+        echo '<div class="rts-review-split">';
+
+        // Left list
+        echo '<div class="rts-review-list" role="navigation" aria-label="Pending letters">';
+        if ($q->have_posts()) {
+            foreach ($q->posts as $p) {
+                $id = (int) $p->ID;
+                $is_active = ($id === $active_id);
+                $title = get_the_title($id);
+                if ($title === '') {
+                    $title = 'Untitled Letter (#' . $id . ')';
+                }
+
+                $ai_bits = [];
+                if (get_post_meta($id, '_rts_manual_lock', true)) $ai_bits[] = '🔒';
+                if (get_post_meta($id, '_rts_refined', true)) $ai_bits[] = '✨';
+                if (get_post_meta($id, '_rts_bot_snapshot', true)) $ai_bits[] = '🧠';
+                $ai = $ai_bits ? implode(' ', $ai_bits) . ' ' : '';
+
+                $link = add_query_arg(
+                    [
+                        'post_type' => 'letter',
+                        'page'      => 'rts_review_console',
+                        'post'      => $id,
+                        's'         => $search,
+                    ],
+                    admin_url('edit.php')
+                );
+
+                echo '<a class="rts-review-item' . ($is_active ? ' is-active' : '') . '" href="' . esc_url($link) . '">';
+                echo '<div class="rts-review-item-title">' . esc_html($ai . $title) . '</div>';
+                echo '<div class="rts-review-item-meta">' . esc_html(get_the_date('Y-m-d H:i', $id)) . '</div>';
+                echo '</a>';
+            }
+        } else {
+            echo '<p style="padding:12px;">No pending letters found.</p>';
+        }
+        echo '</div>';
+
+        // Right editor (iframe)
+        echo '<div class="rts-review-editor">';
+        if ($editor_url) {
+            echo '<iframe title="Letter editor" src="' . esc_url($editor_url) . '" class="rts-review-iframe" loading="lazy"></iframe>';
+        } else {
+            echo '<div class="notice notice-info" style="margin:12px;">No letter selected.</div>';
+        }
+        echo '</div>';
+
+        echo '</div>';
+        echo '</div>';
+
+        wp_reset_postdata();
     }
 
     public function render_patterns_page(): void {
