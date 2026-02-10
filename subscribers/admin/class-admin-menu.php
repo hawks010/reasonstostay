@@ -505,8 +505,8 @@ class RTS_Admin_Menu {
                 </div>
 
                 <div class="rts-card" style="padding:35px;border-radius:35px;">
-                    <h2 style="margin-top:0;">SMTP and Sending</h2>
-                    <p style="margin-top:6px;opacity:0.9;">Configure SMTP2GO, then enable sending when you are ready.</p>
+                    <h2 style="margin-top:0;">Email Delivery</h2>
+                    <p style="margin-top:6px;opacity:0.9;">Current mode, connection status, and quick test.</p>
                     <?php $this->render_smtp_and_sending_inner(); ?>
                 </div>
             </div>
@@ -889,221 +889,320 @@ class RTS_Admin_Menu {
      * ----------------------------------------------------------------*/
 
     private function render_smtp_and_sending_inner() {
-        $smtp_ok = false;
-        if (class_exists('RTS_SMTP_Settings')) {
+        $is_live    = (bool) get_option('rts_smtp_enabled', false);
+        $sending_on = (bool) get_option('rts_email_sending_enabled', false);
+        $demo_on    = (bool) get_option('rts_email_demo_mode', false);
+
+        $smtp_ok   = false;
+        $smtp_msg  = '';
+        if ($is_live && class_exists('RTS_SMTP_Settings')) {
             try {
                 $smtp = new RTS_SMTP_Settings();
                 if (method_exists($smtp, 'test_smtp_connection')) {
-                    $smtp_ok = (bool) $smtp->test_smtp_connection();
+                    $res = $smtp->test_smtp_connection();
+                    $smtp_ok  = !empty($res['ok']);
+                    $smtp_msg = !empty($res['message']) ? (string) $res['message'] : '';
                 }
             } catch (\Throwable $e) {
                 $smtp_ok = false;
             }
         }
-        $dot   = $smtp_ok ? '#22c55e' : '#ef4444';
-        $label = $smtp_ok ? 'SMTP reachable (socket OK)' : 'SMTP unreachable (socket failed)';
+
+        // Mode badge
+        $mode_color = $is_live ? '#22c55e' : '#F4C946';
+        $mode_label = $is_live ? 'Live (SMTP2GO)' : 'Testing (WP Mail)';
         ?>
-        <div style="display:flex;align-items:center;gap:10px;margin:8px 0 18px;">
-            <span aria-hidden="true" style="width:10px;height:10px;border-radius:999px;background:<?php echo esc_attr($dot); ?>;display:inline-block;"></span>
-            <strong><?php echo esc_html($label); ?></strong>
+
+        <!-- Status indicators -->
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
+            <span class="rts-badge" style="background:<?php echo esc_attr($mode_color); ?>22;color:<?php echo esc_attr($mode_color); ?>;">
+                <?php echo esc_html($mode_label); ?>
+            </span>
+            <?php if ($sending_on) : ?>
+                <span class="rts-badge" style="background:rgba(34,197,94,0.18);color:#22c55e;">Sending ON</span>
+            <?php else : ?>
+                <span class="rts-badge" style="background:rgba(239,68,68,0.18);color:#ef4444;">Sending OFF</span>
+            <?php endif; ?>
+            <?php if ($demo_on) : ?>
+                <span class="rts-badge" style="background:rgba(244,201,70,0.18);color:#F4C946;">Demo Mode</span>
+            <?php endif; ?>
         </div>
 
-        <form method="post" action="options.php">
-            <?php settings_fields('rts_smtp_settings_group'); ?>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">Enable SMTP</label>
-                <label style="display:inline-flex;align-items:center;gap:10px;">
-                    <input type="checkbox" name="rts_smtp_enabled" value="1" <?php checked((bool) get_option('rts_smtp_enabled', false)); ?> />
-                    <span style="opacity:0.9;">Route emails through SMTP2GO</span>
-                </label>
+        <?php if ($is_live) : ?>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <span style="width:10px;height:10px;border-radius:999px;background:<?php echo $smtp_ok ? '#22c55e' : '#ef4444'; ?>;display:inline-block;"></span>
+                <span style="color:#ffffff;"><?php echo $smtp_ok ? 'SMTP2GO connection OK' : 'SMTP2GO unreachable'; ?></span>
             </div>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">SMTP Host</label>
-                <input type="text" name="rts_smtp_host"
-                       value="<?php echo esc_attr(get_option('rts_smtp_host', 'mail.smtp2go.com')); ?>"
-                       class="rts-form-input" placeholder="mail.smtp2go.com" required>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                <div class="rts-form-row" style="margin:0;">
-                    <label class="rts-form-label">SMTP Port</label>
-                    <input type="number" name="rts_smtp_port"
-                           value="<?php echo esc_attr((int) get_option('rts_smtp_port', 2525)); ?>"
-                           class="rts-form-input" min="1" max="65535" required>
-                </div>
-                <div class="rts-form-row" style="margin:0;">
-                    <label class="rts-form-label">Encryption</label>
-                    <select name="rts_smtp_encryption" class="rts-form-select">
-                        <option value="tls" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'tls'); ?>>TLS (recommended)</option>
-                        <option value="ssl" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'ssl'); ?>>SSL</option>
-                        <option value="none" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'none'); ?>>None</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">Authentication</label>
-                <label style="display:inline-flex;align-items:center;gap:10px;">
-                    <input type="checkbox" name="rts_smtp_auth" value="1" <?php checked((bool) get_option('rts_smtp_auth', true)); ?> />
-                    <span style="opacity:0.9;">Use username/password</span>
-                </label>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                <div class="rts-form-row" style="margin:0;">
-                    <label class="rts-form-label">Username</label>
-                    <input type="text" name="rts_smtp_user"
-                           value="<?php echo esc_attr(get_option('rts_smtp_user', '')); ?>"
-                           class="rts-form-input" placeholder="your-smtp2go-username">
-                </div>
-                <div class="rts-form-row" style="margin:0;">
-                    <label class="rts-form-label">Password</label>
-                    <input type="password" name="rts_smtp_pass"
-                           value="" class="rts-form-input" placeholder="Leave blank to keep existing">
-                    <span class="rts-form-description">Leave blank to keep existing password.</span>
-                </div>
-            </div>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">From Email</label>
-                <input type="email" name="rts_smtp_from_email"
-                       value="<?php echo esc_attr(get_option('rts_smtp_from_email')); ?>"
-                       class="rts-form-input" required>
-            </div>
-            <div class="rts-form-row">
-                <label class="rts-form-label">From Name</label>
-                <input type="text" name="rts_smtp_from_name"
-                       value="<?php echo esc_attr(get_option('rts_smtp_from_name')); ?>"
-                       class="rts-form-input" required>
-            </div>
-            <div class="rts-form-row">
-                <label class="rts-form-label">Reply-To Email</label>
-                <input type="email" name="rts_smtp_reply_to"
-                       value="<?php echo esc_attr(get_option('rts_smtp_reply_to')); ?>"
-                       class="rts-form-input">
-                <span class="rts-form-description">Optional: where replies go.</span>
-            </div>
-            <div class="rts-form-row">
-                <label class="rts-form-label">CC Email</label>
-                <input type="email" name="rts_smtp_cc_email"
-                       value="<?php echo esc_attr(get_option('rts_smtp_cc_email')); ?>"
-                       class="rts-form-input" placeholder="Optional">
-                <span class="rts-form-description">Optional: add a CC on outgoing subscriber emails.</span>
-            </div>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">Enable Sending</label>
-                <label style="display:flex;align-items:center;gap:10px;">
-                    <input type="checkbox" name="rts_email_sending_enabled" value="1" <?php checked(get_option('rts_email_sending_enabled'), 1); ?>>
-                    <span style="color:#ffffff;">Allow the system to queue and send emails</span>
-                </label>
-                <span class="rts-form-description">Keep OFF until SMTP is confirmed.</span>
-            </div>
-
-            <div class="rts-form-row">
-                <label class="rts-form-label">Demo Mode</label>
-                <label style="display:flex;align-items:center;gap:10px;">
-                    <input type="checkbox" name="rts_email_demo_mode" value="1" <?php checked(get_option('rts_email_demo_mode'), 1); ?>>
-                    <span style="color:#F4C946;font-weight:700;">Demo mode ON = nothing gets sent</span>
-                </label>
-                <span class="rts-form-description">Cancels emails with a log entry for safe testing.</span>
-            </div>
-
-            <?php submit_button('Save SMTP + Sending Settings'); ?>
-        </form>
-
-        <?php if (current_user_can('manage_options')) : ?>
-            <hr style="margin:18px 0;opacity:0.2;">
-            <h3 style="margin:0 0 10px;">Send Test Email</h3>
-            <p style="margin-top:0;opacity:0.9;">Send a test email using the current SMTP settings.</p>
-            <div class="rts-form-row">
-                <input type="email" id="rts_test_smtp_to" class="rts-form-input" placeholder="Test recipient email">
-                <button type="button" class="button" id="rts_test_smtp_btn" style="margin-top:10px;">Send Test Email</button>
-                <div id="rts_test_smtp_result" style="margin-top:10px;"></div>
-            </div>
-            <script>
-            (function(){
-                var btn = document.getElementById('rts_test_smtp_btn');
-                if(!btn) return;
-                btn.addEventListener('click', function(){
-                    var email = document.getElementById('rts_test_smtp_to').value || '';
-                    var out = document.getElementById('rts_test_smtp_result');
-                    out.textContent = 'Sending...';
-                    var data = new FormData();
-                    data.append('action', 'rts_test_smtp');
-                    data.append('email', email);
-                    data.append('nonce', '<?php echo esc_js(wp_create_nonce('rts_test_smtp')); ?>');
-                    fetch(ajaxurl, { method:'POST', credentials:'same-origin', body:data })
-                        .then(function(r){ return r.json(); })
-                        .then(function(res){
-                            out.textContent = (res && res.success) ? 'Test email sent.' : 'Failed: ' + ((res && res.data && res.data.message) ? res.data.message : 'Unknown error');
-                        })
-                        .catch(function(){ out.textContent = 'Network error.'; });
-                });
-            })();
-            </script>
+        <?php else : ?>
+            <p style="margin:0 0 14px 0;color:#94a3b8;font-size:13px;">WordPress default mail is active. No SMTP setup needed for testing.</p>
         <?php endif; ?>
+
+        <!-- Quick test email -->
+        <div style="margin-bottom:14px;">
+            <label class="rts-form-label" style="margin-bottom:6px;">Quick Test Email</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <input type="email" id="rts_dash_test_email" class="rts-form-input" style="flex:1;min-width:200px;" placeholder="<?php echo esc_attr(get_option('admin_email')); ?>" value="<?php echo esc_attr(get_option('admin_email')); ?>">
+                <button type="button" class="rts-button primary" id="rts_dash_test_btn" style="margin:0;white-space:nowrap;">
+                    <span class="dashicons dashicons-email"></span> Send Test
+                </button>
+            </div>
+            <div id="rts_dash_test_result" style="margin-top:8px;"></div>
+        </div>
+
+        <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>" class="rts-button secondary" style="margin:0;">
+            <span class="dashicons dashicons-admin-settings"></span> Full Email Settings
+        </a>
+
+        <script>
+        (function(){
+            var btn = document.getElementById('rts_dash_test_btn');
+            if(!btn) return;
+            btn.addEventListener('click', function(){
+                var email = document.getElementById('rts_dash_test_email').value || '';
+                var out = document.getElementById('rts_dash_test_result');
+                if(!email){ out.innerHTML='<span style="color:#ef4444;font-size:13px;">Enter an email address.</span>'; return; }
+                btn.disabled = true;
+                out.innerHTML = '<span style="color:#94a3b8;font-size:13px;">Sending...</span>';
+                var data = new FormData();
+                data.append('action', 'rts_test_smtp');
+                data.append('email', email);
+                data.append('nonce', '<?php echo esc_js(wp_create_nonce('rts_test_smtp')); ?>');
+                fetch(ajaxurl, { method:'POST', credentials:'same-origin', body:data })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res){
+                        btn.disabled = false;
+                        out.innerHTML = (res && res.success)
+                            ? '<span style="color:#22c55e;font-size:13px;">Sent! Check your inbox.</span>'
+                            : '<span style="color:#ef4444;font-size:13px;">Failed: ' + ((res && res.data && res.data.message) ? res.data.message : 'Unknown error') + '</span>';
+                    })
+                    .catch(function(){ btn.disabled = false; out.innerHTML = '<span style="color:#ef4444;font-size:13px;">Network error.</span>'; });
+            });
+        })();
+        </script>
         <?php
     }
 
     /* ==================================================================
      *  EMAIL SETTINGS – Card-based layout
-     *  Groups: Sender Identity | Social Links | Branding
+     *  Groups: Email Mode | SMTP2GO | Sender | Controls | Social | Branding | Letters
      * =================================================================*/
 
     public function render_settings() {
+        $is_live = (bool) get_option('rts_smtp_enabled', false);
+        $smtp_host = get_option('rts_smtp_host', '');
+        $smtp_user = get_option('rts_smtp_user', '');
+        $sending_on = (bool) get_option('rts_email_sending_enabled', false);
         ?>
         <div class="wrap rts-settings-page">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-admin-settings"></span>Email Settings</h1>
-                <p class="rts-page-description">Configure SMTP settings and email preferences</p>
+                <p class="rts-page-description">Configure how emails are sent, who they come from, and how they look.</p>
             </div>
 
             <form method="post" action="options.php">
-                        <?php settings_fields('rts_smtp_settings_group'); ?>
+                <?php settings_fields('rts_smtp_settings_group'); ?>
 
-                <!-- Card: Sender Identity -->
-                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-email"></span> Sender Identity</h3>
+                <!-- ═══════════════════════════════════════════════
+                     CARD 1: EMAIL MODE (standalone — not inside SMTP)
+                     ═══════════════════════════════════════════════ -->
+                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;border-left:4px solid <?php echo $is_live ? '#22c55e' : '#F4C946'; ?>;">
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-randomize"></span> Email Mode</h3>
+                    <p style="margin:0 0 18px 0;opacity:0.9;">Choose how outgoing emails are delivered. Switch to Live when you are ready for production.</p>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:680px;">
+                        <label style="display:flex;gap:12px;padding:18px;background:<?php echo !$is_live ? 'rgba(244,201,70,0.12)' : 'rgba(255,255,255,0.04)'; ?>;border:2px solid <?php echo !$is_live ? '#F4C946' : '#334155'; ?>;border-radius:16px;cursor:pointer;transition:border-color .2s;">
+                            <input type="radio" name="rts_smtp_enabled" value="0" <?php checked(!$is_live); ?> style="margin-top:3px;">
+                            <div>
+                                <strong style="color:<?php echo !$is_live ? '#F4C946' : '#cbd5e1'; ?>;font-size:15px;">Testing</strong>
+                                <div style="color:#94a3b8;font-size:13px;margin-top:4px;">Uses WordPress default mail (PHP mail). No SMTP setup needed &mdash; good for testing flows.</div>
+                            </div>
+                        </label>
+                        <label style="display:flex;gap:12px;padding:18px;background:<?php echo $is_live ? 'rgba(34,197,94,0.10)' : 'rgba(255,255,255,0.04)'; ?>;border:2px solid <?php echo $is_live ? '#22c55e' : '#334155'; ?>;border-radius:16px;cursor:pointer;transition:border-color .2s;">
+                            <input type="radio" name="rts_smtp_enabled" value="1" <?php checked($is_live); ?> style="margin-top:3px;">
+                            <div>
+                                <strong style="color:<?php echo $is_live ? '#22c55e' : '#cbd5e1'; ?>;font-size:15px;">Live (SMTP2GO)</strong>
+                                <div style="color:#94a3b8;font-size:13px;margin-top:4px;">Routes emails through SMTP2GO for reliable delivery, tracking, and sender reputation.</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <?php if (!$is_live) : ?>
+                        <div style="margin-top:14px;padding:10px 14px;background:rgba(244,201,70,0.08);border-radius:10px;color:#F4C946;font-size:13px;">
+                            <span class="dashicons dashicons-info" style="font-size:14px;width:14px;height:14px;margin-right:4px;"></span>
+                            Testing mode &mdash; emails are sent via your server's default mail function. Some hosts block this, so check your inbox and spam folder.
+                        </div>
+                    <?php else : ?>
+                        <div style="margin-top:14px;padding:10px 14px;background:rgba(34,197,94,0.08);border-radius:10px;color:#22c55e;font-size:13px;">
+                            <span class="dashicons dashicons-yes-alt" style="font-size:14px;width:14px;height:14px;margin-right:4px;"></span>
+                            Live mode &mdash; emails route through SMTP2GO. Make sure the connection details below are correct.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════
+                     CARD 2: SMTP2GO CONNECTION
+                     ═══════════════════════════════════════════════ -->
+                <div class="rts-card" id="rts-smtp-connection-card" style="padding:35px;border-radius:35px;margin-bottom:25px;<?php echo !$is_live ? 'opacity:0.5;' : ''; ?>">
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-cloud"></span> SMTP2GO Connection</h3>
+                    <p style="margin:0 0 18px 0;opacity:0.9;">Enter your SMTP2GO credentials. These are only used when Email Mode is set to <strong>Live</strong>.</p>
 
                     <div class="rts-form-row">
-                        <label class="rts-form-label">From Email</label>
-                        <input type="email" name="rts_smtp_from_email"
-                               value="<?php echo esc_attr(get_option('rts_smtp_from_email')); ?>"
-                               class="rts-form-input" required>
-                        <span class="rts-form-description">The email address emails will be sent from</span>
+                        <label class="rts-form-label">SMTP Host</label>
+                        <input type="text" name="rts_smtp_host"
+                               value="<?php echo esc_attr(get_option('rts_smtp_host', 'mail.smtp2go.com')); ?>"
+                               class="rts-form-input" placeholder="mail.smtp2go.com">
+                        <span class="rts-form-description">Default: <code>mail.smtp2go.com</code></span>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Port</label>
+                            <input type="number" name="rts_smtp_port"
+                                   value="<?php echo esc_attr((int) get_option('rts_smtp_port', 2525)); ?>"
+                                   class="rts-form-input" min="1" max="65535">
+                            <span class="rts-form-description">Common: <code>2525</code>, <code>587</code>, or <code>465</code></span>
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Encryption</label>
+                            <select name="rts_smtp_encryption" class="rts-form-select">
+                                <option value="tls" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'tls'); ?>>TLS (recommended)</option>
+                                <option value="ssl" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'ssl'); ?>>SSL</option>
+                                <option value="none" <?php selected(get_option('rts_smtp_encryption', 'tls'), 'none'); ?>>None</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="rts-form-row">
-                        <label class="rts-form-label">From Name</label>
-                        <input type="text" name="rts_smtp_from_name"
-                               value="<?php echo esc_attr(get_option('rts_smtp_from_name')); ?>"
-                               class="rts-form-input" required>
-                        <span class="rts-form-description">The sender name subscribers will see</span>
+                        <label class="rts-form-label">Authentication</label>
+                        <label style="display:inline-flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_smtp_auth" value="1" <?php checked((bool) get_option('rts_smtp_auth', true)); ?>>
+                            <span style="opacity:0.9;">Use username &amp; password (required for SMTP2GO)</span>
+                        </label>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Username</label>
+                            <input type="text" name="rts_smtp_user"
+                                   value="<?php echo esc_attr(get_option('rts_smtp_user', '')); ?>"
+                                   class="rts-form-input" placeholder="your-smtp2go-username">
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Password</label>
+                            <input type="password" name="rts_smtp_pass"
+                                   value="" class="rts-form-input" placeholder="Leave blank to keep existing">
+                            <span class="rts-form-description">Stored encrypted. Leave blank to keep current password.</span>
+                        </div>
                     </div>
 
                     <div class="rts-form-row">
-                        <label class="rts-form-label">Reply-To Email</label>
-                        <input type="email" name="rts_smtp_reply_to"
-                               value="<?php echo esc_attr(get_option('rts_smtp_reply_to')); ?>"
-                               class="rts-form-input">
-                        <span class="rts-form-description">Where replies will be sent (optional)</span>
-                    </div>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">CC Email</label>
-                        <input type="email" name="rts_smtp_cc_email"
-                               value="<?php echo esc_attr(get_option('rts_smtp_cc_email')); ?>"
-                               class="rts-form-input" placeholder="Optional">
-                        <span class="rts-form-description">Optional: add a CC on outgoing subscriber emails</span>
+                        <label class="rts-form-label">Debug Logging</label>
+                        <label style="display:inline-flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_smtp_debug" value="1" <?php checked((bool) get_option('rts_smtp_debug', false)); ?>>
+                            <span style="opacity:0.9;">Log SMTP conversation to error_log (requires WP_DEBUG)</span>
+                        </label>
                     </div>
                 </div>
 
-                <!-- Card: Social Links -->
+                <!-- ═══════════════════════════════════════════════
+                     CARD 3: SENDER DETAILS
+                     ═══════════════════════════════════════════════ -->
                 <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-share"></span> Social Links</h3>
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-email"></span> Sender Details</h3>
+                    <p style="margin:0 0 18px 0;opacity:0.9;">Who the email comes from. These apply in both Testing and Live modes.</p>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">From Email</label>
+                            <input type="email" name="rts_smtp_from_email"
+                                   value="<?php echo esc_attr(get_option('rts_smtp_from_email')); ?>"
+                                   class="rts-form-input" required>
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">From Name</label>
+                            <input type="text" name="rts_smtp_from_name"
+                                   value="<?php echo esc_attr(get_option('rts_smtp_from_name')); ?>"
+                                   class="rts-form-input" required>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Reply-To Email</label>
+                            <input type="email" name="rts_smtp_reply_to"
+                                   value="<?php echo esc_attr(get_option('rts_smtp_reply_to')); ?>"
+                                   class="rts-form-input" placeholder="Optional">
+                            <span class="rts-form-description">Where replies go (optional)</span>
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">CC Email</label>
+                            <input type="email" name="rts_smtp_cc_email"
+                                   value="<?php echo esc_attr(get_option('rts_smtp_cc_email')); ?>"
+                                   class="rts-form-input" placeholder="Optional">
+                            <span class="rts-form-description">Get a copy of every outgoing email</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════
+                     CARD 4: SENDING CONTROLS
+                     ═══════════════════════════════════════════════ -->
+                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-shield"></span> Sending Controls</h3>
+                    <p style="margin:0 0 18px 0;opacity:0.9;">Safety switches and delivery schedule.</p>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Enable Sending</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_email_sending_enabled" value="1" <?php checked(get_option('rts_email_sending_enabled'), 1); ?>>
+                            <span style="color:#ffffff;">Allow the system to queue and send emails</span>
+                        </label>
+                        <span class="rts-form-description">Master switch &mdash; nothing sends until this is ON.</span>
+                    </div>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Demo Mode</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_email_demo_mode" value="1" <?php checked(get_option('rts_email_demo_mode'), 1); ?>>
+                            <span style="color:#F4C946;font-weight:700;">Demo mode ON = emails are logged but never actually sent</span>
+                        </label>
+                        <span class="rts-form-description">Use this to test the full flow without emailing real subscribers.</span>
+                    </div>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Require Re-consent</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_email_reconsent_required" value="1" <?php checked(get_option('rts_email_reconsent_required'), 1); ?>>
+                            <span style="color:#ffffff;">Only email subscribers after they confirm preferences</span>
+                        </label>
+                        <span class="rts-form-description">Recommended when importing from another platform (GDPR).</span>
+                    </div>
+
+                    <hr style="margin:20px 0;opacity:0.15;">
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Daily Digest Time</label>
+                            <input type="time" name="rts_email_daily_time"
+                                   value="<?php echo esc_attr(get_option('rts_email_daily_time', '09:00')); ?>"
+                                   class="rts-form-input">
+                            <span class="rts-form-description">24-hour format</span>
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Batch Size</label>
+                            <input type="number" name="rts_email_batch_size" min="10" max="500"
+                                   value="<?php echo esc_attr(get_option('rts_email_batch_size', 100)); ?>"
+                                   class="rts-form-input">
+                            <span class="rts-form-description">Emails per cron run (default: 100)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════
+                     CARD 5: SOCIAL LINKS
+                     ═══════════════════════════════════════════════ -->
+                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-share"></span> Social Links</h3>
                     <p style="margin:0 0 18px 0;opacity:0.9;">These appear as gold icons in your email footer.</p>
 
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -1134,102 +1233,108 @@ class RTS_Admin_Menu {
                     </div>
                 </div>
 
-                <!-- Card: Branding -->
+                <!-- ═══════════════════════════════════════════════
+                     CARD 6: BRANDING
+                     ═══════════════════════════════════════════════ -->
                 <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-art"></span> Branding</h3>
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-art"></span> Branding</h3>
+                    <p style="margin:0 0 18px 0;opacity:0.9;">Logo and legal links that appear in emails.</p>
 
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Email Logo URL</label>
-                        <input type="url" name="rts_email_logo_url"
-                               value="<?php echo esc_attr(get_option('rts_email_logo_url')); ?>"
-                               class="rts-form-input" placeholder="https://example.com/logo.png">
-                        <span class="rts-form-description">Logo displayed in email header (55px height recommended)</span>
-                    </div>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Privacy Policy URL</label>
-                        <input type="url" name="rts_privacy_url"
-                               value="<?php echo esc_attr(get_option('rts_privacy_url')); ?>"
-                               class="rts-form-input" placeholder="https://example.com/privacy">
-                        <span class="rts-form-description">Linked in email footer</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Email Logo URL</label>
+                            <input type="url" name="rts_email_logo_url"
+                                   value="<?php echo esc_attr(get_option('rts_email_logo_url')); ?>"
+                                   class="rts-form-input" placeholder="https://example.com/logo.png">
+                            <span class="rts-form-description">55px height recommended</span>
+                        </div>
+                        <div class="rts-form-row" style="margin:0;">
+                            <label class="rts-form-label">Privacy Policy URL</label>
+                            <input type="url" name="rts_privacy_url"
+                                   value="<?php echo esc_attr(get_option('rts_privacy_url')); ?>"
+                                   class="rts-form-input" placeholder="https://example.com/privacy">
+                            <span class="rts-form-description">Linked in email footer</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Card: Email Sending (Safety) -->
+                <!-- ═══════════════════════════════════════════════
+                     CARD 7: LETTER SETTINGS
+                     ═══════════════════════════════════════════════ -->
                 <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-shield"></span> Email Sending (Safety)</h3>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Enable Sending</label>
-                        <label style="display:flex;align-items:center;gap:10px;">
-                            <input type="checkbox" name="rts_email_sending_enabled" value="1" <?php checked(get_option('rts_email_sending_enabled'), 1); ?>>
-                            <span style="color:#ffffff;">Allow the system to queue and send emails</span>
-                        </label>
-                        <span class="rts-form-description">Default is OFF until you are ready.</span>
-                    </div>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Demo Mode</label>
-                        <label style="display:flex;align-items:center;gap:10px;">
-                            <input type="checkbox" name="rts_email_demo_mode" value="1" <?php checked(get_option('rts_email_demo_mode'), 1); ?>>
-                            <span style="color:#F4C946;font-weight:700;">Demo mode ON = nothing gets sent to real subscribers</span>
-                        </label>
-                        <span class="rts-form-description">Emails are cancelled with a log entry so you can safely test flows.</span>
-                    </div>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Require Re-consent</label>
-                        <label style="display:flex;align-items:center;gap:10px;">
-                            <input type="checkbox" name="rts_email_reconsent_required" value="1" <?php checked(get_option('rts_email_reconsent_required'), 1); ?>>
-                            <span style="color:#ffffff;">Only email subscribers after they confirm preferences</span>
-                        </label>
-                        <span class="rts-form-description">Recommended when importing from another platform (GDPR).</span>
-                    </div>
-                </div>
-
-                <!-- Card: Sending Schedule -->
-                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-clock"></span> Sending Schedule</h3>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Daily Digest Time</label>
-                        <input type="time" name="rts_email_daily_time"
-                               value="<?php echo esc_attr(get_option('rts_email_daily_time', '09:00')); ?>"
-                               class="rts-form-input">
-                        <span class="rts-form-description">What time to send daily digests (24-hour format)</span>
-                    </div>
-
-                    <div class="rts-form-row">
-                        <label class="rts-form-label">Batch Size</label>
-                        <input type="number" name="rts_email_batch_size" min="10" max="500"
-                               value="<?php echo esc_attr(get_option('rts_email_batch_size', 100)); ?>"
-                               class="rts-form-input">
-                        <span class="rts-form-description">Number of emails to send per batch (default: 100)</span>
-                    </div>
-                </div>
-
-                <!-- Card: Letter Settings -->
-                <div class="rts-card" style="padding:35px;border-radius:35px;margin-bottom:25px;">
-                    <h3 style="margin:0 0 20px 0;"><span class="dashicons dashicons-edit"></span> Letter Settings</h3>
+                    <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-edit"></span> Letter Settings</h3>
 
                     <div class="rts-form-row">
                         <label class="rts-form-label">Enable Onboarder</label>
                         <label style="display:flex;align-items:center;gap:10px;">
                             <input type="checkbox" name="rts_onboarder_enabled" value="1" <?php checked(get_option('rts_onboarder_enabled', 1), 1); ?>>
-                            <span style="color:#ffffff;">Allow subscribers to view and match letters based on preferences</span>
+                            <span style="color:#ffffff;">Allow subscribers to browse letters during onboarding</span>
                         </label>
-                        <span class="rts-form-description">When enabled, subscribers can browse random letters with tone and feeling matching during onboarding.</span>
                     </div>
                 </div>
 
                 <div class="rts-button-group">
                     <button type="submit" class="rts-button success">
-                        <span class="dashicons dashicons-yes"></span> Save Settings
+                        <span class="dashicons dashicons-yes"></span> Save All Settings
                     </button>
                 </div>
             </form>
 
-            <!-- Re-consent (outside the main form) -->
+            <!-- ═══════════════════════════════════════════════
+                 SEND TEST EMAIL (outside settings form)
+                 ═══════════════════════════════════════════════ -->
+            <div class="rts-card" style="padding:35px;border-radius:35px;margin-top:25px;">
+                <h3 style="margin:0 0 6px 0;"><span class="dashicons dashicons-email"></span> Send Test Email</h3>
+                <p style="margin:0 0 14px 0;opacity:0.9;">Send a test email using the <strong>current</strong> settings (<?php echo $is_live ? 'SMTP2GO' : 'WordPress default mail'; ?>). Save settings first if you made changes.</p>
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:260px;">
+                        <label class="rts-form-label">Recipient</label>
+                        <input type="email" id="rts_test_smtp_to" class="rts-form-input" placeholder="<?php echo esc_attr(get_option('admin_email')); ?>" value="<?php echo esc_attr(get_option('admin_email')); ?>">
+                    </div>
+                    <button type="button" class="rts-button primary" id="rts_test_smtp_btn" style="margin:0;">
+                        <span class="dashicons dashicons-email"></span> Send Test Email
+                    </button>
+                </div>
+                <div id="rts_test_smtp_result" style="margin-top:12px;"></div>
+                <script>
+                (function(){
+                    var btn = document.getElementById('rts_test_smtp_btn');
+                    if(!btn) return;
+                    btn.addEventListener('click', function(){
+                        var email = document.getElementById('rts_test_smtp_to').value || '';
+                        var out = document.getElementById('rts_test_smtp_result');
+                        if(!email){ out.innerHTML='<span style="color:#ef4444;">Please enter an email address.</span>'; return; }
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="dashicons dashicons-update"></span> Sending...';
+                        out.innerHTML = '';
+                        var data = new FormData();
+                        data.append('action', 'rts_test_smtp');
+                        data.append('email', email);
+                        data.append('nonce', '<?php echo esc_js(wp_create_nonce('rts_test_smtp')); ?>');
+                        fetch(ajaxurl, { method:'POST', credentials:'same-origin', body:data })
+                            .then(function(r){ return r.json(); })
+                            .then(function(res){
+                                btn.disabled = false;
+                                btn.innerHTML = '<span class="dashicons dashicons-email"></span> Send Test Email';
+                                if(res && res.success){
+                                    out.innerHTML = '<span style="padding:10px 14px;display:inline-block;background:rgba(34,197,94,0.1);border-radius:10px;color:#22c55e;">Test email sent successfully. Check your inbox.</span>';
+                                } else {
+                                    out.innerHTML = '<span style="padding:10px 14px;display:inline-block;background:rgba(239,68,68,0.1);border-radius:10px;color:#ef4444;">Failed: ' + ((res && res.data && res.data.message) ? res.data.message : 'Unknown error') + '</span>';
+                                }
+                            })
+                            .catch(function(){
+                                btn.disabled = false;
+                                btn.innerHTML = '<span class="dashicons dashicons-email"></span> Send Test Email';
+                                out.innerHTML = '<span style="color:#ef4444;">Network error. Try again.</span>';
+                            });
+                    });
+                })();
+                </script>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════
+                 RE-CONSENT (outside settings form)
+                 ═══════════════════════════════════════════════ -->
             <div class="rts-card" style="padding:35px;border-radius:35px;margin-top:25px;">
                 <h3 style="margin:0 0 12px 0;"><span class="dashicons dashicons-megaphone"></span> Subscriber Re-consent</h3>
                 <p style="margin-top:0;color:#ffffff;">Send a one-time email asking subscribers what they want to receive (letters and/or newsletters). This updates their saved preferences and creates an audit trail.</p>
@@ -1241,12 +1346,20 @@ class RTS_Admin_Menu {
                     </button>
                 </form>
             </div>
-
-            <div class="rts-info-box" style="margin-top:25px;">
-                <h4><span class="dashicons dashicons-info"></span> SMTP Plugin Required</h4>
-                <p>These settings work with any SMTP plugin like WP Mail SMTP, Easy WP SMTP, or Post SMTP. Install and configure an SMTP plugin to enable email sending.</p>
-            </div>
         </div>
+        <script>
+        /* Toggle SMTP card opacity based on Email Mode radio */
+        (function(){
+            var radios = document.querySelectorAll('input[name="rts_smtp_enabled"]');
+            var smtpCard = document.getElementById('rts-smtp-connection-card');
+            if(!radios.length || !smtpCard) return;
+            function update(){
+                var live = document.querySelector('input[name="rts_smtp_enabled"]:checked');
+                smtpCard.style.opacity = (live && live.value === '1') ? '1' : '0.5';
+            }
+            radios.forEach(function(r){ r.addEventListener('change', update); });
+        })();
+        </script>
         <?php
     }
 

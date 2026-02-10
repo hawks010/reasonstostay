@@ -126,7 +126,7 @@ class RTS_SMTP_Settings {
         ));
         register_setting(self::OPTION_GROUP, 'rts_smtp_port', array(
             'type' => 'integer',
-            'default' => 587,
+            'default' => 2525,
             'sanitize_callback' => 'absint'
         ));
         register_setting(self::OPTION_GROUP, 'rts_smtp_encryption', array(
@@ -343,22 +343,17 @@ class RTS_SMTP_Settings {
     /**
      * Apply SMTP settings to PHPMailer.
      */
+    /**
+     * Apply mail settings to PHPMailer.
+     *
+     * Sender details (From, Reply-To, CC) are applied in BOTH Testing and
+     * Live modes so that emails always show the correct sender identity.
+     * SMTP transport is only enabled when Email Mode is set to Live.
+     */
     public function configure_smtp($phpmailer) {
-        if (!get_option('rts_smtp_enabled')) {
-            return;
-        }
+        $is_live = (bool) get_option('rts_smtp_enabled', false);
 
-        $phpmailer->isSMTP();
-        $phpmailer->Host       = get_option('rts_smtp_host');
-        $phpmailer->Port       = get_option('rts_smtp_port', 587);
-        $phpmailer->SMTPSecure = get_option('rts_smtp_encryption', 'tls');
-
-        if (get_option('rts_smtp_auth')) {
-            $phpmailer->SMTPAuth = true;
-            $phpmailer->Username = get_option('rts_smtp_user');
-            $phpmailer->Password = $this->decrypt(get_option('rts_smtp_pass'));
-        }
-
+        // --- Sender identity (always applied) ---
         $from_email = get_option('rts_smtp_from_email');
         $from_name  = get_option('rts_smtp_from_name');
 
@@ -377,6 +372,22 @@ class RTS_SMTP_Settings {
         $cc = get_option('rts_smtp_cc_email');
         if ($cc && is_email($cc)) {
             $phpmailer->addCC($cc);
+        }
+
+        // --- SMTP transport (Live mode only) ---
+        if (!$is_live) {
+            return;
+        }
+
+        $phpmailer->isSMTP();
+        $phpmailer->Host       = get_option('rts_smtp_host', 'mail.smtp2go.com');
+        $phpmailer->Port       = get_option('rts_smtp_port', 2525);
+        $phpmailer->SMTPSecure = get_option('rts_smtp_encryption', 'tls');
+
+        if (get_option('rts_smtp_auth', true)) {
+            $phpmailer->SMTPAuth = true;
+            $phpmailer->Username = get_option('rts_smtp_user');
+            $phpmailer->Password = $this->decrypt(get_option('rts_smtp_pass'));
         }
 
         if (get_option('rts_smtp_debug') && defined('WP_DEBUG') && WP_DEBUG) {
@@ -438,6 +449,11 @@ class RTS_SMTP_Settings {
     public function test_smtp_connection() {
         $host = get_option('rts_smtp_host', 'mail.smtp2go.com');
         $port = (int) get_option('rts_smtp_port', 2525);
+
+        // No point testing SMTP socket if in Testing mode
+        if (!(bool) get_option('rts_smtp_enabled', false)) {
+            return array('ok' => true, 'message' => 'Testing mode (WordPress default mail)');
+        }
         $timeout = 3;
         $errno = 0;
         $errstr = '';
