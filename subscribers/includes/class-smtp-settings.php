@@ -347,6 +347,13 @@ class RTS_SMTP_Settings {
      * Live modes so that emails always show the correct sender identity.
      * SMTP transport is only enabled when Email Mode is set to Live.
      */
+    /**
+     * Apply mail settings to PHPMailer.
+     *
+     * Sender details (From, Reply-To, CC) are applied in BOTH Testing and
+     * Live modes so that emails always show the correct sender identity.
+     * SMTP transport is only enabled when Email Mode is set to Live.
+     */
     public function configure_smtp($phpmailer) {
         $is_live = (bool) get_option('rts_smtp_enabled', false);
 

@@ -505,11 +505,19 @@ class RTS_Admin_Menu {
                 </div>
             </div>
 
-            <!-- ── Import Subscribers ── -->
-            <div class="rts-card" id="rts-import-card" style="padding:35px;border-radius:35px;margin-top:25px;">
-                <h2 style="margin-top:0;">Import Subscribers</h2>
-                <p style="margin-top:6px;opacity:0.9;">Upload a CSV file to import subscribers in bulk.</p>
-                <?php $this->render_import_inner(); ?>
+            <!-- ── 50/50: Import + SMTP ── -->
+            <div class="rts-two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:start;margin-top:25px;">
+                <div class="rts-card" id="rts-import-card" style="padding:35px;border-radius:35px;">
+                    <h2 style="margin-top:0;">Import Subscribers</h2>
+                    <p style="margin-top:6px;opacity:0.9;">Upload a CSV file to import subscribers in bulk.</p>
+                    <?php $this->render_import_inner(); ?>
+                </div>
+
+                <div class="rts-card" style="padding:35px;border-radius:35px;">
+                    <h2 style="margin-top:0;">Email Delivery</h2>
+                    <p style="margin-top:6px;opacity:0.9;">Current mode, connection status, and quick test.</p>
+                    <?php $this->render_smtp_and_sending_inner(); ?>
+                </div>
             </div>
 
             <style>@media (max-width:900px){ .rts-two-col-top{ grid-template-columns:1fr !important; } }</style>
