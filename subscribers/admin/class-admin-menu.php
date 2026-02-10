@@ -318,7 +318,7 @@ class RTS_Admin_Menu {
                 ?>
 
                 <!-- ── 50/50: How Subscriptions Work + Email Delivery ── -->
-                <div class="rts-two-col-top" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:stretch;margin-top:18px;align-content: start;">
+                <div class="rts-two-col-top" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:start;margin-top:18px;">
                     <div class="rts-card" style="padding:35px;border-radius:35px;">
                         <h2 style="margin:0 0 10px 0;">How subscriptions work</h2>
                         <div style="color:rgba(255,255,255,0.86);line-height:1.6;font-size:14px;">
