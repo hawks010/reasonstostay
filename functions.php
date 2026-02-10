@@ -530,6 +530,9 @@ if (file_exists($multilingual_path)) {
 // Core includes with file_exists() checks for safety
 $core_includes = [
     'security.php',
+    'rts-learning-engine.php',
+    'rts-content-refiner.php',
+    'rts-learning-dashboard.php',
     'cpt-letters-complete.php',
     'rts-rest-api.php',
     'rts-bulk-jobs.php',

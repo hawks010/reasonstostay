@@ -28,6 +28,7 @@ if (!defined('ABSPATH')) {
 function rts_bulk_jobs_init(): void {
     add_action('rts_bulk_rescan', 'rts_handle_bulk_rescan', 10, 2);
     add_action('rts_bulk_admin_action', 'rts_handle_bulk_admin_action', 10, 2);
+    add_action('rts_bulk_refine_job', 'rts_handle_bulk_refine_job', 10, 2);
     add_action('rts_rescan_quarantine_loop', 'rts_handle_quarantine_loop', 10, 2);
     add_action('rts_daily_maintenance', 'rts_cleanup_stuck_bulk_jobs');
 }
@@ -485,4 +486,63 @@ function rts_get_bulk_job_status(string $token): array {
 	}
 	
 	return ['ok' => false, 'error' => 'Invalid payload format'];
+}
+
+
+// -----------------------------------------------------------------------
+// Auto-Refine Bulk Job (Learning System)
+// -----------------------------------------------------------------------
+
+/**
+ * Action Scheduler handler for bulk auto-refine jobs.
+ *
+ * @param string $token  Transient key storing the IDs.
+ * @param int    $offset Offset into the list.
+ */
+function rts_handle_bulk_refine_job(string $token, int $offset = 0): void {
+    if (!function_exists('as_schedule_single_action')) {
+        return;
+    }
+
+    if (function_exists('set_time_limit')) { @set_time_limit(300); }
+
+    $ids = get_transient($token);
+    if (!is_array($ids) || empty($ids)) {
+        delete_transient($token);
+        return;
+    }
+
+    $offset = max(0, (int) $offset);
+    $batch_size = 20;
+    $slice = array_slice($ids, $offset, $batch_size);
+
+    if (empty($slice)) {
+        delete_transient($token);
+        return;
+    }
+
+    foreach ($slice as $post_id) {
+        $post_id = absint($post_id);
+        if (!$post_id || get_post_type($post_id) !== 'letter') continue;
+
+        if (class_exists('RTS_Content_Refiner')) {
+            RTS_Content_Refiner::refine($post_id);
+        }
+
+        clean_post_cache($post_id);
+    }
+
+    if (function_exists('wp_cache_flush')) {
+        wp_cache_flush();
+    }
+
+    $next_offset = $offset + $batch_size;
+    if ($next_offset < count($ids)) {
+        if (!as_next_scheduled_action('rts_bulk_refine_job', [$token, $next_offset], 'rts')) {
+            as_schedule_single_action(time() + 2, 'rts_bulk_refine_job', [$token, $next_offset], 'rts');
+        }
+        return;
+    }
+
+    delete_transient($token);
 }

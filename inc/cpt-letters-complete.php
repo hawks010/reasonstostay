@@ -28,6 +28,8 @@ class RTS_CPT_Letters_System {
     
     private function __construct() {
         add_action('init', [$this, 'register_post_type']);
+        add_action('admin_menu', [$this, 'register_admin_pages']);
+        add_action('admin_post_rts_revert_refine', [$this, 'handle_revert_refine']);
         add_action('init', [$this, 'register_taxonomies']);
         
         // Prevent auto-draft creation for letters (v2.0.18)
@@ -1104,11 +1106,12 @@ class RTS_CPT_Letters_System {
         $bulk_actions['mark_safe'] = 'Mark as Safe';
         $bulk_actions['mark_review'] = 'Mark for Review';
         $bulk_actions['clear_quarantine_rescan'] = 'Clear Quarantine & Re-scan';
+        $bulk_actions['rts_refine'] = 'Auto-Refine (Pending + Snapshot)';
         return $bulk_actions;
     }
 
     public function handle_bulk_actions($redirect_to, $doaction, $post_ids) {
-        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan'], true)) {
+        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan', 'rts_refine'], true)) {
             return $redirect_to;
         }
 
@@ -1130,6 +1133,19 @@ class RTS_CPT_Letters_System {
 
         $ids = array_values(array_filter(array_map('absint', (array) $post_ids)));
         if (empty($ids)) {
+            return add_query_arg('bulk_processed', 0, $redirect_to);
+        }
+
+        // Auto-Refine: schedule dedicated refiner job.
+        if ($doaction === 'rts_refine') {
+            $token = 'rts_bulk_refine_' . wp_generate_uuid4();
+            set_transient($token, $ids, DAY_IN_SECONDS);
+
+            if (!as_next_scheduled_action('rts_bulk_refine_job', [$token, 0], 'rts')) {
+                as_schedule_single_action(time() + 5, 'rts_bulk_refine_job', [$token, 0], 'rts');
+            }
+
+            $redirect_to = add_query_arg('bulk_scheduled', count($ids), $redirect_to);
             return add_query_arg('bulk_processed', 0, $redirect_to);
         }
 
@@ -1319,6 +1335,139 @@ public function admin_css(): void {
             wp_deregister_script('autosave');
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Adaptive Learning Admin UI
+    // ---------------------------------------------------------------------
+
+    public function register_admin_pages(): void {
+        add_submenu_page(
+            'edit.php?post_type=letter',
+            'Learned Patterns',
+            'Patterns (AI)',
+            'manage_options',
+            'rts_patterns',
+            [$this, 'render_patterns_page']
+        );
+    }
+
+    public function render_patterns_page(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die('You do not have permission to access this page.');
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_learned_patterns';
+
+        // Handle bulk actions
+        if (isset($_POST['rts_patterns_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['rts_patterns_nonce'])), 'rts_patterns_bulk')) {
+            $this->handle_pattern_actions();
+        }
+
+        $total  = 0;
+        $active = 0;
+
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) === $table) {
+            $total  = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+            $active = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE is_active = 1");
+        }
+
+        echo '<div class="wrap">';
+        echo '<h1>🧠 Adaptive Learning System</h1>';
+        echo '<p style="max-width:900px;color:#555">These rules are learned from human edits when letters are published. You can deactivate or delete patterns if they become noisy.</p>';
+        echo '<div class="rts-stats" style="margin:16px 0;font-size:14px"><strong>Total Patterns:</strong> ' . esc_html((string) $total) . ' | <strong>Active:</strong> ' . esc_html((string) $active) . '</div>';
+
+        echo '<form method="post">';
+        echo '<table class="wp-list-table widefat fixed striped">';
+        echo '<thead><tr>';
+        echo '<td class="manage-column column-cb check-column"><input type="checkbox" /></td>';
+        echo '<th>Pattern</th><th>Type</th><th>Confidence</th><th>Status</th>';
+        echo '</tr></thead><tbody>';
+
+        if ($total > 0) {
+            $rows = $wpdb->get_results("SELECT * FROM {$table} ORDER BY failure_count DESC, last_updated DESC LIMIT 200");
+            if ($rows) {
+                foreach ($rows as $p) {
+                    $conf = class_exists('RTS_Learning_Engine') ? (RTS_Learning_Engine::calculate_pattern_confidence((int) $p->id) * 100) : 0;
+                    $status = ((int) $p->is_active === 1) ? '✅ Active' : '❌ Inactive';
+                    echo '<tr>';
+                    echo '<th class="check-column"><input type="checkbox" name="p_ids[]" value="' . esc_attr((string) (int) $p->id) . '"></th>';
+                    echo '<td><strong>' . esc_html((string) $p->pattern_value) . '</strong></td>';
+                    echo '<td>' . esc_html((string) $p->pattern_type) . '</td>';
+                    echo '<td>' . esc_html(number_format_i18n($conf, 1)) . '%</td>';
+                    echo '<td>' . esc_html($status) . '</td>';
+                    echo '</tr>';
+                }
+            }
+        } else {
+            echo '<tr><td colspan="5">No patterns yet.</td></tr>';
+        }
+
+        echo '</tbody></table>';
+
+        echo '<div class="tablenav bottom"><div class="alignleft actions">';
+        echo '<select name="bulk_action">';
+        echo '<option value="-1">Bulk Actions</option>';
+        echo '<option value="activate">Activate</option>';
+        echo '<option value="deactivate">Deactivate</option>';
+        echo '<option value="delete">Delete</option>';
+        echo '</select> ';
+        submit_button('Apply', 'secondary', 'submit', false);
+        echo '</div></div>';
+
+        wp_nonce_field('rts_patterns_bulk', 'rts_patterns_nonce');
+        echo '</form>';
+        echo '</div>';
+    }
+
+    private function handle_pattern_actions(): void {
+        if (!current_user_can('manage_options')) return;
+
+        $bulk = isset($_POST['bulk_action']) ? sanitize_key(wp_unslash($_POST['bulk_action'])) : '';
+        $ids  = isset($_POST['p_ids']) ? array_map('absint', (array) $_POST['p_ids']) : [];
+        $ids  = array_values(array_filter($ids));
+
+        if (empty($ids)) return;
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_learned_patterns';
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+        if ($bulk === 'activate') {
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET is_active = 1 WHERE id IN ({$placeholders})", $ids));
+        } elseif ($bulk === 'deactivate') {
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET is_active = 0 WHERE id IN ({$placeholders})", $ids));
+        } elseif ($bulk === 'delete') {
+            $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE id IN ({$placeholders})", $ids));
+        }
+
+        if (class_exists('RTS_Learning_Cache')) {
+            RTS_Learning_Cache::invalidate_cache();
+        }
+    }
+
+    public function handle_revert_refine(): void {
+        $id = isset($_GET['post']) ? absint($_GET['post']) : 0;
+        if (!$id) {
+            wp_safe_redirect(wp_get_referer());
+            exit;
+        }
+
+        check_admin_referer('rts_rev_refine_' . $id);
+
+        if (!current_user_can('edit_post', $id)) {
+            wp_safe_redirect(wp_get_referer());
+            exit;
+        }
+
+        if (class_exists('RTS_Content_Refiner')) {
+            RTS_Content_Refiner::revert($id);
+        }
+
+        wp_safe_redirect(wp_get_referer());
+        exit;
+    }
+
 }
 
 // Initialize
