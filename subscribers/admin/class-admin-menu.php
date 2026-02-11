@@ -260,7 +260,7 @@ class RTS_Admin_Menu {
         $max_value     = (int) ($flow['max'] ?? 0);
 
         ?>
-        <div class="wrap rts-dashboard-page rts-analytics-page rts-settings-page">
+        <div class="wrap rts-dashboard-page rts-analytics-page rts-settings-page rts-ui-wrapper">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-dashboard"></span>Subscriber Dashboard</h1>
                 <p class="rts-page-description">A single place to manage sending, SMTP, and imports.</p>
@@ -1002,7 +1002,7 @@ class RTS_Admin_Menu {
         $smtp_user = get_option('rts_smtp_user', '');
         $sending_on = (bool) get_option('rts_email_sending_enabled', false);
         ?>
-        <div class="wrap rts-settings-page">
+        <div class="wrap rts-settings-page rts-ui-wrapper">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-admin-settings"></span>Email Settings</h1>
                 <p class="rts-page-description">Configure how emails are sent, who they come from, and how they look.</p>
@@ -1384,7 +1384,7 @@ class RTS_Admin_Menu {
 
         $templates = $this->get_email_templates();
         ?>
-        <div class="wrap rts-templates-page">
+        <div class="wrap rts-templates-page rts-ui-wrapper">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-email-alt"></span>Email Templates</h1>
                 <p class="rts-page-description">Customize email content and styling - click any template to edit</p>
@@ -1452,7 +1452,7 @@ class RTS_Admin_Menu {
         $current_subject = get_option('rts_email_template_' . $template_key . '_subject', $template['default_subject']);
         $current_body    = get_option('rts_email_template_' . $template_key . '_body', $template['default_body']);
         ?>
-        <div class="wrap rts-templates-page">
+        <div class="wrap rts-templates-page rts-ui-wrapper">
             <div class="rts-page-header">
                 <h1>
                     <a href="<?php echo esc_url(admin_url('admin.php?page=rts-email-templates')); ?>"
@@ -1710,7 +1710,7 @@ class RTS_Admin_Menu {
             $notice = '<div class="notice notice-success is-dismissible"><p>Subscriber added.</p></div>';
         }
         ?>
-        <div class="wrap rts-admin-wrap">
+        <div class="wrap rts-admin-wrap rts-ui-wrapper">
             <h1 style="margin-bottom:16px;">Add Subscriber</h1>
             <?php echo $notice; ?>
 
@@ -1897,7 +1897,7 @@ class RTS_Admin_Menu {
         $letters     = get_posts(array('post_type' => 'letter', 'post_status' => 'publish', 'posts_per_page' => 200, 'orderby' => 'date', 'order' => 'DESC', 'fields' => 'ids'));
         $pause_all   = (int) get_option('rts_pause_all_sending', 0);
         ?>
-        <div class="wrap rts-settings-page">
+        <div class="wrap rts-settings-page rts-ui-wrapper">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-dashboard"></span>Command Center</h1>
                 <p class="rts-page-description">A single screen to confirm delivery health and recent sends</p>

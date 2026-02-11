@@ -650,9 +650,10 @@ public function register_letter_cpt() {
                 }
             }
         }
-        // Default to both if none selected
+        // GDPR-safe: require an explicit preference selection.
         if (empty($prefs)) {
-            $prefs = array('letters', 'newsletters');
+            wp_send_json_error(array('message' => 'Please choose what you want to receive (Letters and/or Newsletters).'));
+            return;
         }
 
         // Privacy consent required

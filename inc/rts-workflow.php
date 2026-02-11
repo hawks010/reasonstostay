@@ -26,6 +26,11 @@ final class RTS_Workflow {
     }
 
     public static function ensure_workflow_index() {
+        // ABORT: Never run schema changes on live production traffic.
+        // Creating indexes on wp_postmeta can lock the table for a long time on large sites.
+        // If you want this index, add it manually via your DB tool during a quiet window.
+        return;
+
         if (get_option(self::DB_OPT_INDEX_VER) === '1') return;
         global $wpdb;
         $table = $wpdb->postmeta;

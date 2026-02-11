@@ -36,6 +36,11 @@ window.RTS_DISABLE_TRACKING = true;
 
     // Main System Definition attached directly to window
     window.RTSLetterSystem = {
+      // Guard against double-initialisation.
+      // Cloudflare Rocket Loader (and similar script deferrers) can cause
+      // init() to be called twice in a single page view, which looks like
+      // the letter "loads twice".
+      _booted: false,
       loaded: true, // Flag to prevent re-init
       // --- Debug / diagnostics ---
       diagEnabled: (function(){
@@ -289,6 +294,11 @@ window.RTS_DISABLE_TRACKING = true;
       },
 
       init() {
+        if (this._booted) {
+          return;
+        }
+        this._booted = true;
+
         if (window.location.hostname === 'localhost') {
         }
 

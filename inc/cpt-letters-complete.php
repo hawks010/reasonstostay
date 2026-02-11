@@ -1171,14 +1171,31 @@ class RTS_CPT_Letters_System {
 
         // Auto-Refine: schedule dedicated refiner job.
         if ($doaction === 'rts_refine') {
+            // Safety: never queue locked (human-edited) letters for AI refinement.
+            $ids_to_process = [];
+            $skipped_locked = 0;
+            foreach ($ids as $id) {
+                if (get_post_meta($id, '_rts_manual_lock', true)) {
+                    $skipped_locked++;
+                    continue;
+                }
+                $ids_to_process[] = $id;
+            }
+
+            if (empty($ids_to_process)) {
+                $redirect_to = add_query_arg('bulk_scheduled', 0, $redirect_to);
+                return add_query_arg('bulk_skipped_locked', $skipped_locked, $redirect_to);
+            }
+
             $token = 'rts_bulk_refine_' . wp_generate_uuid4();
-            set_transient($token, $ids, DAY_IN_SECONDS);
+            set_transient($token, $ids_to_process, DAY_IN_SECONDS);
 
             if (!as_next_scheduled_action('rts_bulk_refine_job', [$token, 0], 'rts')) {
                 as_schedule_single_action(time() + 5, 'rts_bulk_refine_job', [$token, 0], 'rts');
             }
 
-            $redirect_to = add_query_arg('bulk_scheduled', count($ids), $redirect_to);
+            $redirect_to = add_query_arg('bulk_scheduled', count($ids_to_process), $redirect_to);
+            $redirect_to = add_query_arg('bulk_skipped_locked', $skipped_locked, $redirect_to);
             return add_query_arg('bulk_processed', 0, $redirect_to);
         }
 

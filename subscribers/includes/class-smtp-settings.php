@@ -30,9 +30,29 @@ class RTS_SMTP_Settings {
             add_action('wp_ajax_rts_test_smtp', array($this, 'ajax_test_smtp'));
             add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
             add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_settings_link'));
+
+            // Back-compat safety: some older builds used 'rts_smtp_settings' as the option_page
+            // group. If a client submits that form, WordPress will block it unless it's in
+            // the allowed options list. Map it to our current group.
+            add_filter('allowed_options', array($this, 'allow_legacy_option_group'));
         }
 
         add_action('phpmailer_init', array($this, 'configure_smtp'));
+    }
+
+    /**
+     * Allow legacy option group submissions (prevents "options page ... not in allowed options list").
+     */
+    public function allow_legacy_option_group($allowed) {
+        if (!is_array($allowed)) {
+            return $allowed;
+        }
+
+        if (!isset($allowed['rts_smtp_settings']) && isset($allowed[self::OPTION_GROUP]) && is_array($allowed[self::OPTION_GROUP])) {
+            $allowed['rts_smtp_settings'] = $allowed[self::OPTION_GROUP];
+        }
+
+        return $allowed;
     }
 
     /**

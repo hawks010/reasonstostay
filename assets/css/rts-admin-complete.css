@@ -1127,7 +1127,17 @@ body.rts-admin-scope.edit-php.post-type-letter .wp-list-table th,
 body.rts-admin-scope.edit-php.post-type-letter .wp-list-table td,
 body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table th,
 body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table td {
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Horizontal scroll instead of overlap on narrow viewports */
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table {
+  display: block;
+  overflow-x: auto;
+  table-layout: auto;
+  min-width: 980px;
 }
 body.rts-admin-scope.edit-php.post-type-letter .wp-list-table .column-primary,
 body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table .column-primary {
@@ -1250,13 +1260,15 @@ body.rts-admin-scope #wpbody-content .page-title-action {
    Inputs / filters / search boxes
    ------------------------------------------------------------------------- */
 
-body.rts-admin-scope #wpbody-content input[type="text"],
-body.rts-admin-scope #wpbody-content input[type="search"],
-body.rts-admin-scope #wpbody-content input[type="email"],
-body.rts-admin-scope #wpbody-content input[type="url"],
-body.rts-admin-scope #wpbody-content input[type="number"],
-body.rts-admin-scope #wpbody-content select,
-body.rts-admin-scope #wpbody-content textarea {
+/* IMPORTANT: Prevent CSS bleed into WordPress core/plugin UI.
+   Only apply the RTS input theme inside explicit RTS UI wrappers. */
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input[type="text"],
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input[type="search"],
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input[type="email"],
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input[type="url"],
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input[type="number"],
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper select,
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper textarea {
   background: rgba(255, 255, 255, 0.06) !important;
   border: 1px solid var(--rts-line-soft) !important;
   color: var(--rts-txt) !important;
@@ -1264,14 +1276,14 @@ body.rts-admin-scope #wpbody-content textarea {
   padding: 10px 12px !important;
 }
 
-body.rts-admin-scope #wpbody-content input::placeholder,
-body.rts-admin-scope #wpbody-content textarea::placeholder {
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input::placeholder,
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper textarea::placeholder {
   color: rgba(242, 242, 242, 0.55);
 }
 
-body.rts-admin-scope #wpbody-content input:focus,
-body.rts-admin-scope #wpbody-content select:focus,
-body.rts-admin-scope #wpbody-content textarea:focus {
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper input:focus,
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper select:focus,
+body.rts-admin-scope #wpbody-content .rts-ui-wrapper textarea:focus {
   outline: none;
   border-color: rgba(94, 234, 212, 0.75) !important;
   box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.12) !important;
@@ -1890,4 +1902,126 @@ body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul li.active a{
   background: rgba(34,211,238,0.14);
   border-color: rgba(34,211,238,0.28);
   color: #ffffff;
+}
+
+/* =========================================================
+   FIX: WP List Tables (Letters + Subscribers)
+   Prevent overlap / smushed layout when filters change.
+   Scoped to RTS admin skin.
+   ========================================================= */
+
+/* Make the tablenav stack cleanly instead of flex-overlapping custom strips */
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top {
+  display: block;
+}
+
+/* Keep the filter row tidy and wrap nicely */
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions {
+  float: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+/* Ensure select + button sizes are consistent and don't crush */
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions select,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions select {
+  max-width: 240px;
+  min-width: 160px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top #post-query-submit,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top #post-query-submit {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+/* Force workflow strip to be its own row */
+body.rts-admin-scope.edit-php.post-type-letter .rts-workflow-strip,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .rts-workflow-strip {
+  clear: both;
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* Table itself: allow horizontal scroll on narrow screens */
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table thead,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table thead,
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table tbody,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table tbody,
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table tfoot,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table tfoot {
+  width: 100%;
+}
+
+/* Keep column headers readable and stop them from collapsing into each other */
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table th,
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table td,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table td {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Allow safe horizontal scrolling on narrow screens (no overlaps) */
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 920px;
+  table-layout: auto;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top {
+  display: block;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions {
+  float: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+body.rts-admin-scope .rts-workflow-strip {
+  clear: both;
+  width: 100%;
+  margin: 10px 0 6px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table .column-title,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table .column-title {
+  min-width: 260px;
+}
+
+/* Contextual help: keep it legible in dark UI */
+body.rts-admin-scope #screen-meta,
+body.rts-admin-scope #contextual-help-wrap,
+body.rts-admin-scope #screen-options-wrap {
+  background: rgba(15, 22, 38, 0.96);
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+body.rts-admin-scope #contextual-help-wrap a,
+body.rts-admin-scope #screen-options-wrap a {
+  color: #22d3ee;
 }

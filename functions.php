@@ -629,6 +629,14 @@ add_shortcode('rts_stat', function($atts) {
  * Use this function in shortcodes/templates to get consistent stats
  */
 function rts_get_site_stats() {
+    // Cache heavy stats so wp-admin doesn't run live COUNT/SUM queries on every load.
+    // Invalidation is handled via hooks further down (publish, view_count updates, options changes).
+    $cache_key = 'rts_site_stats_cache_v1';
+    $cached = get_transient($cache_key);
+    if (is_array($cached)) {
+        return $cached;
+    }
+
     // Manual offsets (legacy-compatible)
     $stats_override = get_option('rts_stats_override', ['enabled' => 0]);
 
@@ -657,7 +665,7 @@ function rts_get_site_stats() {
             ? (float) $stats_override['feel_better_percent']
             : $live_feel_better_percent;
 
-        return [
+        $stats = [
             // legacy keys
             'total_letters'       => $live_letters_submitted + $off_submitted,
             // preferred keys
@@ -666,9 +674,12 @@ function rts_get_site_stats() {
             'feel_better_percent' => (float) $feel_better_percent,
             'using_override'      => true,
         ];
+
+        set_transient($cache_key, $stats, HOUR_IN_SECONDS);
+        return $stats;
     }
 
-    return [
+    $stats = [
         // legacy key
         'total_letters'       => $live_letters_submitted,
         // preferred keys
@@ -677,7 +688,33 @@ function rts_get_site_stats() {
         'feel_better_percent' => (float) $live_feel_better_percent,
         'using_override'      => false,
     ];
+
+    set_transient($cache_key, $stats, HOUR_IN_SECONDS);
+    return $stats;
 }
+
+/**
+ * Invalidate cached site stats.
+ */
+function rts_invalidate_site_stats_cache() {
+    delete_transient('rts_site_stats_cache_v1');
+}
+
+// Invalidate on letter changes and view_count updates.
+add_action('save_post_letter', 'rts_invalidate_site_stats_cache', 10);
+add_action('deleted_post', 'rts_invalidate_site_stats_cache', 10);
+add_action('updated_post_meta', function($meta_id, $object_id, $meta_key, $_meta_value){
+    if ($meta_key === 'view_count' && get_post_type($object_id) === 'letter') {
+        rts_invalidate_site_stats_cache();
+    }
+}, 10, 4);
+
+// Invalidate when relevant options change.
+add_action('updated_option', function($option, $old, $value){
+    if (in_array($option, array('rts_stats_override', 'rts_feel_better_percentage'), true)) {
+        rts_invalidate_site_stats_cache();
+    }
+}, 10, 3);
 
 /**
  * Export letters to CSV

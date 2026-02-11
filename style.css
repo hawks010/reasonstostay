@@ -1,13 +1,13 @@
 /*
-Theme Name: Hello-Elementor-Child-RTS-v5.2.23
+Theme Name: Hello-Elementor-Child-RTS-v5.2.25
 Theme URI: https://reasonstostay.co.uk
 Template: hello-elementor
 Author: Inkfire
 Author URI: https://inkfire.co.uk
 Description: Reasons to Stay child theme (production). Accessibility-first, letters system, admin tools.
 Tags: mental-health,accessibility-ready,flexible-header,custom-colors,custom-menu,custom-logo,featured-images,rtl-language-support,threaded-comments,translation-ready
-Version: 5.2.23
-Updated: 2026-02-11 Fix: Remove legacy Letters Analytics header, harden workflow backfill nonce URL, make Letters/Subscribers list tables responsive (no overlap), and improve Help tab readability in dark admin.
+Version: 5.2.25
+Updated: 2026-02-11 Launch Readiness Patch: disable production DB indexer, cache heavy stats, prevent admin CSS bleed, require explicit subscription preferences, block AI refine on locked letters, SMTP options safety.
 */
 
 /* =====================================================
