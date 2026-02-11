@@ -1,0 +1,91 @@
+/* RTS Workflow Badges (Admin) */
+.rts-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:2px 8px;
+  border-radius:12px;
+  font-size:12px;
+  font-weight:500;
+  line-height:1.4;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  white-space:nowrap;
+}
+
+.rts-badge .dashicons{
+  font-size:16px;
+  width:16px;
+  height:16px;
+  line-height:16px;
+}
+
+.rts-badge-blue{ background:#e3f2fd; color:#1565c0; border:1px solid #bbdefb; }
+.rts-badge-orange{ background:#fff3e0; color:#e65100; border:1px solid #ffe0b2; }
+.rts-badge-red{ background:#ffebee; color:#c62828; border:1px solid #ffcdd2; }
+.rts-badge-green{ background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; }
+.rts-badge-gray{ background:#f5f5f5; color:#616161; border:1px solid #e0e0e0; }
+
+.rts-icon{
+  display:inline-block;
+  margin-left:4px;
+  opacity:.75;
+  vertical-align:middle;
+}
+
+.rts-icon .dashicons{
+  font-size:16px;
+  width:16px;
+  height:16px;
+  line-height:16px;
+}
+
+.rts-icon:hover{ opacity:1; }
+
+/* Make badges feel clickable in dashboard strip */
+.rts-dashboard-badges .rts-badge{
+  cursor:pointer;
+  transition:transform .2s, box-shadow .2s;
+}
+
+.rts-dashboard-badges .rts-badge:hover{
+  transform:translateY(-1px);
+  box-shadow:0 2px 4px rgba(0,0,0,.1);
+}
+
+/* Dark-glass skin overrides (RTS admin pages only) */
+body.rts-admin-scope .rts-badge{ 
+  background: rgba(255,255,255,0.08);
+  color: var(--rts-txt);
+  border: 1px solid var(--rts-line-soft);
+}
+
+body.rts-admin-scope .rts-badge-blue{
+  background: rgba(34,211,238,0.12);
+  border-color: rgba(34,211,238,0.35);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .rts-badge-orange{
+  background: rgba(251,146,60,0.14);
+  border-color: rgba(251,146,60,0.45);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .rts-badge-red{
+  background: rgba(248,113,113,0.14);
+  border-color: rgba(248,113,113,0.45);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .rts-badge-green{
+  background: rgba(74,222,128,0.14);
+  border-color: rgba(74,222,128,0.45);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .rts-badge-gray{
+  background: rgba(255,255,255,0.06);
+  border-color: var(--rts-line);
+  color: var(--rts-txt);
+}
+
+body.rts-admin-scope .rts-dashboard-badges .rts-badge:hover{
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+}

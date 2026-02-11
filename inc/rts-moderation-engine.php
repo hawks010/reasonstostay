@@ -1281,12 +1281,40 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 			$feedback_obj = wp_count_posts('rts_feedback');
 			$feedback_total = $feedback_obj ? (int) ($feedback_obj->publish + $feedback_obj->pending + $feedback_obj->draft + $feedback_obj->private + $feedback_obj->future) : 0;
 
+
+			// Workflow-aware counts (meta driven) for clarity.
+			$pending_review = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage('pending_review') : 0;
+			$flagged_draft  = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage('flagged_draft') : 0;
+			$ingested       = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage('ingested') : 0;
+			$skipped_pub    = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage('skipped_published') : 0;
+			$approved_pub   = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage('approved_published') : 0;
+
+			// Missing stage (used to prompt backfill). Avoid heavy meta queries.
+			$missing_stage = 0;
+			if (class_exists('RTS_Workflow')) {
+				global $wpdb;
+				$missing_stage = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(p.ID) FROM {$wpdb->posts} p LEFT JOIN {$wpdb->postmeta} pm ON (pm.post_id = p.ID AND pm.meta_key = %s) WHERE p.post_type = %s AND pm.post_id IS NULL",
+						RTS_Workflow::META_STAGE,
+						'letter'
+					)
+				);
+			}
+
 			return [
-				'total'         => (int) ($letters->publish + $letters->pending + $letters->draft + $letters->future + $letters->private),
-				'published'     => (int) max(0, ((int) $letters->publish) + $off_letters),
-				'pending'       => (int) $letters->pending,
-				'needs_review'  => self::count_needs_review(),
-				'feedback_total'=> $feedback_total,
+				'total'          => (int) ($letters->publish + $letters->pending + $letters->draft + $letters->future + $letters->private),
+				'published'      => (int) max(0, ((int) $letters->publish) + $off_letters),
+				'pending'        => (int) $letters->pending,
+				'needs_review'   => self::count_needs_review(),
+				'feedback_total' => $feedback_total,
+				// Workflow metrics
+				'pending_review' => (int) $pending_review,
+				'flagged_draft'  => (int) $flagged_draft,
+				'ingested'       => (int) $ingested,
+				'skipped_pub'    => (int) $skipped_pub,
+				'approved_pub'   => (int) $approved_pub,
+				'missing_stage'  => (int) $missing_stage,
 			];
 		}
 
@@ -1315,8 +1343,28 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                             <span class="rts-status-dot"></span>
                             <span class="rts-status-text"><?php echo $as_ok ? 'System Online' : 'System Offline'; ?></span>
                         </div>
+	                        <button type="button" class="rts-btn rts-btn-ghost rts-help-inline" id="rts-open-help" aria-label="Open help">
+	                            Help
+	                        </button>
                     </div>
                 </header>
+
+	                <script>
+	                (function(){
+	                    var btn = document.getElementById('rts-open-help');
+	                    if (!btn) return;
+	                    btn.addEventListener('click', function(e){
+	                        e.preventDefault();
+	                        var link = document.getElementById('contextual-help-link');
+	                        if (link) { link.click(); return; }
+	                        // Fallback: toggle the panel directly if WP link is not available
+	                        var wrap = document.getElementById('contextual-help-wrap');
+	                        if (wrap) {
+	                            wrap.style.display = (wrap.style.display === 'none' || !wrap.style.display) ? 'block' : 'none';
+	                        }
+	                    });
+	                })();
+	                </script>
 
 				<?php if ($message): ?>
 					<div class="notice notice-success is-dismissible rts-notice">
@@ -1342,8 +1390,8 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 					<div class="notice notice-info" style="margin: 20px 0; padding: 15px; border-left: 4px solid #2271b1; background: #f0f6fc;">
 						<p style="margin: 0; font-size: 14px; line-height: 1.6;">
 							<span class="dashicons dashicons-update" style="color: #2271b1; animation: rotation 2s infinite linear;"></span>
-								<strong>Auto-Processing Active:</strong> The system is automatically working through <strong><?php echo number_format_i18n($true_inbox); ?> letter(s)</strong> in the inbox. 
-							Each letter is being quality-checked, safety-scanned, and tagged. Letters that pass all checks will be automatically published. 
+						<strong>Auto-Processing Active:</strong> The system is automatically working through <strong><?php echo number_format_i18n($true_inbox); ?> letter(s)</strong> in the inbox. 
+						Each letter is being quality-checked, safety-scanned, and tagged. Letters that pass all checks will be moved into <strong>Pending Review</strong> for a human to publish. 
 							<a href="<?php echo esc_url(self::url_for_tab('system') . '#rts-live-processing-status'); ?>">View progress →</a>
 						</p>
 					</div>
@@ -1363,7 +1411,8 @@ if (!class_exists('RTS_Engine_Dashboard')) {
 	                <!-- Primary Stats Grid -->
 				<div class="rts-stats-grid">
 	                    <?php self::stat_card('Live on Site', number_format_i18n($stats['published']), 'published', 'Letters live on the website'); ?>
-	                    <?php self::stat_card('Inbox', number_format_i18n($true_inbox), 'inbox', 'Awaiting auto-processing'); ?>
+	                    <?php self::stat_card('Pending Review', number_format_i18n($stats['pending_review'] ?? 0), 'pending_review', 'Ready for a human to publish'); ?>
+	                    <?php self::stat_card('Inbox', number_format_i18n($stats['ingested'] ?? 0), 'inbox', 'Received and awaiting processing'); ?>
 	                    <?php self::stat_card('Quarantined', number_format_i18n($stats['needs_review']), 'quarantined', 'Flagged for safety review'); ?>
 	                    <?php self::stat_card('Feedback', number_format_i18n($stats['feedback_total'] ?? 0), 'feedback', 'Reader feedback received'); ?>
 	                    <?php self::stat_card('Total Letters', number_format_i18n($stats['total']), 'total', 'All-time submissions'); ?>
@@ -1396,6 +1445,20 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                             <span class="rts-status-label">Queued Letters:</span>
                             <span class="rts-status-value" id="rts-queued-count">Checking...</span>
                         </div>
+
+						<div class="rts-status-item">
+							<span class="rts-status-label">Workflow Backlog:</span>
+							<span class="rts-status-value">
+								<?php
+								$missing = (int) ($stats['missing_stage'] ?? 0);
+								echo number_format_i18n($missing);
+								if ($missing > 0 && current_user_can('manage_options') && function_exists('wp_create_nonce')) {
+									$url = wp_nonce_url(admin_url('admin-post.php?action=rts_start_workflow_backfill'), 'rts_workflow_backfill');
+									echo ' <a class="button button-small" href="' . esc_url($url) . '" style="margin-left:8px;">Start Backfill</a>';
+								}
+								?>
+							</span>
+						</div>
                     </div>
                 </div>
 
@@ -1403,11 +1466,11 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                 <div class="rts-quick-actions">
                     <h3><span class="dashicons dashicons-admin-tools"></span> Quick Actions</h3>
                     <div class="rts-action-buttons">
-                        <a class="button button-primary rts-action-btn" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&post_status=pending')); ?>">
+						<a class="button button-primary rts-action-btn" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_stage=pending_review')); ?>">
                             <span class="dashicons dashicons-list-view"></span> Review Inbox
                         </a>
                         
-                        <a class="button rts-action-btn" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&meta_key=needs_review&meta_value=1')); ?>">
+						<a class="button rts-action-btn" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_stage=flagged_draft')); ?>">
                             <span class="dashicons dashicons-shield"></span> View Quarantine
                         </a>
                         

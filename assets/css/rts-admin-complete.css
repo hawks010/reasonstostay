@@ -2,13 +2,8 @@
  * RTS Admin Complete (Scoped)
  * Pair with admin body class: `rts-admin-scope`
  */
-.rts-action-bar {
+body.rts-admin-scope .rts-action-bar {
 	margin-bottom: 10px;
-}
-.dashicons dashicons-email-alt .dashicons-before:before{
-	width: 40px!important;
-    height: 30px!important;
-    font-size: 30px!important;
 }
 
 body.rts-admin-scope {
@@ -253,6 +248,25 @@ body.rts-admin-scope #wpbody-content .rts-page-description {
 /* 2.3 System status indicator */
 body.rts-admin-scope #wpbody-content .rts-system-status {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+body.rts-admin-scope #wpbody-content .rts-help-inline{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--rts-line-soft);
+  color: var(--rts-txt);
+  cursor: pointer;
+}
+body.rts-admin-scope #wpbody-content .rts-help-inline:hover{
+  border-color: var(--rts-line);
+  background: rgba(255,255,255,0.08);
 }
 
 body.rts-admin-scope #wpbody-content .rts-status-indicator,
@@ -1038,8 +1052,87 @@ body.rts-admin-scope #wpbody-content .subsubsub a.current {
 }
 
 /* Count badges in filter links */
-.subsubsub {
+.rts-admin-scope .subsubsub {
 	margin: 25px 0 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Contextual Help (Help tab dropdown) readability in dark glass admin
+   -------------------------------------------------------------------------- */
+body.rts-admin-scope #screen-meta {
+  background: transparent;
+}
+body.rts-admin-scope #contextual-help-wrap,
+body.rts-admin-scope #screen-options-wrap {
+  background: rgba(12, 18, 30, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope #contextual-help-wrap a,
+body.rts-admin-scope #screen-options-wrap a {
+  color: var(--rts-teal);
+}
+body.rts-admin-scope .contextual-help-tabs a {
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .contextual-help-tabs a:focus,
+body.rts-admin-scope .contextual-help-tabs a:hover {
+  color: var(--rts-cyan);
+}
+body.rts-admin-scope .contextual-help-tabs .active a {
+  color: var(--rts-cyan);
+}
+body.rts-admin-scope .contextual-help-tabs-wrap {
+  color: var(--rts-txt);
+}
+body.rts-admin-scope .contextual-help-tabs-wrap p,
+body.rts-admin-scope .contextual-help-tabs-wrap li,
+body.rts-admin-scope .contextual-help-tabs-wrap em,
+body.rts-admin-scope .contextual-help-tabs-wrap strong {
+  color: var(--rts-txt);
+}
+
+/* --------------------------------------------------------------------------
+   List tables responsiveness (Letters/Subscribers)
+   -------------------------------------------------------------------------- */
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top {
+  margin-bottom: 12px;
+}
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  float: none;
+}
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions select,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions select {
+  max-width: 240px;
+}
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions input[type="submit"],
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions input[type="submit"] {
+  margin: 0;
+}
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table th,
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table td,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table td {
+  white-space: nowrap;
+}
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table .column-primary,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table .column-primary {
+  white-space: normal;
+  min-width: 260px;
 }
 body.rts-admin-scope #wpbody-content .subsubsub a .count,
 body.rts-admin-scope #wpbody-content .subsubsub a.current .count {
@@ -1687,4 +1780,114 @@ body.post-type-rts_subscriber.edit-php.rts-admin-scope #wpbody-content #rts_freq
   .rts-review-split{ flex-direction:column; }
   .rts-review-list{ width:100%; max-width:100%; max-height:34vh; }
   .rts-review-iframe{ min-height:60vh; }
+}
+
+/* ------------------------------------------------------------
+   Workflow UI helpers (v5.2.19+)
+------------------------------------------------------------ */
+body.rts-admin-scope .rts-wide-input {width: 100%; max-width: 900px;}
+body.rts-admin-scope .rts-button-row {margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;}
+
+body.rts-admin-scope .rts-max-820 {max-width: 820px;}
+
+body.rts-admin-scope .rts-workflow-strip {margin: 14px 0 10px; padding: 12px; width: 100%; clear: both;}
+body.rts-admin-scope .rts-workflow-strip__row {display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
+body.rts-admin-scope .rts-workflow-strip__title {font-weight: 700; margin-right: 6px;}
+
+/* --------------------------------------------------------------------------
+   List table responsiveness (Letters + Subscribers)
+   Prevent overlap/smush when filters wrap or status views change.
+   -------------------------------------------------------------------------- */
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top {
+  margin-bottom: 12px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions select,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions select,
+body.rts-admin-scope.edit-php.post-type-letter .tablenav.top .alignleft.actions .button,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .tablenav.top .alignleft.actions .button {
+  margin: 0;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table thead th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table thead th,
+body.rts-admin-scope.edit-php.post-type-letter .wp-list-table tfoot th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .wp-list-table tfoot th {
+  white-space: nowrap;
+}
+body.rts-admin-scope .rts-workflow-strip__status {font-size: 12px; opacity: 0.85;}
+
+/* WP Help / Screen Options: keep readable in dark-glass mode */
+body.rts-admin-scope #screen-meta,
+body.rts-admin-scope #contextual-help-wrap,
+body.rts-admin-scope #screen-options-wrap{
+  background: rgba(15,22,38,0.92);
+  border-bottom: 1px solid var(--rts-line);
+  color: var(--rts-txt);
+}
+body.rts-admin-scope #screen-meta-links{
+  z-index: 50;
+}
+body.rts-admin-scope .screen-meta-links .show-settings{
+  background: var(--rts-glass-base);
+  border: 1px solid var(--rts-line-soft);
+  color: var(--rts-txt);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+body.rts-admin-scope .screen-meta-links .show-settings:hover,
+body.rts-admin-scope .screen-meta-links .show-settings:focus{
+  color: var(--rts-txt);
+  border-color: var(--rts-line);
+}
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul li a{
+  color: var(--rts-txt);
+}
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul li a:hover{
+  color: var(--rts-cyan);
+}
+body.rts-admin-scope #contextual-help-wrap .help-tab-content{
+  color: var(--rts-txt-soft);
+}
+body.rts-admin-scope #contextual-help-wrap .help-tab-content p strong{
+  color: var(--rts-txt);
+}
+
+/* Ensure the tab list itself is always readable (some admin themes force white backgrounds). */
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs{
+  background: transparent;
+}
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul{
+  background: rgba(0,0,0,0.12);
+  border: 1px solid var(--rts-line-soft);
+  border-radius: 12px;
+  padding: 6px;
+}
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul li a{
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  padding: 8px 12px;
+}
+body.rts-admin-scope #contextual-help-wrap .contextual-help-tabs ul li.active a{
+  background: rgba(34,211,238,0.14);
+  border-color: rgba(34,211,238,0.28);
+  color: #ffffff;
 }

@@ -960,7 +960,7 @@ html.rts-onboarding-active .rts-a11y-panel{
 @media (max-width: 768px) {
     .rts-letter-card {
         /* Keep room for the top-left tag icons */
-        padding: 52px 20px 26px;
+        padding: 35px 20px 35px 20px;
     }
 
     .rts-tag-btn i {
@@ -1272,6 +1272,7 @@ body.rts-modal-open{overflow:hidden;}
 @media (max-width: 768px){
   .rts-letter-footer{
     justify-content: stretch;
+	  margin-top: 50px;
   }
   .rts-letter-footer .rts-btn-next{
     width: 100%;

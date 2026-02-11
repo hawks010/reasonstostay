@@ -113,13 +113,15 @@ if ( ! function_exists( 'rts_is_admin_screen' ) ) {
         $taxonomy  = '';
         $page      = '';
 
-        if ( function_exists( 'get_current_screen' ) ) {
-            $screen = get_current_screen();
-            if ( $screen ) {
-                $post_type = isset( $screen->post_type ) ? (string) $screen->post_type : '';
-                $taxonomy  = isset( $screen->taxonomy ) ? (string) $screen->taxonomy : '';
-            }
-        }
+	    $base = '';
+	    if ( function_exists( 'get_current_screen' ) ) {
+	        $screen = get_current_screen();
+	        if ( $screen ) {
+	            $post_type = isset( $screen->post_type ) ? (string) $screen->post_type : '';
+	            $taxonomy  = isset( $screen->taxonomy ) ? (string) $screen->taxonomy : '';
+	            $base      = isset( $screen->base ) ? (string) $screen->base : '';
+	        }
+	    }
 
         $page = isset( $_GET['page'] ) ? (string) $_GET['page'] : '';
 
@@ -127,9 +129,13 @@ if ( ! function_exists( 'rts_is_admin_screen' ) ) {
         $rts_post_types = array( 'letter', 'rts_feedback', 'rts_subscriber', 'rts_newsletter' );
         $rts_taxonomies = array( 'rts_feeling', 'rts_tone' );
 
-        if ( $post_type && in_array( $post_type, $rts_post_types, true ) ) {
-            return true;
-        }
+	    if ( $post_type && in_array( $post_type, $rts_post_types, true ) ) {
+	        // Keep WordPress editors (post.php) in WP default styling.
+	        if ( $base === 'post' ) {
+	            return false;
+	        }
+	        return true;
+	    }
 
         if ( $taxonomy && in_array( $taxonomy, $rts_taxonomies, true ) ) {
             return true;
@@ -148,6 +154,13 @@ if ( ! function_exists( 'rts_is_admin_screen' ) ) {
         // URL fallback (last resort)
         if ( isset( $_SERVER['REQUEST_URI'] ) ) {
             $uri = (string) $_SERVER['REQUEST_URI'];
+
+            // IMPORTANT: Do NOT apply RTS admin theming to the block editor / post editor screens.
+            // We want WordPress defaults here to avoid "white on white" editor UI leaks.
+            if ( strpos( $uri, 'post.php' ) !== false || strpos( $uri, 'post-new.php' ) !== false ) {
+                return false;
+            }
+
             if ( strpos( $uri, 'post_type=letter' ) !== false ||
                  strpos( $uri, 'post_type=rts_feedback' ) !== false ||
                  strpos( $uri, 'post_type=rts_subscriber' ) !== false ||
@@ -530,6 +543,9 @@ if (file_exists($multilingual_path)) {
 // Core includes with file_exists() checks for safety
 $core_includes = [
     'security.php',
+    'rts-workflow-badges.php',
+    'rts-workflow.php',
+    'rts-workflow-admin.php',
     'rts-learning-engine.php',
     'rts-content-refiner.php',
     'rts-learning-dashboard.php',

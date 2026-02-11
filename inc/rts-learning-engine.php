@@ -102,6 +102,9 @@ class RTS_Learning_Engine {
         if (class_exists('RTS_Learning_Cache')) {
             RTS_Learning_Cache::invalidate_cache();
         }
+
+        // Let the workflow layer record a "learned" timestamp (admin clarity).
+        do_action('rts_workflow_mark_learned', $post_id, 'learning_engine');
     }
 
     // ---------------------------------------------------------------------

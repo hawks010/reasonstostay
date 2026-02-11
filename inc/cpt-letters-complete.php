@@ -52,7 +52,11 @@ class RTS_CPT_Letters_System {
 
         // Dashboard/legacy processing UI removed (migrated to RTS Dashboard).
         // New: lightweight analytics header on the Letters list screen (powered by the Moderation Engine).
-        add_action('all_admin_notices', [$this, 'show_letters_analytics_header']);
+        // NOTE: We intentionally do NOT inject the legacy "Letters Analytics" header
+        // above the Letters list anymore. It duplicated the newer Moderation Control Room
+        // dashboard, created visual confusion, and caused tablenav/table overlap.
+        // (The dashboard page remains the authoritative analytics surface.)
+        // add_action('all_admin_notices', [$this, 'show_letters_analytics_header']);
 
         // Ensure buttons in the analytics header work on Letters admin screens.
         add_action('admin_enqueue_scripts', [$this, 'enqueue_letters_admin_assets']);
@@ -537,7 +541,11 @@ class RTS_CPT_Letters_System {
             wp_enqueue_style('rts-admin-css', get_stylesheet_directory_uri() . '/assets/css/rts-admin-complete.css', [], $css_ver);
         }
 
-        
+        $wf_css_path = get_stylesheet_directory() . '/assets/css/rts-workflow-badges.css';
+        if (file_exists($wf_css_path)) {
+            $wf_ver = (string) filemtime($wf_css_path);
+            wp_enqueue_style('rts-workflow-badges', get_stylesheet_directory_uri() . '/assets/css/rts-workflow-badges.css', ['dashicons'], $wf_ver);
+        }
 
         $js_path  = get_stylesheet_directory() . '/assets/js/rts-dashboard.js';
         if (file_exists($js_path)) {
@@ -970,22 +978,10 @@ class RTS_CPT_Letters_System {
     public function render_column($column, $post_id) {
         switch ($column) {
             case 'rts_ai_status':
-                $locked  = get_post_meta($post_id, '_rts_manual_lock', true);
-                $refined = get_post_meta($post_id, '_rts_refined', true);
-                $snap    = get_post_meta($post_id, '_rts_bot_snapshot', true);
-                $status  = get_post_status($post_id);
-
-                if ($locked) {
-                    echo '<span class="rts-badge rts-locked" title="Manually edited">🔒 Locked</span> ';
-                }
-                if ($refined) {
-                    echo '<span class="rts-badge rts-refined" title="Processed by AI">✨ Refined</span> ';
-                }
-                if (!empty($snap) && $status !== 'publish') {
-                    echo '<span class="rts-badge rts-learning" title="Will learn when you publish">🧠 Learning</span>';
-                }
-                if (!$locked && !$refined && empty($snap)) {
-                    echo '<span class="rts-badge rts-neutral" title="No AI actions yet">—</span>';
+                if (function_exists('rts_render_workflow_badge')) {
+                    echo rts_render_workflow_badge((int) $post_id);
+                } else {
+                    echo '<span class="rts-badge rts-badge-gray"><span class="dashicons dashicons-warning"></span> Badges unavailable</span>';
                 }
                 break;
             case 'letter_quality':
@@ -1143,11 +1139,12 @@ class RTS_CPT_Letters_System {
         $bulk_actions['mark_review'] = 'Mark for Review';
         $bulk_actions['clear_quarantine_rescan'] = 'Clear Quarantine & Re-scan';
         $bulk_actions['rts_refine'] = 'Auto-Refine (Pending + Snapshot)';
+        $bulk_actions['rts_send_to_review'] = 'Send to Review (Workflow)';
         return $bulk_actions;
     }
 
     public function handle_bulk_actions($redirect_to, $doaction, $post_ids) {
-        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan', 'rts_refine'], true)) {
+        if (!in_array($doaction, ['mark_safe', 'mark_review', 'clear_quarantine_rescan', 'rts_refine', 'rts_send_to_review'], true)) {
             return $redirect_to;
         }
 

@@ -332,10 +332,17 @@ class RTS_Accessibility_Toolkit {
             }
 
             /* === MINIMIZED PILL === */
+			@media screen and (min-width: 769px) and (max-width: 1024px) {
+    .rts-a11y-pill {
+        top: 85% !important;
+        transform: translateY(-50%); /* Keeps it centered vertically relative to the top % */
+    }
+}
+			
             .rts-a11y-pill {
                 position: fixed;
                 right: 10px;
-                top: 75%;
+                top: 79%;
                 transform: translateY(-50%);
                 display: flex;
                 flex-direction: column;

@@ -187,6 +187,17 @@ function rts_handle_bulk_admin_action(string $token, int $offset = 0): void {
                     as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
                 }
                 $processed++;
+            } elseif ($action === 'rts_send_to_review') {
+                // Workflow: Send to Review (sets workflow stage + (optionally) moves to Pending bucket)
+                if (class_exists('RTS_Workflow')) {
+                    RTS_Workflow::set_stage($post_id, 'pending_review', 'bulk:send_to_review', false);
+                }
+
+                $change_status = (bool) apply_filters('rts_send_to_review_change_status', true, $post_id);
+                if ($change_status && get_post_status($post_id) !== 'pending') {
+                    wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
+                }
+                $processed++;
             }
         } catch (\Throwable $e) {
             error_log('RTS Bulk: Error processing post ' . $post_id . ': ' . $e->getMessage());
@@ -426,7 +437,7 @@ function rts_start_bulk_admin_action(string $action, array $letter_ids): array {
 		return ['ok' => false, 'error' => 'Action Scheduler not available'];
 	}
 	
-	$allowed_actions = ['mark_safe', 'mark_review', 'clear_quarantine_rescan'];
+	$allowed_actions = ['mark_safe', 'mark_review', 'clear_quarantine_rescan', 'rts_send_to_review'];
 	if (!in_array($action, $allowed_actions, true)) {
 		return ['ok' => false, 'error' => 'Invalid action: ' . $action];
 	}
