@@ -556,6 +556,7 @@ $core_includes = [
     'logger.php',
     'rts-google-translate.php',
     'rts-quick-exit.php',
+    'class-rts-admin-dashboard-view.php',
 ];
 
 foreach ($core_includes as $file) {

@@ -2036,3 +2036,288 @@ body.rts-admin-scope #screen-options-wrap a {
 .rts-analytics-container table.widefat.fixed.striped thead th{
   background: rgba(255,255,255,0.06);
 }
+
+/* =========================================================================
+   COMMAND CENTER — Layout & Components
+   ========================================================================= */
+
+/* Wrapper */
+body.rts-admin-scope .rts-app-wrapper {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 30px 24px 60px;
+}
+
+/* Header */
+body.rts-admin-scope .rts-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+body.rts-admin-scope .rts-main-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--rts-txt);
+  margin: 0 0 4px;
+  letter-spacing: -0.5px;
+}
+
+/* Section titles */
+body.rts-admin-scope .rts-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--rts-txt-dim);
+  margin-bottom: 16px;
+}
+
+/* Split panel — two-column grid */
+body.rts-admin-scope .rts-split-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+/* Four-column metric grid */
+body.rts-admin-scope .rts-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* Full-width panel */
+body.rts-admin-scope .rts-full-panel {
+  margin-top: 8px;
+}
+
+/* Card value — large stat number */
+body.rts-admin-scope .rts-card-value {
+  font-size: 28px;
+  font-weight: 850;
+  color: var(--rts-txt);
+  line-height: 1.1;
+}
+
+/* Card sub — small label above metric */
+body.rts-admin-scope .rts-card-sub {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--rts-txt-mute);
+  margin-bottom: 6px;
+}
+
+/* Card header — section title inside a card */
+body.rts-admin-scope .rts-card-header {
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--rts-txt);
+  border-bottom: 1px solid var(--rts-line-soft);
+}
+
+/* Metric rows — key/value pairs in pipeline cards */
+body.rts-admin-scope .metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--rts-line-soft);
+}
+
+body.rts-admin-scope .metric-row:last-of-type {
+  border-bottom: none;
+}
+
+body.rts-admin-scope .metric-label {
+  font-size: 13px;
+  color: var(--rts-txt-mute);
+}
+
+body.rts-admin-scope .metric-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rts-txt);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Status dots */
+body.rts-admin-scope .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+body.rts-admin-scope .status-dot.bg-green {
+  background: var(--rts-green);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+body.rts-admin-scope .status-dot.bg-red {
+  background: var(--rts-red);
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+}
+
+/* Workflow badges */
+body.rts-admin-scope .wf-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 99px;
+  letter-spacing: 0.3px;
+}
+
+body.rts-admin-scope .wf-badge.inbox {
+  background: rgba(34, 211, 238, 0.14);
+  color: var(--rts-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+}
+
+body.rts-admin-scope .wf-badge.live {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--rts-green);
+  border: 1px solid rgba(74, 222, 128, 0.28);
+}
+
+body.rts-admin-scope .wf-badge.quarantine {
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--rts-red);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+/* Button variants that were missing */
+body.rts-admin-scope .rts-btn-secondary {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid var(--rts-line) !important;
+  color: var(--rts-txt) !important;
+}
+
+body.rts-admin-scope .rts-btn-secondary:hover {
+  background: rgba(255,255,255,0.10) !important;
+  border-color: rgba(255,255,255,0.22) !important;
+}
+
+body.rts-admin-scope .rts-btn-danger {
+  background: rgba(248, 113, 113, 0.14) !important;
+  border: 1px solid rgba(248, 113, 113, 0.35) !important;
+  color: var(--rts-red) !important;
+}
+
+body.rts-admin-scope .rts-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.22) !important;
+  border-color: rgba(248, 113, 113, 0.50) !important;
+}
+
+/* ── Queue Visualizer ─────────────────────────────────────────────── */
+
+body.rts-admin-scope .queue-visualizer {
+  background: var(--rts-glass-base);
+  border: 1px solid var(--rts-line);
+  border-radius: var(--rts-radius);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.rts-admin-scope .queue-bar-container {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--rts-line-soft);
+}
+
+body.rts-admin-scope .q-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 12px;
+  min-width: 0;
+  transition: width 0.4s ease;
+}
+
+body.rts-admin-scope .q-segment.q-sent {
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.55), rgba(94, 234, 212, 0.45));
+}
+
+body.rts-admin-scope .q-segment.q-queued {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.50), rgba(244, 201, 70, 0.40));
+}
+
+body.rts-admin-scope .q-segment.q-empty {
+  color: var(--rts-txt-dim);
+  font-weight: 500;
+}
+
+body.rts-admin-scope .queue-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rts-line-soft);
+}
+
+body.rts-admin-scope .q-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.rts-admin-scope .q-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--rts-txt-dim);
+}
+
+body.rts-admin-scope .q-stat-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--rts-txt);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  body.rts-admin-scope .rts-split-panel {
+    grid-template-columns: 1fr;
+  }
+
+  body.rts-admin-scope .rts-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  body.rts-admin-scope .rts-header {
+    flex-direction: column;
+  }
+
+  body.rts-admin-scope .queue-stats {
+    gap: 16px;
+  }
+}

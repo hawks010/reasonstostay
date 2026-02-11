@@ -3820,6 +3820,21 @@ private static function bump_counter(int $post_id, string $meta_key, int $by = 1
 }
 
 /**
+ * Increment a daily view counter (auto-resets each day).
+ * Used by the Command Center "Views Today" metric.
+ */
+private static function bump_daily_views(): void {
+    $today = current_time('Y-m-d');
+    $daily = get_option('rts_views_daily', array('date' => '', 'count' => 0));
+    if (isset($daily['date']) && $daily['date'] === $today) {
+        $daily['count'] = (int) ($daily['count'] ?? 0) + 1;
+    } else {
+        $daily = array('date' => $today, 'count' => 1);
+    }
+    update_option('rts_views_daily', $daily, false);
+}
+
+/**
  * Minimal abuse guard: throttle by IP hash + action.
  */
 private static function analytics_throttle(string $action, int $post_id): bool {
@@ -3865,6 +3880,9 @@ public static function rest_track_view(\WP_REST_Request $req): \WP_REST_Response
 
     // Back-compat: older builds summed 'view_count'. Keep it in sync.
     self::bump_counter($letter_id, 'view_count', 1);
+
+    // Daily view counter for Command Center dashboard.
+    self::bump_daily_views();
 
     // Make the stats row feel "live".
     delete_transient('rts_site_stats_v1');
@@ -3975,6 +3993,7 @@ public static function ajax_get_next_letter(): void {
         wp_send_json_success(['ok' => true, 'throttled' => true]);
     }
     self::bump_counter($letter_id, 'rts_views', 1);
+    self::bump_daily_views();
     wp_send_json_success(['ok' => true]);
 }
 
