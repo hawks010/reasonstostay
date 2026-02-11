@@ -50,6 +50,56 @@ final class RTS_Workflow_Admin {
         echo self::get_workflow_strip_html();
     }
 
+    /**
+     * Return the workflow strip HTML for the Letters list screen.
+     *
+     * NOTE: This must return a string (not echo) because it is used from
+     * admin_notices where output ordering matters.
+     */
+    private static function get_workflow_strip_html(): string {
+        if (!current_user_can('edit_others_posts')) return '';
+        if (!function_exists('rts_get_workflow_badge_config')) return '';
+
+        $cfg   = rts_get_workflow_badge_config();
+        $order = ['pending_review','flagged_draft','ingested','approved_published','skipped_published'];
+
+        ob_start();
+
+        // Clear floats so we never overlap the list table controls.
+        echo '<div class="rts-card rts-workflow-strip" style="clear:both; width:100%;">';
+        echo '<div class="rts-workflow-strip__row">';
+        echo '<strong class="rts-workflow-strip__title">Workflow</strong>';
+
+        foreach ($order as $stage) {
+            $count = class_exists('RTS_Workflow') ? RTS_Workflow::count_by_stage($stage) : 0;
+            $badge = $cfg[$stage] ?? [
+                'label' => ucwords(str_replace('_',' ', $stage)),
+                'color' => 'gray',
+                'icon'  => 'dashicons-marker',
+            ];
+
+            $url = add_query_arg(
+                ['post_type' => 'letter', 'rts_stage' => $stage],
+                admin_url('edit.php')
+            );
+
+            echo '<a href="' . esc_url($url) . '" class="rts-workflow-strip__link">';
+            echo '<span class="rts-badge rts-badge-' . esc_attr($badge['color']) . '">';
+            echo '<span class="dashicons ' . esc_attr($badge['icon']) . '"></span> ';
+            echo esc_html($badge['label']) . ' (' . (int) $count . ')';
+            echo '</span></a>';
+        }
+
+        // Backfill status indicator.
+        if (get_transient(self::BACKFILL_LOCK)) {
+            echo '<span class="rts-workflow-strip__status">Backfill running…</span>';
+        }
+
+        echo '</div></div>';
+
+        return (string) ob_get_clean();
+    }
+
     public static function menus(): void {
         add_submenu_page(
             'edit.php?post_type=letter',

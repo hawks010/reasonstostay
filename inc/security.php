@@ -125,8 +125,7 @@ class RTS_Security {
                         </a>
                     </div>
                 </div>
-            </div>
-            
+
             <table class="widefat fixed striped">
                 <thead>
                     <tr>
@@ -154,6 +153,7 @@ class RTS_Security {
                     <?php endif; ?>
                 </tbody>
             </table>
+            </div>
         </div>
         <?php
     }

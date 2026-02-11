@@ -2025,3 +2025,14 @@ body.rts-admin-scope #contextual-help-wrap a,
 body.rts-admin-scope #screen-options-wrap a {
   color: #22d3ee;
 }
+
+
+/* Security Logs table inside analytics container */
+.rts-analytics-container table.widefat.fixed.striped{
+  margin-top:16px;
+  border-radius:16px;
+  overflow:hidden;
+}
+.rts-analytics-container table.widefat.fixed.striped thead th{
+  background: rgba(255,255,255,0.06);
+}
