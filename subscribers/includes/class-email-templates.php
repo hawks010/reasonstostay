@@ -262,6 +262,6 @@ default:
      * @return string
      */
     private function signature_date() {
-        return gmdate('Y-m-d');
+        return gmgmdate('Y-m-d');
     }
 }

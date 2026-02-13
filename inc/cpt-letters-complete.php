@@ -33,7 +33,7 @@ class RTS_CPT_Letters_System {
         add_action('init', [$this, 'register_taxonomies']);
         
         // Prevent auto-draft creation for letters (v2.0.18)
-        add_filter('wp_insert_post_data', [$this, 'prevent_auto_draft'], 10, 2);
+        // NOTE: We no longer force auto-drafts to trash. WordPress cleans auto-drafts automatically.
         
         // Meta boxes
         add_action('add_meta_boxes', [$this, 'add_meta_boxes']);
@@ -666,7 +666,12 @@ $generated_gmt     = '';
         if (!current_user_can('manage_options')) {
             wp_die('Forbidden');
         }
-        check_admin_referer('rts_rescan_pending_letters');
+        $nonce = isset($_REQUEST['_wpnonce']) ? sanitize_text_field(wp_unslash($_REQUEST['_wpnonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'rts_rescan_pending_letters')) {
+            $url = add_query_arg(array('rts_notice' => 'nonce_failed'), admin_url('edit.php?post_type=letter&page=rts_workflow'));
+            wp_safe_redirect($url);
+            exit;
+        }
 
         // Use the engine batch size when present, otherwise sane default.
         $batch = 50;
@@ -1488,25 +1493,10 @@ public function admin_css(): void {
      * allow it (so the editor works) but mark it so moderation doesn't queue empty posts.
      */
     public function prevent_auto_draft($data, $postarr) {
-        if (!isset($data['post_type']) || $data['post_type'] !== 'letter') {
-            return $data;
-        }
-
-        // Allow auto-drafts created via admin "Add New" (they are needed for the editor).
-        // But if this is an auto-draft with empty content AND it's not an explicit admin action,
-        // block it entirely by setting post_status to 'trash' so it won't pollute the list.
-        if ($data['post_status'] === 'auto-draft') {
-            $has_content = !empty(trim($data['post_content'] ?? ''));
-            $is_admin_new = is_admin() && (isset($_GET['post_type']) || isset($_GET['action']));
-
-            if (!$has_content && !$is_admin_new && !isset($_POST['post_title'])) {
-                // Silently block: set to trash so it's never visible.
-                $data['post_status'] = 'trash';
-            }
-        }
-
         return $data;
     }
+
+
 
     /**
      * Disable autosave on letter edit screens to prevent auto-draft spam.

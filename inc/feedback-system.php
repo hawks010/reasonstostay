@@ -343,7 +343,7 @@ class RTS_Feedback_System {
     public function ajax_submit_feedback() {
         // CSRF protection.
         $nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
-        if (!$nonce || !wp_verify_nonce($nonce, 'rts_feedback_submit')) {
+        if (!$nonce || !(wp_verify_nonce($nonce, 'rts_feedback_submit') || wp_verify_nonce($nonce, 'wp_rest'))) {
             wp_send_json_error(['message' => 'Invalid security token'], 403);
         }
 

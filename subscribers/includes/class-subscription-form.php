@@ -12,9 +12,9 @@ class RTS_Subscription_Form {
         wp_enqueue_script('rts-subscription-js');
 
         $signups_enabled = (bool) get_option('rts_newsletter_signups_enabled', false);
-        $pause_logo_url = (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        $pause_logo_url = (string) get_option('rts_frontend_pause_logo_url', get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png');
         if ($pause_logo_url === '') {
-            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+            $pause_logo_url = get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png';
         }
 
         $form_id = uniqid('rts-subscribe-');

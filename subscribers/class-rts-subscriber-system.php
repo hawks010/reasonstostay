@@ -373,7 +373,7 @@ public function register_letter_cpt() {
             'rts_webhook_secret' => '',
             'rts_letter_submissions_enabled' => false,
             'rts_newsletter_signups_enabled' => false,
-            'rts_frontend_pause_logo_url' => 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png',
+            'rts_frontend_pause_logo_url' => get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png',
         );
         foreach ($defaults as $key => $value) {
             if (false === get_option($key)) add_option($key, $value);
@@ -799,7 +799,62 @@ public function register_letter_cpt() {
      * table for active subscribers whose next_send_date has passed, selects a
      * random unsent letter, enqueues it, and calculates the next send date.
      */
-    public function process_automated_emails() {
+    
+/**
+ * Cache-friendly pool of email-ready published letters.
+ *
+ * Avoids ORDER BY RAND() and repeated queries inside cron loops.
+ *
+ * @return int[]
+ */
+private function get_cached_email_ready_letter_ids() {
+    $key = 'rts_email_ready_letter_ids_v1';
+    $ids = get_transient($key);
+    if (is_array($ids) && !empty($ids)) {
+        return array_values(array_unique(array_map('absint', $ids)));
+    }
+
+    $q_args = [
+        'post_type'      => 'letter',
+        'post_status'    => 'publish',
+        'posts_per_page' => 2000,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+        'meta_query'     => [
+            [
+                'key'     => '_rts_email_ready',
+                'value'   => ['1', 'true'],
+                'compare' => 'IN',
+            ],
+        ],
+    ];
+
+    // Primary workflow decision: stage=published when available.
+    if (class_exists('RTS_Workflow')) {
+        $q_args['meta_query'][] = [
+            'key'   => RTS_Workflow::META_STAGE,
+            'value' => RTS_Workflow::STAGE_PUBLISHED,
+        ];
+    }
+
+    $ids = [];
+    $paged = 1;
+    do {
+        $q_args['paged'] = $paged;
+        $q = new WP_Query($q_args);
+        if (!empty($q->posts)) {
+            $ids = array_merge($ids, array_map('absint', $q->posts));
+        }
+        $paged++;
+    } while (!empty($q->posts) && $paged <= 200);
+
+    $ids = array_values(array_unique(array_filter($ids)));
+    set_transient($key, $ids, 15 * MINUTE_IN_SECONDS);
+
+    return $ids;
+}
+
+public function process_automated_emails() {
         global $wpdb;
         $table = $wpdb->prefix . 'rts_subscribers';
 
@@ -836,6 +891,11 @@ public function register_letter_cpt() {
         $templates = new RTS_Email_Templates();
         $queue = new RTS_Email_Queue();
         $logs_table = $wpdb->prefix . 'rts_email_logs';
+
+        $eligible_pool = $this->get_cached_email_ready_letter_ids();
+        if (!empty($eligible_pool)) {
+            shuffle($eligible_pool);
+        }
 
         foreach ($subscribers as $sub) {
             $subscriber_id = intval($sub->post_id);
@@ -878,27 +938,21 @@ public function register_letter_cpt() {
                 ));
                 $sent_ids = array_values(array_unique(array_filter(array_map('intval', (array) $sent_ids))));
             }
-
-            // Select a random published letter they haven't received
-            $letter_args = array(
-                'post_type'      => 'letter',
-                'post_status'    => 'publish',
-                'posts_per_page' => 1,
-                'orderby'        => 'rand',
-                'no_found_rows'  => true,
-                'meta_query'     => array(
-                    array(
-                        'key'   => '_rts_email_ready',
-                        'value' => array('1', 'true'),
-                        'compare' => 'IN',
-                    ),
-                ),
-            );
-            if (!empty($sent_ids)) {
-                $letter_args['post__not_in'] = $sent_ids;
+            // Select a letter they haven't received using cached pool (no ORDER BY RAND()).
+            $candidate_pool = $eligible_pool;
+            if (!empty($sent_ids) && !empty($candidate_pool)) {
+                $candidate_pool = array_values(array_diff($candidate_pool, $sent_ids));
+            }
+            $letter_id = null;
+            if (!empty($candidate_pool)) {
+                $letter_id = (int) $candidate_pool[array_rand($candidate_pool)];
             }
 
-            $letters = get_posts($letter_args);
+            $letter_post = null;
+            if ($letter_id) {
+                $letter_post = get_post($letter_id);
+            }
+            $letters = $letter_post ? [ $letter_post ] : [];
 
             if (empty($letters)) {
                 // All caught up: send the all_caught_up template
@@ -1056,6 +1110,13 @@ public function register_letter_cpt() {
         }
         $synced[$post_id] = true;
 
+        // Lightweight lock to reduce race conditions during rapid/bulk updates.
+        $lock_key = 'rts_sync_subscriber_lock_' . (int) $post_id;
+        if (get_transient($lock_key)) {
+            return;
+        }
+        set_transient($lock_key, 1, 5);
+
         global $wpdb;
         $table = $wpdb->prefix . 'rts_subscribers';
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
@@ -1142,7 +1203,7 @@ public function register_letter_cpt() {
         if (!$token) {
             return home_url('/');
         }
-        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . date('Y-m-d'), wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . gmdate('Y-m-d'), wp_salt('auth'));
         return add_query_arg(array('rts_unsubscribe' => $token, 'sig' => $sig), home_url('/'));
     }
 

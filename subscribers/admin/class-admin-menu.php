@@ -1085,7 +1085,7 @@ public function render_add_subscriber_card() {
 
                     <div class="rts-form-row rts-frontend-controls__logo">
                         <label class="rts-form-label">Paused Form Overlay Logo URL</label>
-                        <input class="rts-form-input" type="url" name="rts_frontend_pause_logo_url" value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png')); ?>">
+                        <input class="rts-form-input" type="url" name="rts_frontend_pause_logo_url" value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png')); ?>">
                     </div>
 
                     <div class="rts-button-group">
@@ -2976,7 +2976,7 @@ public function render_add_subscriber_card() {
                     <div class="rts-form-row">
                         <label class="rts-form-label">Paused Form Overlay Logo URL</label>
                         <input type="url" name="rts_frontend_pause_logo_url"
-                               value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png')); ?>"
+                               value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png')); ?>"
                                class="rts-form-input" placeholder="https://example.com/logo.png">
                         <span class="rts-form-description">Shown in the disabled form overlay when submissions are paused.</span>
                     </div>

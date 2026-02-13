@@ -56,9 +56,82 @@ function rts_embed_parse_exclude( $exclude_raw ) {
     return array_values( array_unique( $ids ) );
 }
 
+
+/**
+ * Get cached list of published letter IDs for embeds.
+ *
+ * Caches the whole pool so exclude lists don't destroy cache hit rate.
+ *
+ * @return int[]
+ */
+function rts_embed_get_cached_letter_ids() {
+    $key = 'rts_embed_letter_ids_v1';
+    $ids = get_transient($key);
+    if (is_array($ids) && !empty($ids)) {
+        return array_values(array_unique(array_map('absint', $ids)));
+    }
+
+    $q_args = [
+        'post_type'      => 'letter',
+        'post_status'    => 'publish',
+        'posts_per_page' => 2000,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+    ];
+
+    // Primary workflow decision: stage=published when available.
+    if (class_exists('RTS_Workflow')) {
+        $q_args['meta_query'] = [
+            [
+                'key'   => RTS_Workflow::META_STAGE,
+                'value' => RTS_Workflow::STAGE_PUBLISHED,
+            ],
+        ];
+    }
+
+    $ids = [];
+    $paged = 1;
+    do {
+        $q_args['paged'] = $paged;
+        $q = new WP_Query($q_args);
+        if (!empty($q->posts)) {
+            $ids = array_merge($ids, array_map('absint', $q->posts));
+        }
+        $paged++;
+    } while (!empty($q->posts) && $paged <= 200);
+
+    $ids = array_values(array_unique(array_filter($ids)));
+    set_transient($key, $ids, 60 * MINUTE_IN_SECONDS);
+
+    return $ids;
+}
+
+/**
+ * Pick a random embed letter ID from cached pool.
+ *
+ * @param int[] $exclude
+ * @return int|null
+ */
+function rts_embed_pick_random_id(array $exclude = []) {
+    $pool = rts_embed_get_cached_letter_ids();
+    if (empty($pool)) {
+        return null;
+    }
+    if (!empty($exclude)) {
+        $exclude = array_slice(array_values(array_unique(array_map('absint', $exclude))), 0, 200);
+        $pool = array_values(array_diff($pool, $exclude));
+    }
+    if (empty($pool)) {
+        return null;
+    }
+    $idx = array_rand($pool);
+    return (int) $pool[$idx];
+}
+
 /**
  * Return a random published letter for the embed widget.
  */
+
 function rts_embed_random_letter( WP_REST_Request $request ) {
 
     // Handle preflight (Standard 200 OK)
@@ -68,35 +141,30 @@ function rts_embed_random_letter( WP_REST_Request $request ) {
 
     $exclude = rts_embed_parse_exclude( (string) $request->get_param( 'exclude' ) );
 
-    // Cache key includes exclude list (so "read another" isn't stuck on one cached item).
-    $transient_key = 'rts_embed_random_letter_' . md5( implode( ',', $exclude ) );
-    $cached        = get_transient( $transient_key );
-
-    if ( false !== $cached ) {
-        $response = new WP_REST_Response( $cached, 200 );
-        $response->header( 'X-RTS-Cache', 'HIT' );
-        return $response;
-    }
-
-    $query = new WP_Query( [
-        'post_type'      => 'letter',
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'rand',
-        'no_found_rows'  => true,
-        'fields'         => 'ids',
-        'post__not_in'   => $exclude,
-    ] );
-
-    if ( ! $query->have_posts() ) {
+    $post_id = rts_embed_pick_random_id($exclude);
+    if ( empty( $post_id ) ) {
         return new WP_REST_Response(
             [ 'error' => 'No letters available.' ],
             404
         );
     }
 
-    $post_id = (int) $query->posts[0];
-    $post    = get_post( $post_id );
+    // Cache the rendered payload per-letter for fast repeat delivery.
+    $payload_key = 'rts_embed_letter_payload_' . (int) $post_id;
+    $cached = get_transient($payload_key);
+    if ( false !== $cached && is_array($cached) ) {
+        $response = new WP_REST_Response( $cached, 200 );
+        $response->header( 'X-RTS-Cache', 'HIT' );
+        return $response;
+    }
+
+    $post = get_post( (int) $post_id );
+    if ( ! $post ) {
+        return new WP_REST_Response(
+            [ 'error' => 'No letters available.' ],
+            404
+        );
+    }
 
     $author_name = get_post_meta( $post_id, 'rts_author_name', true );
     $author_name = $author_name ? sanitize_text_field( $author_name ) : 'Anonymous';
@@ -122,13 +190,13 @@ function rts_embed_random_letter( WP_REST_Request $request ) {
         'logo_url'     => $logo_url ? esc_url_raw( $logo_url ) : '',
     ];
 
-    // Cache this specific letter query result for 5 minutes
-    set_transient( $transient_key, $data, 5 * MINUTE_IN_SECONDS );
+    set_transient( $payload_key, $data, 10 * MINUTE_IN_SECONDS );
 
     $response = new WP_REST_Response( $data, 200 );
     $response->header( 'X-RTS-Cache', 'MISS' );
     return $response;
 }
+
 
 /**
  * Stable Asset Loader (Virtual URL)

@@ -15,7 +15,7 @@ class RTS_Newsletter_API {
 
     public function __construct() {
         add_action('rest_api_init', array($this, 'register_routes'));
-        add_action('init', array($this, 'maybe_seed_default_templates'), 30);
+        add_action('admin_init', array($this, 'maybe_seed_default_templates'), 30);
     }
 
     public function register_routes() {
@@ -563,7 +563,8 @@ class RTS_Newsletter_API {
         global $wpdb;
         $table = $wpdb->prefix . 'rts_newsletter_versions';
         if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
-            return;
+            update_option('rts_newsletter_templates_seeded_v1', 1, false);
+        return;
         }
 
         $post = get_post($post_id);
@@ -616,6 +617,18 @@ class RTS_Newsletter_API {
     }
 
     public function maybe_seed_default_templates() {
+        // Run once, and only in wp-admin when visiting RTS Newsletter screens.
+        if (!is_admin() || !current_user_can('manage_options')) {
+            return;
+        }
+        if (get_option('rts_newsletter_templates_seeded_v1')) {
+            return;
+        }
+        $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
+        if ($page && strpos($page, 'rts-newsletter') === false && strpos($page, 'rts_newsletter') === false) {
+            return;
+        }
+
         global $wpdb;
         $table = $wpdb->prefix . 'rts_newsletter_templates';
         if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
@@ -660,6 +673,8 @@ class RTS_Newsletter_API {
                 'created_at' => current_time('mysql', true),
             ), array('%s', '%s', '%s', '%d', '%d', '%s'));
         }
+
+        update_option('rts_newsletter_templates_seeded_v1', 1, false);
     }
 
     /**

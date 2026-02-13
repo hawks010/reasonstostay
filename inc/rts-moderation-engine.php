@@ -1486,6 +1486,26 @@ if (!class_exists('RTS_Engine_Dashboard')) {
                     return current_user_can('manage_options');
                 },
             ]);
+
+            // Frontend engagement tracking (used by rts-system.js). These routes are public
+            // and intentionally minimal: they only increment counters with throttling.
+            register_rest_route('rts/v1', '/track/view', [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'rest_track_view'],
+                'permission_callback' => '__return_true',
+            ]);
+
+            register_rest_route('rts/v1', '/track/helpful', [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'rest_track_helpful'],
+                'permission_callback' => '__return_true',
+            ]);
+
+            register_rest_route('rts/v1', '/track/rate', [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'rest_track_rate'],
+                'permission_callback' => '__return_true',
+            ]);
         }
 
 
@@ -4536,7 +4556,7 @@ private static function get_next_letter_payload(array $exclude_ids = []): ?array
  */
 public static function queue_letter_scan(int $post_id, bool $force = false): bool {
     if ($post_id <= 0) return false;
-    if (!function_exists('as_schedule_single_action') || !rts_as_available()) return false;
+    if (!function_exists('as_schedule_single_action') || !function_exists('rts_as_available') || !rts_as_available()) return false;
 
     $stage = (string) get_post_meta($post_id, RTS_Workflow::META_STAGE, true);
 
@@ -4564,7 +4584,7 @@ public static function queue_letter_scan(int $post_id, bool $force = false): boo
  * Enqueues a batch of UNPROCESSED letters only.
  */
 public static function handle_scan_pump(): void {
-    if (!function_exists('as_schedule_single_action') || !rts_as_available()) return;
+    if (!function_exists('as_schedule_single_action') || !function_exists('rts_as_available') || !rts_as_available()) return;
 
     $batch = (int) get_option(self::OPTION_AUTO_BATCH, 100);
     if ($batch < 1) $batch = 50;
@@ -5075,23 +5095,23 @@ if (!class_exists('RTS_Moderation_Bootstrap')) {
             $batch = (int) get_option(RTS_Engine_Dashboard::OPTION_AUTO_BATCH, 50);
             $batch = max(5, min(100, $batch));
 
-            // Queue oldest pending letters via Dashboard utility
+            // Queue UNPROCESSED letters only (stage-based)
             $pending = new \WP_Query([
                 'post_type'      => 'letter',
                 'post_status'    => 'any',
                 'fields'         => 'ids',
                 'posts_per_page' => $batch,
-                'orderby'        => 'date',
+                'orderby'        => 'ID',
                 'order'          => 'ASC',
                 'no_found_rows'  => true,
+                'meta_query'     => [
+                    [ 'key' => RTS_Workflow::META_STAGE, 'value' => RTS_Workflow::STAGE_UNPROCESSED ],
+                ],
             ]);
-            foreach ($pending->posts as $id) {
-                $id = (int) $id;
-                if ((string) get_post_meta($id, 'rts_analysis_status', true) === 'processed') {
-                    continue;
-                }
-                RTS_Engine_Dashboard::queue_letter_scan($id);
+            foreach ((array) $pending->posts as $id) {
+                RTS_Engine_Dashboard::queue_letter_scan((int) $id, false);
             }
+            wp_reset_postdata();
         }
 	}
 }

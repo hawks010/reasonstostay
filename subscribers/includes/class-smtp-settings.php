@@ -343,7 +343,7 @@ class RTS_SMTP_Settings {
         ));
         register_setting(self::OPTION_GROUP, 'rts_frontend_pause_logo_url', array(
             'type' => 'string',
-            'default' => 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png',
+            'default' => get_stylesheet_directory_uri() . '/assets/img/rts-pause-logo.png',
             'sanitize_callback' => 'esc_url_raw'
         ));
 
