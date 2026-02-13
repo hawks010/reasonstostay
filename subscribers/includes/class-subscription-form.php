@@ -11,6 +11,12 @@ class RTS_Subscription_Form {
         wp_enqueue_style('rts-frontend-css');
         wp_enqueue_script('rts-subscription-js');
 
+        $signups_enabled = (bool) get_option('rts_newsletter_signups_enabled', false);
+        $pause_logo_url = (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
+
         $form_id = uniqid('rts-subscribe-');
         $nonce = wp_create_nonce('rts_subscribe_nonce');
 
@@ -21,7 +27,17 @@ class RTS_Subscription_Form {
 
         ob_start();
         ?>
-        <div class="rts-subscribe-wrapper" id="<?php echo esc_attr($form_id); ?>">
+        <div class="rts-subscribe-wrapper rts-form-gated <?php echo $signups_enabled ? '' : 'is-disabled'; ?>" id="<?php echo esc_attr($form_id); ?>">
+
+            <?php if (!$signups_enabled) : ?>
+                <div class="rts-form-overlay" role="status" aria-live="polite">
+                    <div class="rts-form-overlay-card">
+                        <img src="<?php echo esc_url($pause_logo_url); ?>" alt="Reasons to Stay" class="rts-form-overlay-logo" loading="lazy" decoding="async">
+                        <h3>Newsletter Signups Are Temporarily Closed</h3>
+                        <p>This form is paused right now. Please check back soon.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <form class="rts-subscribe-form" method="post">
                 <!-- Security Tokens -->

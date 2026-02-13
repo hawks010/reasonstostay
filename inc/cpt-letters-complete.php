@@ -202,7 +202,7 @@ class RTS_CPT_Letters_System {
         // Quick approve/unflag meta box (only shows for quarantined letters)
         add_meta_box(
             'rts_quick_approve',
-            'Quarantine Status',
+            'Quarantined Status',
             [$this, 'render_quick_approve_box'],
             'letter',
             'side',
@@ -256,13 +256,14 @@ class RTS_CPT_Letters_System {
     }
 
     public function save_meta_boxes($post_id) {
-        if (!isset($_POST['rts_letter_meta_nonce']) || !wp_verify_nonce($_POST['rts_letter_meta_nonce'], 'rts_letter_meta_save')) return;
+        $nonce = isset($_POST['rts_letter_meta_nonce']) ? sanitize_text_field(wp_unslash($_POST['rts_letter_meta_nonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'rts_letter_meta_save')) return;
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
         if (!current_user_can('edit_post', $post_id)) return;
 
-        $author_name  = isset($_POST['rts_author_name']) ? sanitize_text_field($_POST['rts_author_name']) : '';
-        $author_email = isset($_POST['rts_author_email']) ? sanitize_email($_POST['rts_author_email']) : '';
-        $reading_time = isset($_POST['rts_reading_time']) ? sanitize_key($_POST['rts_reading_time']) : '';
+        $author_name  = isset($_POST['rts_author_name']) ? sanitize_text_field(wp_unslash($_POST['rts_author_name'])) : '';
+        $author_email = isset($_POST['rts_author_email']) ? sanitize_email(wp_unslash($_POST['rts_author_email'])) : '';
+        $reading_time = isset($_POST['rts_reading_time']) ? sanitize_key(wp_unslash($_POST['rts_reading_time'])) : '';
 
         if ($author_email && !is_email($author_email)) $author_email = '';
 
@@ -278,14 +279,14 @@ class RTS_CPT_Letters_System {
 
         // Manual stats override (for Wix imports)
         if (isset($_POST['rts_view_count'])) {
-            $view_count = intval($_POST['rts_view_count']);
+            $view_count = intval(wp_unslash($_POST['rts_view_count']));
             if ($view_count >= 0) {
                 update_post_meta($post_id, 'view_count', $view_count);
             }
         }
 
         if (isset($_POST['rts_help_count'])) {
-            $help_count = intval($_POST['rts_help_count']);
+            $help_count = intval(wp_unslash($_POST['rts_help_count']));
             if ($help_count >= 0) {
                 update_post_meta($post_id, 'help_count', $help_count);
             }
@@ -297,7 +298,8 @@ class RTS_CPT_Letters_System {
      */
     public function render_quick_approve_box($post) {
         $needs_review = get_post_meta($post->ID, 'needs_review', true);
-        $is_quarantined = ($needs_review === '1' && $post->post_status === 'draft');
+        // Authoritative quarantine signal is workflow stage.
+        $is_quarantined = (class_exists('RTS_Workflow') && RTS_Workflow::get_stage((int) $post->ID) === RTS_Workflow::STAGE_QUARANTINED);
         
         if (!$is_quarantined) {
             echo '<p style="color:#155724;background:#d4edda;padding:10px;border-radius:4px;margin:0;">✓ This letter is not quarantined.</p>';
@@ -311,7 +313,7 @@ class RTS_CPT_Letters_System {
         echo '<p style="margin:0 0 5px 0;font-weight:600;color:#856404;">⚠ Quarantined</p>';
         
         if (!empty($reasons)) {
-            echo '<p style="margin:0;font-size:12px;color:#666;">Flagged for:</p>';
+            echo '<p style="margin:0;font-size:12px;color:#666;">Reasons:</p>';
             echo '<ul style="margin:5px 0 0 0;padding-left:20px;font-size:11px;color:#666;">';
             foreach (array_slice($reasons, 0, 5) as $reason) {
                 echo '<li>' . esc_html($reason) . '</li>';
@@ -334,12 +336,12 @@ class RTS_CPT_Letters_System {
         echo '</a>';
         
         echo '<p style="font-size:11px;color:#666;margin:8px 0 0 0;line-height:1.4;">';
-        echo 'This will clear the quarantine flag, set status to pending, and queue the letter for a fresh scan.';
+        echo 'This will clear the quarantine flag, reset the letter to unprocessed, and queue it for a fresh scan.';
         echo '</p>';
         
         echo '<hr style="margin:12px 0;border:0;border-top:1px solid #ddd;">';
         
-        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=rts-quarantine')) . '" class="button" style="width:100%;text-align:center;">';
+        echo '<a href="' . esc_url(admin_url('edit.php?post_type=letter&rts_stage=quarantined')) . '" class="button" style="width:100%;text-align:center;">';
         echo 'View All Quarantined';
         echo '</a>';
     }
@@ -419,24 +421,64 @@ class RTS_CPT_Letters_System {
         if (!is_admin()) return;
         if (!current_user_can('manage_options')) return;
         if (!$this->is_letters_screen()) return;
-		// Source of truth: live counts (avoid cache drift between screens)
-		$counts            = wp_count_posts('letter');
-		$letters_published = (int) ($counts->publish ?? 0);
-		$letters_pending   = (int) ($counts->pending ?? 0);
-		$letters_draft     = (int) ($counts->draft ?? 0);
-		$letters_future    = (int) ($counts->future ?? 0);
-		$letters_private   = (int) ($counts->private ?? 0);
-        $needs_review      = (int) $this->count_needs_review_live();
-		// Match RTS Moderation Engine "Total" across admin screens.
-		$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_future + $letters_private;
-        $feedback_total    = (int) wp_count_posts('rts_feedback')->publish + (int) wp_count_posts('rts_feedback')->pending;
-        $generated_gmt     = '';
+// Source of truth: live counts (avoid wp_count_posts() cache drift after bulk SQL updates)
+global $wpdb;
+$rows = $wpdb->get_results(
+$wpdb->prepare(
+"SELECT post_status, COUNT(1) AS cnt FROM {$wpdb->posts} WHERE post_type=%s GROUP BY post_status",
+'letter'
+),
+ARRAY_A
+);
+$map = [
+'publish' => 0,
+'pending' => 0,
+'draft'   => 0,
+'future'  => 0,
+'private' => 0,
+];
+if (is_array($rows)) {
+foreach ($rows as $r) {
+$st = isset($r['post_status']) ? (string) $r['post_status'] : '';
+if ($st === '') continue;
+$map[$st] = (int) ($r['cnt'] ?? 0);
+}
+}
+
+$letters_published = (int) ($map['publish'] ?? 0);
+$letters_pending   = (int) ($map['pending'] ?? 0);
+$letters_draft     = (int) ($map['draft'] ?? 0);
+$letters_future    = (int) ($map['future'] ?? 0);
+$letters_private   = (int) ($map['private'] ?? 0);
+$needs_review      = (int) $this->count_needs_review_live();
+
+// Match RTS Moderation Engine "Total" across admin screens.
+$letters_total     = $letters_published + $letters_pending + $letters_draft + $letters_future + $letters_private;
+
+$fb_rows = $wpdb->get_results(
+$wpdb->prepare(
+"SELECT post_status, COUNT(1) AS cnt FROM {$wpdb->posts} WHERE post_type=%s GROUP BY post_status",
+'rts_feedback'
+),
+ARRAY_A
+);
+$feedback_total = 0;
+if (is_array($fb_rows)) {
+foreach ($fb_rows as $r) {
+$st = isset($r['post_status']) ? (string) $r['post_status'] : '';
+if ($st === 'publish' || $st === 'pending') {
+$feedback_total += (int) ($r['cnt'] ?? 0);
+}
+}
+}
+
+$generated_gmt     = '';
 
         $true_inbox        = max(0, $letters_pending - $needs_review);
 
         $run_analytics_url = wp_nonce_url(admin_url('admin-post.php?action=rts_run_analytics_now'), 'rts_run_analytics_now');
         $rescan_url        = wp_nonce_url(admin_url('admin-post.php?action=rts_rescan_pending_letters'), 'rts_rescan_pending_letters');
-        $rts_dashboard_url = admin_url('admin.php?page=rts-dashboard');
+        $rts_dashboard_url = admin_url('edit.php?post_type=letter&page=rts-dashboard');
 
         ?>
         <div class="rts-analytics-container">
@@ -451,21 +493,21 @@ class RTS_CPT_Letters_System {
                             <span class="dashicons dashicons-chart-bar" aria-hidden="true"></span>
                             Open Dashboard
                         </a>
-                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_inbox=1')); ?>">
-                            <span class="dashicons dashicons-email" aria-hidden="true"></span>
-                            Review Inbox
+                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_stage=pending_review')); ?>">
+                            <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                            Open Pending Review
                         </a>
-                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_draft=1')); ?>">
+                        <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&rts_stage=quarantined')); ?>">
                             <span class="dashicons dashicons-shield" aria-hidden="true"></span>
-                            View Quarantine
+                            View Quarantined
                         </a>
                         <button type="button" class="button button-primary" id="rts-scan-inbox-btn">
                             <span class="dashicons dashicons-search" aria-hidden="true"></span>
-                            Scan Inbox Now
+                            Scan Unprocessed
                         </button>
                         <button type="button" class="button" id="rts-rescan-quarantine-btn">
                             <span class="dashicons dashicons-update" aria-hidden="true"></span>
-                            Rescan Quarantine
+                            Recheck Quarantined
                         </button>
                         <button type="button" class="button button-secondary" id="rts-refresh-status-btn">
                             <span class="dashicons dashicons-update" aria-hidden="true"></span>
@@ -477,8 +519,8 @@ class RTS_CPT_Letters_System {
                 <div class="rts-stats-grid">
                     <?php $this->render_stat_box('Total', $letters_total, admin_url('edit.php?post_type=letter'), '#1d2327', '#f0f0f1', '#dcdcde'); ?>
                     <?php $this->render_stat_box('Published', $letters_published, admin_url('edit.php?post_type=letter&post_status=publish'), '#0B3D2E', '#E7F7EF', '#b8e6d0'); ?>
-                    <?php $this->render_stat_box('Inbox', $true_inbox, admin_url('edit.php?post_type=letter&rts_inbox=1'), '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
-                    <?php $this->render_stat_box('Needs Review', $needs_review, admin_url('edit.php?post_type=letter&rts_draft=1'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
+                    <?php $this->render_stat_box('Pending Review', $true_inbox, admin_url('edit.php?post_type=letter&rts_stage=pending_review'), '#6B4E00', '#FFF4CC', '#f5e5a3'); ?>
+                    <?php $this->render_stat_box('Quarantined', $needs_review, admin_url('edit.php?post_type=letter&rts_stage=quarantined'), '#5B1B1B', '#FCE8E8', '#f5c2c2'); ?>
                     <?php $this->render_stat_box('Feedback', $feedback_total, admin_url('edit.php?post_type=rts_feedback'), '#1B3D5B', '#E8F3FC', '#b8d9f2'); ?>
                 </div>
             </div>
@@ -633,7 +675,8 @@ class RTS_CPT_Letters_System {
         }
         $batch = max(1, min(250, $batch));
 
-        // Queue pending letters + needs_review letters.
+        // HARD GUARD: Only queue unprocessed letters (draft + ingested stage or no stage).
+        // Must NOT select pending_review or quarantined letters.
         $q_args = [
             'post_type'      => 'letter',
             'posts_per_page' => $batch,
@@ -643,30 +686,22 @@ class RTS_CPT_Letters_System {
             'no_found_rows'  => true,
         ];
 
-        $pending = new \WP_Query(array_merge($q_args, ['post_status' => 'pending']));
-        if (!empty($pending->posts)) {
-            foreach ($pending->posts as $id) {
+	    $unprocessed = new \WP_Query(array_merge($q_args, [
+	        'post_status' => 'any',
+	        'meta_query'  => [
+	            [
+	                'key'   => RTS_Workflow::META_STAGE,
+	                'value' => RTS_Workflow::STAGE_UNPROCESSED,
+	            ],
+	        ],
+	    ]));
+        if (!empty($unprocessed->posts)) {
+            foreach ($unprocessed->posts as $id) {
                 $this->queue_letter_for_processing((int) $id);
             }
         }
 
-        $needs = new \WP_Query(array_merge($q_args, [
-            'post_status' => ['publish', 'pending', 'draft'],
-            'meta_query'  => [
-                [
-                    'key'   => 'needs_review',
-                    'value' => '1',
-                ],
-            ],
-        ]));
-        if (!empty($needs->posts)) {
-            foreach ($needs->posts as $id) {
-                $this->queue_letter_for_processing((int) $id);
-            }
-        }
-
-        // Kick quarantine loop as well (runs in chunks).
-        $this->kick_quarantine_loop($batch);
+        // Quarantined letters are NEVER auto-reprocessed. Manual recheck only.
 
         // Refresh analytics after queueing.
         if (function_exists('as_enqueue_async_action')) {
@@ -681,9 +716,21 @@ class RTS_CPT_Letters_System {
      * Queue a single letter for processing (Action Scheduler preferred, WP-Cron fallback).
      */
     private function queue_letter_for_processing(int $post_id): void {
+        
         if ($post_id <= 0 || get_post_type($post_id) !== 'letter') {
             return;
         }
+
+        // Strict stage guard: only unprocessed may be queued automatically.
+        if (class_exists('RTS_Workflow')) {
+            $stage = RTS_Workflow::get_stage($post_id);
+            if ($stage !== RTS_Workflow::STAGE_UNPROCESSED) {
+                return;
+            }
+        } else {
+            return;
+        }
+
 
         // Prefer Action Scheduler when available.
         if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
@@ -702,19 +749,10 @@ class RTS_CPT_Letters_System {
     /**
      * Start / continue the quarantine rescan loop.
      */
-    private function kick_quarantine_loop(int $batch): void {
-        $batch = max(1, min(250, $batch));
-
-        if (function_exists('as_schedule_single_action') && function_exists('as_next_scheduled_action')) {
-            if (!as_next_scheduled_action('rts_rescan_quarantine_loop', [0, $batch], 'rts')) {
-                as_schedule_single_action(time() + 5, 'rts_rescan_quarantine_loop', [0, $batch], 'rts');
-            }
-            return;
-        }
-
-        if (!wp_next_scheduled('rts_rescan_quarantine_loop', [0, $batch])) {
-            wp_schedule_single_event(time() + 15, 'rts_rescan_quarantine_loop', [0, $batch]);
-        }
+    private function kick_quarantine_loop(int $batch = 50): void {
+        // Quarantined letters must NEVER be auto-reprocessed.
+        // Manual recheck is provided via the Moderation Engine dashboard action.
+        return;
     }
 
     public function handle_enqueue_letter_rescan(): void {
@@ -842,7 +880,7 @@ class RTS_CPT_Letters_System {
         <select name="safety_status">
             <option value="">All Safety Levels</option>
             <option value="safe" <?php selected($safety_filter, 'safe'); ?>>✓ Safe</option>
-            <option value="flagged" <?php selected($safety_filter, 'flagged'); ?>>⚠️ Flagged</option>
+            <option value="flagged" <?php selected($safety_filter, 'flagged'); ?>>⚠️ Quarantined</option>
         </select>
         <?php
     }
@@ -1002,7 +1040,7 @@ class RTS_CPT_Letters_System {
             case 'letter_safety':
                 $needs_review = get_post_meta($post_id, 'needs_review', true);
                 if ($needs_review) {
-					echo '<span class="rts-safety rts-safety-flag">⚠️ Review</span>';
+					echo '<span class="rts-safety rts-safety-flag">⚠️ Quarantined</span>';
 
 					// Show why this letter is flagged (helps diagnose false positives).
 					$flags_json   = (string) get_post_meta($post_id, 'rts_flagged_keywords', true);
@@ -1136,10 +1174,10 @@ class RTS_CPT_Letters_System {
     
     public function register_bulk_actions($bulk_actions) {
         $bulk_actions['mark_safe'] = 'Mark as Safe';
-        $bulk_actions['mark_review'] = 'Mark for Review';
-        $bulk_actions['clear_quarantine_rescan'] = 'Clear Quarantine & Re-scan';
+        $bulk_actions['mark_review'] = 'Move to Quarantined';
+        $bulk_actions['clear_quarantine_rescan'] = 'Recheck Quarantined';
         $bulk_actions['rts_refine'] = 'Auto-Refine (Pending + Snapshot)';
-        $bulk_actions['rts_send_to_review'] = 'Send to Review (Workflow)';
+        $bulk_actions['rts_send_to_review'] = 'Move to Pending Review';
         return $bulk_actions;
     }
 
@@ -1256,7 +1294,7 @@ class RTS_CPT_Letters_System {
             'id'      => 'rts_workflow',
             'title'   => '🟢 Review workflow',
             'content' => '<p><strong>1. Auto-Refine:</strong> Fixes obvious spelling/grammar, removes unsafe HTML, adds "Dear Stranger" if missing.</p>' .
-                         '<p><strong>2. Pending Review:</strong> Refined letters move to <em>Pending</em>. Review and edit.</p>' .
+                         '<p><strong>2. Pending Review:</strong> Refined letters move to <em>Pending Review</em>. Review and edit.</p>' .
                          '<p><strong>3. Publish & Learn:</strong> When you hit Publish, the system compares your final version to the AI snapshot and learns from your changes.</p>',
         ]);
 
@@ -1278,7 +1316,7 @@ class RTS_CPT_Letters_System {
 
         $msg = isset($_GET['rts_msg']) ? sanitize_key(wp_unslash($_GET['rts_msg'])) : '';
         $map = [
-            'started'  => '🚀 Bulk Auto-Refine started. Refined letters will appear in Pending shortly.',
+            'started'  => '🚀 Bulk Auto-Refine started. Refined letters will appear in Pending Review shortly.',
             'unlocked' => '🔓 Letter unlocked. You can now run Auto-Refine again.',
             'reverted' => '↩️ Refinement reverted to the previous revision.',
         ];
@@ -1309,11 +1347,11 @@ public function admin_css(): void {
      * v2.0.18: Fixed to redirect back to referring page and prevent auto-draft creation
      */
     public function handle_quick_approve() {
-        if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'approve_' . $_GET['post'])) {
+        $post_id = isset($_GET['post']) ? absint(wp_unslash($_GET['post'])) : 0;
+        $nonce = isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '';
+        if (!$post_id || !$nonce || !wp_verify_nonce($nonce, 'approve_' . $post_id)) {
             wp_die('Invalid request');
         }
-        
-        $post_id = intval($_GET['post']);
 
         // Security check: ensure this is actually a letter post type
         if (get_post_type($post_id) !== 'letter') {
@@ -1379,11 +1417,11 @@ public function admin_css(): void {
      * v2.0.18: Added hook removal to prevent auto-draft creation
      */
     public function handle_quick_unflag() {
-        if (!isset($_GET['post']) || !wp_verify_nonce($_GET['_wpnonce'], 'unflag_' . $_GET['post'])) {
+        $post_id = isset($_GET['post']) ? absint(wp_unslash($_GET['post'])) : 0;
+        $nonce = isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '';
+        if (!$post_id || !$nonce || !wp_verify_nonce($nonce, 'unflag_' . $post_id)) {
             wp_die('Invalid request');
         }
-        
-        $post_id = intval($_GET['post']);
 
         // Security check: ensure this is actually a letter post type
         if (get_post_type($post_id) !== 'letter') {
@@ -1395,6 +1433,10 @@ public function admin_css(): void {
             wp_die('Permission denied.');
         }
         
+        // Mark explicit admin override to prevent immediate re-flag loops on rescans.
+        update_post_meta($post_id, 'rts_admin_override', '1');
+        update_post_meta($post_id, 'rts_admin_override_gmt', gmdate('c'));
+
         // Clear quarantine flags
         delete_post_meta($post_id, 'needs_review');
         delete_post_meta($post_id, 'rts_flagged');
@@ -1405,10 +1447,18 @@ public function admin_css(): void {
         // Remove save_post_letter hook temporarily to prevent unwanted side effects
         remove_action('save_post_letter', [$this, 'save_meta_boxes']);
         
-        // Set to pending so it goes to inbox
+        // Reset workflow stage for manual recheck.
+        if (class_exists('RTS_Workflow')) {
+            // Clear any stale processing markers.
+            delete_post_meta($post_id, RTS_Workflow::META_PROCESSING_STARTED_AT);
+            update_post_meta($post_id, RTS_Workflow::META_PROCESSING_LOCK, '0');
+            RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_UNPROCESSED, 'Admin cleared quarantine for manual recheck');
+        }
+
+        // Keep post_status as draft for visibility only.
         $result = wp_update_post([
             'ID' => $post_id,
-            'post_status' => 'pending'
+            'post_status' => 'draft'
         ], true);
 
         if (is_wp_error($result)) {
@@ -1418,7 +1468,8 @@ public function admin_css(): void {
         // Re-add the hook
         add_action('save_post_letter', [$this, 'save_meta_boxes']);
         
-        // Queue for fresh scan if Action Scheduler is available
+        // Queue for fresh scan if Action Scheduler is available.
+        // Note: the processing engine must still stage-guard and only operate on unprocessed.
         if (function_exists('as_schedule_single_action') && !as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
             as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
         }
@@ -1474,8 +1525,8 @@ public function admin_css(): void {
     public function register_admin_pages(): void {
         add_submenu_page(
             'edit.php?post_type=letter',
-            'Review Console',
-            'Review Console',
+            'Manual Review',
+            'Manual Review',
             'edit_others_posts',
             'rts_review_console',
             [$this, 'render_review_console_page']
@@ -1483,8 +1534,8 @@ public function admin_css(): void {
 
         add_submenu_page(
             'edit.php?post_type=letter',
-            'Learned Patterns',
-            'Patterns (AI)',
+            'Content Insights',
+            'Content Insights',
             'manage_options',
             'rts_patterns',
             [$this, 'render_patterns_page']
@@ -1527,20 +1578,20 @@ public function admin_css(): void {
         $editor_url = $active_id ? admin_url('post.php?post=' . $active_id . '&action=edit') : '';
 
         echo '<div class="wrap rts-review-console">';
-        echo '<h1 style="display:flex; align-items:center; gap:12px;">Review Console <span style="font-size:12px; font-weight:600; opacity:.8;">(Pending letters)</span></h1>';
+        echo '<h1 style="display:flex; align-items:center; gap:12px;">Manual Review <span style="font-size:12px; font-weight:600; opacity:.8;">(Pending Review)</span></h1>';
 
         echo '<div class="rts-review-toolbar">';
         echo '<form method="get" style="margin:0; display:flex; gap:8px; align-items:center;">';
         echo '<input type="hidden" name="post_type" value="letter" />';
         echo '<input type="hidden" name="page" value="rts_review_console" />';
-        echo '<input type="search" name="s" value="' . esc_attr($search) . '" placeholder="Search pending letters" class="regular-text" />';
+        echo '<input type="search" name="s" value="' . esc_attr($search) . '" placeholder="Search letters in Pending Review" class="regular-text" />';
         echo '<button class="button">Search</button>';
         echo '</form>';
 
         if ($active_id) {
             echo '<div class="rts-review-toolbar-actions">';
             echo '<a class="button" href="' . esc_url($editor_url) . '" target="_blank" rel="noopener">Open editor in new tab</a>';
-            echo '<a class="button button-primary" href="' . esc_url(admin_url('edit.php?post_type=letter&post_status=pending')) . '">Open full Pending list</a>';
+            echo '<a class="button button-primary" href="' . esc_url(admin_url('edit.php?post_type=letter&rts_stage=pending_review')) . '">Open Pending Review</a>';
             echo '</div>';
         }
         echo '</div>';
@@ -1580,7 +1631,7 @@ public function admin_css(): void {
                 echo '</a>';
             }
         } else {
-            echo '<p style="padding:12px;">No pending letters found.</p>';
+            echo '<p style="padding:12px;">No letters in Pending Review.</p>';
         }
         echo '</div>';
 

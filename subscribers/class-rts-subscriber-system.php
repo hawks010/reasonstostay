@@ -2,7 +2,7 @@
 /**
  * Plugin Name: RTS Subscriber System
  * Description: A complete subscriber management, newsletter, and analytics system.
- * Version: 2.0.39.12
+ * Version: 2.3.0
  * Author: RTS
  * Text Domain: rts-subscriber-system
  */
@@ -22,7 +22,7 @@ if (!defined('RTS_PLUGIN_URL')) {
     define('RTS_PLUGIN_URL', trailingslashit(get_stylesheet_directory_uri()) . 'subscribers/');
 }
 if (!defined('RTS_VERSION')) {
-    define('RTS_VERSION', '2.1.0');
+    define('RTS_VERSION', '2.3.0');
 }
 
 class RTS_Subscriber_System {
@@ -30,8 +30,8 @@ class RTS_Subscriber_System {
     private static $instance = null;
     
     // Versioning
-    const VERSION = '2.1.0';
-    const DB_VERSION = '2.1.0';
+    const VERSION = '2.3.0';
+    const DB_VERSION = '2.3.0';
     
     private $plugin_path;
     private $plugin_url;
@@ -48,6 +48,8 @@ class RTS_Subscriber_System {
     public $csv_importer;
     public $admin_menu;
     public $newsletter_cpt;
+    public $newsletter_api;
+    public $audit_logger;
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -108,6 +110,8 @@ class RTS_Subscriber_System {
             'class-subscription-form.php',
             'class-email-engine.php',
             'class-newsletter-cpt.php',
+            'class-newsletter-api.php',
+            'class-audit-logger.php',
             'class-email-queue.php',
             'class-email-templates.php',
             'class-smtp-settings.php',
@@ -139,6 +143,8 @@ class RTS_Subscriber_System {
         $components = array(
             'subscriber_cpt'    => 'RTS_Subscriber_CPT',
             'newsletter_cpt'    => 'RTS_Newsletter_CPT',
+            'newsletter_api'    => 'RTS_Newsletter_API',
+            'audit_logger'      => 'RTS_Audit_Logger',
             'subscription_form' => 'RTS_Subscription_Form',
             'email_engine'      => 'RTS_Email_Engine',
             'email_queue'       => 'RTS_Email_Queue',
@@ -151,9 +157,6 @@ class RTS_Subscriber_System {
         foreach ($components as $prop => $class) {
             if (class_exists($class)) {
                 $this->$prop = new $class();
-                if (method_exists($this->$prop, 'init_hooks')) {
-                    $this->$prop->init_hooks();
-                }
             } else {
                 error_log('[RTS Subscriber] Missing component class: ' . $class);
             }
@@ -353,7 +356,24 @@ public function register_letter_cpt() {
             'rts_smtp_reply_to' => get_option('admin_email'),
             'rts_email_batch_size' => 100,
             'rts_email_retry_attempts' => 3,
+            'rts_email_sending_enabled' => true,
+            'rts_email_demo_mode' => false,
             'rts_require_email_verification' => true,
+            'rts_capture_signups_while_offline' => true,
+            'rts_newsletter_batch_delay' => 5,
+            'rts_letters_require_manual_review' => true,
+            'rts_queue_retention_sent_days' => 90,
+            'rts_queue_retention_cancelled_days' => 30,
+            'rts_queue_stuck_timeout_minutes' => 60,
+            'rts_retention_email_logs_days' => 90,
+            'rts_retention_tracking_days' => 90,
+            'rts_retention_bounce_days' => 180,
+            'rts_webhook_enabled' => false,
+            'rts_webhook_url' => '',
+            'rts_webhook_secret' => '',
+            'rts_letter_submissions_enabled' => false,
+            'rts_newsletter_signups_enabled' => false,
+            'rts_frontend_pause_logo_url' => 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png',
         );
         foreach ($defaults as $key => $value) {
             if (false === get_option($key)) add_option($key, $value);
@@ -529,7 +549,12 @@ public function register_letter_cpt() {
             $wpdb->prefix . 'rts_email_bounces',
             $wpdb->prefix . 'rts_dead_letter_queue',
             $wpdb->prefix . 'rts_rate_limits',
-            $wpdb->prefix . 'rts_engagement'
+            $wpdb->prefix . 'rts_engagement',
+            $wpdb->prefix . 'rts_newsletter_versions',
+            $wpdb->prefix . 'rts_newsletter_analytics',
+            $wpdb->prefix . 'rts_newsletter_templates',
+            $wpdb->prefix . 'rts_newsletter_audit',
+            $wpdb->prefix . 'rts_system_audit',
         );
 
         foreach ($required as $table) {
@@ -617,6 +642,11 @@ public function register_letter_cpt() {
         // Verify nonce
         if (!check_ajax_referer('rts_subscribe_nonce', 'security', false)) {
             wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'));
+            return;
+        }
+
+        if (!(bool) get_option('rts_newsletter_signups_enabled', false)) {
+            wp_send_json_error(array('message' => 'Newsletter signups are temporarily paused. Please check back soon.'), 503);
             return;
         }
 
@@ -717,11 +747,37 @@ public function register_letter_cpt() {
         $this->sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs);
 
         // Send verification or welcome email
+        // Mail offline capture: store the subscriber, but do NOT queue verification/welcome.
+        if ((bool) get_option('rts_mail_system_offline', false)) {
+            $capture = (bool) get_option('rts_capture_signups_while_offline', true);
+            if (!$capture) {
+                wp_send_json_error(array('message' => 'Mail system is offline. Signups are temporarily paused. Please try again later.'), 503);
+                return;
+            }
+
+            update_post_meta($subscriber_id, '_rts_subscriber_status', 'captured_offline');
+            // Ensure scheduling table reflects non-active status.
+            $this->sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs);
+
+            wp_send_json_success(array(
+                'message' => 'Thanks! You are on the list. We will email you to verify once mail is back online.'
+            ));
+            return;
+        }
+
+
         $require_verification = (bool) get_option('rts_require_email_verification', true);
 
         if ($require_verification && $this->email_engine && method_exists($this->email_engine, 'send_verification_email')) {
-            $this->email_engine->send_verification_email($subscriber_id);
-            $message = 'Please check your email to verify your subscription.';
+            $result = $this->email_engine->send_verification_email($subscriber_id);
+            if (is_wp_error($result)) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('RTS subscription verification send failed: ' . $result->get_error_message());
+                }
+                $message = 'Subscription created, but verification email could not be queued. Please contact support.';
+            } else {
+                $message = 'Please check your email to verify your subscription.';
+            }
         } else {
             if ($this->email_engine && method_exists($this->email_engine, 'send_welcome_email')) {
                 $this->email_engine->send_welcome_email($subscriber_id);
@@ -803,6 +859,16 @@ public function register_letter_cpt() {
                 continue;
             }
 
+            // If re-consent is enabled, only send after explicit consent confirmation.
+            if (get_option('rts_email_reconsent_required')) {
+                $has_consent = (bool) get_post_meta($subscriber_id, '_rts_subscriber_consent_confirmed', true);
+                if (!$has_consent) {
+                    $next = $this->calculate_next_send_date($sub->frequency);
+                    $wpdb->update($table, array('next_send_date' => $next), array('id' => $sub->id), array('%s'), array('%d'));
+                    continue;
+                }
+            }
+
             // Get IDs of letters already sent to this subscriber
             $sent_ids = array();
             if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
@@ -823,7 +889,8 @@ public function register_letter_cpt() {
                 'meta_query'     => array(
                     array(
                         'key'   => '_rts_email_ready',
-                        'value' => 1,
+                        'value' => array('1', 'true'),
+                        'compare' => 'IN',
                     ),
                 ),
             );
@@ -846,35 +913,42 @@ public function register_letter_cpt() {
 
             $letter = $letters[0];
 
-            // Render using the frequency-appropriate digest template (reuses existing templates)
             $template_slug = 'automated_letter';
+            $subject_opt = get_option('rts_email_subject_automated_letter', false);
+            $body_opt    = get_option('rts_email_body_automated_letter', false);
+            $has_custom_template = ($subject_opt !== false || $body_opt !== false);
 
-            // Build the email using the branded renderer
-            $token = get_post_meta($subscriber_id, '_rts_subscriber_token', true);
-            $unsubscribe_url = $this->generate_unsubscribe_url($token);
-
-            // Use the new email renderer for branded output
-            if (!class_exists('RTS_Email_Renderer') && file_exists($includes_path . 'class-email-renderer.php')) {
-                require_once $includes_path . 'class-email-renderer.php';
-            }
-
-            $subject = get_bloginfo('name') . ' - ' . get_the_title($letter);
-            $letter_content = apply_filters('the_content', $letter->post_content);
-
-            if (class_exists('RTS_Email_Renderer')) {
-                $renderer = new RTS_Email_Renderer();
-                $body = $renderer->render('letter', array(
-                    'letter_title'    => esc_html(get_the_title($letter)),
-                    'letter_content'  => wp_kses_post($letter_content),
-                    'unsubscribe_url' => $unsubscribe_url,
-                    'site_name'       => esc_html(get_bloginfo('name')),
-                    'letter_url'      => esc_url(get_permalink($letter)),
-                ));
+            if ($has_custom_template) {
+                // Use editable automated-letter templates when configured.
+                $tpl = $templates->render($template_slug, $subscriber_id, array($letter));
+                $subject = (string) ($tpl['subject'] ?? '');
+                $body = (string) ($tpl['body'] ?? '');
             } else {
-                // Fallback: use templates class
-                $tpl = $templates->render('daily_digest', $subscriber_id, array($letter));
-                $body = $tpl['body'];
-                $subject = $tpl['subject'];
+                // Default to branded single-letter renderer so it mirrors the viewer style.
+                $token = get_post_meta($subscriber_id, '_rts_subscriber_token', true);
+                $unsubscribe_url = $this->generate_unsubscribe_url($token);
+
+                if (!class_exists('RTS_Email_Renderer') && file_exists($includes_path . 'class-email-renderer.php')) {
+                    require_once $includes_path . 'class-email-renderer.php';
+                }
+
+                $subject = get_bloginfo('name') . ' - ' . get_the_title($letter);
+                $letter_content = apply_filters('the_content', $letter->post_content);
+
+                if (class_exists('RTS_Email_Renderer')) {
+                    $renderer = new RTS_Email_Renderer();
+                    $body = $renderer->render('letter', array(
+                        'letter_title'    => esc_html(get_the_title($letter)),
+                        'letter_content'  => wp_kses_post($letter_content),
+                        'unsubscribe_url' => $unsubscribe_url,
+                        'site_name'       => esc_html(get_bloginfo('name')),
+                        'letter_url'      => esc_url(get_permalink($letter)),
+                    ));
+                } else {
+                    $tpl = $templates->render($template_slug, $subscriber_id, array($letter));
+                    $body = (string) ($tpl['body'] ?? '');
+                    $subject = (string) ($tpl['subject'] ?? $subject);
+                }
             }
 
             // Add letter ID marker for granular logging
@@ -906,7 +980,7 @@ public function register_letter_cpt() {
      * @param string $frequency     daily|weekly|monthly.
      * @param array  $prefs         Array of preference strings.
      */
-    private function sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs) {
+    public function sync_subscriber_to_table($subscriber_id, $email, $frequency, $prefs) {
         global $wpdb;
         $table = $wpdb->prefix . 'rts_subscribers';
 
@@ -916,6 +990,10 @@ public function register_letter_cpt() {
         }
 
         $next_send = $this->calculate_next_send_date($frequency);
+        $status = (string) get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+        if ($status === '') {
+            $status = 'active';
+        }
 
         $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE post_id = %d", intval($subscriber_id)));
 
@@ -924,7 +1002,7 @@ public function register_letter_cpt() {
                 $table,
                 array(
                     'email'          => sanitize_email($email),
-                    'status'         => 'active',
+                    'status'         => $status,
                     'frequency'      => $frequency,
                     'preferences'    => wp_json_encode($prefs),
                     'next_send_date' => $next_send,
@@ -939,7 +1017,7 @@ public function register_letter_cpt() {
                 array(
                     'post_id'        => intval($subscriber_id),
                     'email'          => sanitize_email($email),
-                    'status'         => 'active',
+                    'status'         => $status,
                     'frequency'      => $frequency,
                     'preferences'    => wp_json_encode($prefs),
                     'next_send_date' => $next_send,

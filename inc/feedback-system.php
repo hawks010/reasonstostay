@@ -56,6 +56,7 @@ class RTS_Feedback_System {
 
         add_action('restrict_manage_posts', [$this, 'admin_filters']);
         add_action('pre_get_posts', [$this, 'admin_filter_query']);
+        add_action('admin_notices', [$this, 'render_feedback_endpoint_insights'], 16);
 
         add_action('add_meta_boxes', [$this, 'add_letter_metabox']);
         add_action('admin_head', [$this, 'admin_styles']);
@@ -86,12 +87,24 @@ class RTS_Feedback_System {
             'methods' => 'POST',
             'callback' => [$this, 'submit_feedback'],
             'permission_callback' => function(\WP_REST_Request $request) {
-                $nonce = $request->get_header('x-wp-nonce');
-                if (!$nonce) {
-                    $nonce = (string) $request->get_param('_wpnonce');
+                $nonce = '';
+                if (function_exists('rts_rest_request_nonce')) {
+                    $nonce = rts_rest_request_nonce($request, ['_wpnonce', 'nonce'], ['x_wp_nonce', 'x-wp-nonce']);
                 }
-                $nonce = $nonce ? sanitize_text_field($nonce) : '';
-                return (bool) wp_verify_nonce($nonce, 'wp_rest');
+
+                if ($nonce === '') {
+                    $nonce = sanitize_text_field((string) $request->get_header('x-wp-nonce'));
+                    if ($nonce === '') {
+                        $nonce = sanitize_text_field((string) $request->get_param('_wpnonce'));
+                    }
+                }
+
+                if (function_exists('rts_verify_nonce_actions')) {
+                    return rts_verify_nonce_actions($nonce, ['wp_rest']);
+                }
+
+                $verified = wp_verify_nonce($nonce, 'wp_rest');
+                return ($verified === 1 || $verified === 2);
             },
         ]);
     }
@@ -162,7 +175,7 @@ class RTS_Feedback_System {
         update_post_meta($feedback_id, 'email', $email);
         update_post_meta($feedback_id, 'mood', $mood);
         update_post_meta($feedback_id, 'ip_hash', md5($this->get_client_ip())); // privacy-safe-ish
-        update_post_meta($feedback_id, 'user_agent', substr((string) $_SERVER['HTTP_USER_AGENT'] ?? '', 0, 250));
+        update_post_meta($feedback_id, 'user_agent', substr($ua, 0, 250));
 
         // If rating is up/down, also increment per-letter thumbs to keep systems aligned
         if (class_exists('RTS_Letter_System')) {
@@ -260,7 +273,7 @@ class RTS_Feedback_System {
         $letter_title = get_the_title($letter_id);
         $letter_edit_url = admin_url('post.php?post=' . $letter_id . '&action=edit');
         $feedback_url = admin_url('edit.php?post_type=rts_feedback');
-        $dashboard_url = admin_url('admin.php?page=rts_moderation_dashboard&tab=feedback');
+        $dashboard_url = admin_url('edit.php?post_type=letter&page=rts-dashboard&tab=feedback');
 
         $rating_emoji = [
             'up' => '👍 Helpful',
@@ -312,7 +325,7 @@ class RTS_Feedback_System {
 
         $message .= '<div style="margin-top: 30px; padding: 16px; background: #f9f9f9; border-radius: 4px; font-size: 12px; color: #646970;">';
         $message .= '<p style="margin: 0;">This email was sent from the RTS (Reasons to Stay) moderation system.</p>';
-        $message .= '<p style="margin: 8px 0 0 0;">To manage notification settings, go to: <a href="' . admin_url('admin.php?page=rts_moderation_dashboard&tab=settings') . '">RTS Settings</a></p>';
+        $message .= '<p style="margin: 8px 0 0 0;">To manage notification settings, go to: <a href="' . admin_url('edit.php?post_type=letter&page=rts-dashboard&tab=settings') . '">RTS Settings</a></p>';
         $message .= '</div>';
 
         $message .= '</body></html>';
@@ -550,6 +563,414 @@ class RTS_Feedback_System {
             .rts-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;line-height:18px}
             .rts-badge-red{background:#ffe1e1;color:#8b0000}
         </style>';
+    }
+
+    public function render_feedback_endpoint_insights() {
+        if (!is_admin()) return;
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen) return;
+        if ($screen->base !== 'edit' || $screen->post_type !== 'rts_feedback') return;
+
+        $stats = $this->get_feedback_endpoint_stats();
+        $trends = $this->get_feedback_endpoint_trends(14);
+
+        $mood_svg = $this->build_line_chart_svg(
+            $trends['labels'],
+            [
+                [
+                    'label' => 'Better %',
+                    'color' => '#48bb78',
+                    'values' => $trends['mood_better'],
+                ],
+                [
+                    'label' => 'Worse %',
+                    'color' => '#f56565',
+                    'values' => $trends['mood_worse'],
+                ],
+            ]
+        );
+
+        $feeling_svg = $this->build_line_chart_svg(
+            $trends['labels'],
+            [
+                [
+                    'label' => $trends['feeling_a_label'] . ' %',
+                    'color' => '#60a5fa',
+                    'values' => $trends['feeling_a'],
+                ],
+                [
+                    'label' => $trends['feeling_b_label'] . ' %',
+                    'color' => '#f59e0b',
+                    'values' => $trends['feeling_b'],
+                ],
+            ]
+        );
+        ?>
+        <section id="rts-feedback-endpoint-insights" class="rts-feedback-endpoint-insights rts-card" style="clear:both;">
+            <div class="rts-feedback-endpoint-insights__head">
+                <h2 class="rts-section-title"><span class="dashicons dashicons-chart-line"></span> Feedback Insights</h2>
+                <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard&tab=feedback')); ?>">Open Dashboard Feedback Tab</a>
+            </div>
+
+            <div class="rts-analytics-grid-4">
+                <div class="rts-analytics-card">
+                    <div class="rts-analytics-icon" style="background: rgba(45, 127, 249, 0.1);">
+                        <span class="dashicons dashicons-testimonial" style="color: #2d7ff9;"></span>
+                    </div>
+                    <div class="rts-analytics-content">
+                        <div class="rts-analytics-label">Total Feedback</div>
+                        <div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int) $stats['total'])); ?></div>
+                        <div class="rts-analytics-sub">All time responses</div>
+                    </div>
+                </div>
+
+                <div class="rts-analytics-card">
+                    <div class="rts-analytics-icon" style="background: rgba(72, 187, 120, 0.1);">
+                        <span class="dashicons dashicons-smiley" style="color: #48bb78;"></span>
+                    </div>
+                    <div class="rts-analytics-content">
+                        <div class="rts-analytics-label">Mood Improvement</div>
+                        <div class="rts-analytics-value"><?php echo esc_html($stats['improvement_rate']); ?>%</div>
+                        <div class="rts-analytics-sub">Feel better after reading</div>
+                    </div>
+                </div>
+
+                <div class="rts-analytics-card">
+                    <div class="rts-analytics-icon" style="background: rgba(252, 163, 17, 0.1);">
+                        <span class="dashicons dashicons-thumbs-up" style="color: #FCA311;"></span>
+                    </div>
+                    <div class="rts-analytics-content">
+                        <div class="rts-analytics-label">Positive Ratings</div>
+                        <div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int) $stats['positive'])); ?></div>
+                        <div class="rts-analytics-sub">Helpful or neutral responses</div>
+                    </div>
+                </div>
+
+                <div class="rts-analytics-card">
+                    <div class="rts-analytics-icon" style="background: rgba(214, 54, 56, 0.1);">
+                        <span class="dashicons dashicons-warning" style="color: #d63638;"></span>
+                    </div>
+                    <div class="rts-analytics-content">
+                        <div class="rts-analytics-label">Triggered Reports</div>
+                        <div class="rts-analytics-value"><?php echo esc_html(number_format_i18n((int) $stats['triggered'])); ?></div>
+                        <div class="rts-analytics-sub">Letters flagged unsafe</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rts-analytics-grid-2 rts-feedback-line-grid">
+                <div class="rts-analytics-box-card rts-feedback-line-card">
+                    <div class="rts-analytics-box-header">
+                        <h4><span class="dashicons dashicons-heart"></span> Mood Trend (14d)</h4>
+                    </div>
+                    <p class="rts-feedback-line-sub">Daily share of better vs worse mood outcomes.</p>
+                    <?php echo $mood_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    <div class="rts-feedback-line-legend">
+                        <span><i style="--line:#48bb78;"></i> Better %</span>
+                        <span><i style="--line:#f56565;"></i> Worse %</span>
+                    </div>
+                </div>
+
+                <div class="rts-analytics-box-card rts-feedback-line-card">
+                    <div class="rts-analytics-box-header">
+                        <h4><span class="dashicons dashicons-chart-line"></span> Feeling Trend (14d)</h4>
+                    </div>
+                    <p class="rts-feedback-line-sub">Daily share by linked letter feeling (top 2).</p>
+                    <?php echo $feeling_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    <div class="rts-feedback-line-legend">
+                        <span><i style="--line:#60a5fa;"></i> <?php echo esc_html($trends['feeling_a_label']); ?> %</span>
+                        <span><i style="--line:#f59e0b;"></i> <?php echo esc_html($trends['feeling_b_label']); ?> %</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <script>
+        (function(){
+            var panel = document.getElementById('rts-feedback-endpoint-insights');
+            if (!panel) return;
+            function placePanel() {
+                var wrap = document.querySelector('#wpbody-content .wrap');
+                if (!wrap) return false;
+                var commandCenter = wrap.querySelector('#rts-letter-command-center');
+                if (commandCenter && commandCenter.parentNode) {
+                    commandCenter.insertAdjacentElement('afterend', panel);
+                    return true;
+                }
+                var anchor = wrap.querySelector('.wp-header-end') || wrap.querySelector('h1.wp-heading-inline') || wrap.querySelector('h1');
+                if (!anchor || !anchor.parentNode) return false;
+                anchor.insertAdjacentElement('afterend', panel);
+                return true;
+            }
+            var attempts = 0;
+            if (!placePanel()) {
+                var timer = setInterval(function(){
+                    attempts++;
+                    if (placePanel() || attempts >= 14) clearInterval(timer);
+                }, 120);
+            }
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * @return array{total:int,triggered:int,positive:int,improvement_rate:float}
+     */
+    private function get_feedback_endpoint_stats(): array {
+        global $wpdb;
+        $cache_key = 'rts_feedback_endpoint_stats_v1';
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $total = (int) $wpdb->get_var("SELECT COUNT(1) FROM {$wpdb->posts} WHERE post_type='rts_feedback' AND post_status='publish'");
+        $triggered = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type='rts_feedback'
+               AND p.post_status='publish'
+               AND pm.meta_key='triggered'
+               AND pm.meta_value='1'"
+        );
+        $positive = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type='rts_feedback'
+               AND p.post_status='publish'
+               AND pm.meta_key='rating'
+               AND pm.meta_value IN ('up','neutral')"
+        );
+        $much_better = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type='rts_feedback'
+               AND p.post_status='publish'
+               AND pm.meta_key='mood_change'
+               AND pm.meta_value='much_better'"
+        );
+        $little_better = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type='rts_feedback'
+               AND p.post_status='publish'
+               AND pm.meta_key='mood_change'
+               AND pm.meta_value='little_better'"
+        );
+        $mood_total = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type='rts_feedback'
+               AND p.post_status='publish'
+               AND pm.meta_key='mood_change'
+               AND pm.meta_value<>''"
+        );
+
+        $improvement = $mood_total > 0 ? round((($much_better + $little_better) / $mood_total) * 100, 1) : 0.0;
+        $stats = [
+            'total' => $total,
+            'triggered' => $triggered,
+            'positive' => $positive,
+            'improvement_rate' => $improvement,
+        ];
+
+        set_transient($cache_key, $stats, 120);
+        return $stats;
+    }
+
+    /**
+     * @return array{labels:array<int,string>,mood_better:array<int,float>,mood_worse:array<int,float>,feeling_a:array<int,float>,feeling_b:array<int,float>,feeling_a_label:string,feeling_b_label:string}
+     */
+    private function get_feedback_endpoint_trends(int $days = 14): array {
+        global $wpdb;
+
+        $days = max(7, min(30, $days));
+        $cache_key = 'rts_feedback_endpoint_trends_' . $days;
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $tz = wp_timezone();
+        $today = new \DateTimeImmutable('now', $tz);
+        $date_keys = [];
+        $labels = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $d = $today->sub(new \DateInterval('P' . $i . 'D'));
+            $key = $d->format('Y-m-d');
+            $date_keys[] = $key;
+            $labels[] = $d->format('M j');
+        }
+        $start_at = $date_keys[0] . ' 00:00:00';
+
+        $mood_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT DATE(p.post_date) AS day_key,
+                        SUM(CASE WHEN pm.meta_value IN ('much_better','little_better') THEN 1 ELSE 0 END) AS better_count,
+                        SUM(CASE WHEN pm.meta_value IN ('little_worse','much_worse') THEN 1 ELSE 0 END) AS worse_count,
+                        COUNT(*) AS total_count
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+                 WHERE p.post_type = 'rts_feedback'
+                   AND p.post_status = 'publish'
+                   AND p.post_date >= %s
+                   AND pm.meta_key = 'mood_change'
+                   AND pm.meta_value <> ''
+                 GROUP BY DATE(p.post_date)",
+                $start_at
+            ),
+            ARRAY_A
+        );
+
+        $mood_by_day = [];
+        if (is_array($mood_rows)) {
+            foreach ($mood_rows as $row) {
+                $day = (string) ($row['day_key'] ?? '');
+                $total = (int) ($row['total_count'] ?? 0);
+                if ($day === '' || $total <= 0) continue;
+                $mood_by_day[$day] = [
+                    'better' => round((((int) ($row['better_count'] ?? 0)) / $total) * 100, 1),
+                    'worse' => round((((int) ($row['worse_count'] ?? 0)) / $total) * 100, 1),
+                ];
+            }
+        }
+
+        $feeling_rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT DATE(p.post_date) AS day_key,
+                        COALESCE(lf.feeling, 'Uncategorized') AS feeling,
+                        COUNT(*) AS total_count
+                 FROM {$wpdb->posts} p
+                 LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = 'letter_id'
+                 LEFT JOIN (
+                    SELECT tr.object_id AS letter_id, MIN(t.name) AS feeling
+                    FROM {$wpdb->term_relationships} tr
+                    INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                    INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
+                    WHERE tt.taxonomy = 'letter_feeling'
+                    GROUP BY tr.object_id
+                 ) lf ON lf.letter_id = CAST(pm.meta_value AS UNSIGNED)
+                 WHERE p.post_type = 'rts_feedback'
+                   AND p.post_status = 'publish'
+                   AND p.post_date >= %s
+                 GROUP BY DATE(p.post_date), COALESCE(lf.feeling, 'Uncategorized')",
+                $start_at
+            ),
+            ARRAY_A
+        );
+
+        $feeling_totals = [];
+        $feeling_by_day = [];
+        $day_totals = [];
+        if (is_array($feeling_rows)) {
+            foreach ($feeling_rows as $row) {
+                $day = (string) ($row['day_key'] ?? '');
+                $feeling = sanitize_text_field((string) ($row['feeling'] ?? 'Uncategorized'));
+                $count = (int) ($row['total_count'] ?? 0);
+                if ($day === '' || $count <= 0) continue;
+
+                if (!isset($feeling_by_day[$day])) $feeling_by_day[$day] = [];
+                $feeling_by_day[$day][$feeling] = ($feeling_by_day[$day][$feeling] ?? 0) + $count;
+                $day_totals[$day] = ($day_totals[$day] ?? 0) + $count;
+                $feeling_totals[$feeling] = ($feeling_totals[$feeling] ?? 0) + $count;
+            }
+        }
+
+        arsort($feeling_totals);
+        $top_feelings = array_slice(array_keys($feeling_totals), 0, 2);
+        $feeling_a_label = $top_feelings[0] ?? 'Uncategorized';
+        $feeling_b_label = $top_feelings[1] ?? 'Other';
+
+        $mood_better = [];
+        $mood_worse = [];
+        $feeling_a = [];
+        $feeling_b = [];
+        foreach ($date_keys as $day_key) {
+            $mood_better[] = (float) ($mood_by_day[$day_key]['better'] ?? 0.0);
+            $mood_worse[] = (float) ($mood_by_day[$day_key]['worse'] ?? 0.0);
+
+            $day_total = (int) ($day_totals[$day_key] ?? 0);
+            if ($day_total > 0) {
+                $a_count = (int) ($feeling_by_day[$day_key][$feeling_a_label] ?? 0);
+                $b_count = (int) ($feeling_by_day[$day_key][$feeling_b_label] ?? 0);
+                $feeling_a[] = round(($a_count / $day_total) * 100, 1);
+                $feeling_b[] = round(($b_count / $day_total) * 100, 1);
+            } else {
+                $feeling_a[] = 0.0;
+                $feeling_b[] = 0.0;
+            }
+        }
+
+        $data = [
+            'labels' => $labels,
+            'mood_better' => $mood_better,
+            'mood_worse' => $mood_worse,
+            'feeling_a' => $feeling_a,
+            'feeling_b' => $feeling_b,
+            'feeling_a_label' => $feeling_a_label,
+            'feeling_b_label' => $feeling_b_label,
+        ];
+        set_transient($cache_key, $data, 120);
+        return $data;
+    }
+
+    /**
+     * @param array<int,string> $labels
+     * @param array<int,array{label:string,color:string,values:array<int,float>}> $series
+     */
+    private function build_line_chart_svg(array $labels, array $series): string {
+        $count = count($labels);
+        if ($count < 2) {
+            return '<div class="rts-empty-state-small"><span class="dashicons dashicons-chart-line"></span><p>Not enough trend data yet</p></div>';
+        }
+
+        $w = 760.0;
+        $h = 220.0;
+        $pad_l = 40.0;
+        $pad_r = 12.0;
+        $pad_t = 12.0;
+        $pad_b = 30.0;
+        $plot_w = $w - $pad_l - $pad_r;
+        $plot_h = $h - $pad_t - $pad_b;
+        $step_x = ($count > 1) ? ($plot_w / ($count - 1)) : 0.0;
+
+        $grid = '';
+        foreach ([0, 25, 50, 75, 100] as $tick) {
+            $y = $pad_t + (1 - ($tick / 100)) * $plot_h;
+            $grid .= '<line x1="' . round($pad_l, 1) . '" y1="' . round($y, 1) . '" x2="' . round($w - $pad_r, 1) . '" y2="' . round($y, 1) . '" class="rts-line-grid"/>';
+            $grid .= '<text x="2" y="' . round($y + 4, 1) . '" class="rts-line-axis">' . (int) $tick . '%</text>';
+        }
+
+        $x_labels = '';
+        $index_marks = array_unique([0, (int) floor(($count - 1) / 2), $count - 1]);
+        foreach ($index_marks as $idx) {
+            $x = $pad_l + ($idx * $step_x);
+            $x_labels .= '<text x="' . round($x, 1) . '" y="' . round($h - 6, 1) . '" text-anchor="middle" class="rts-line-axis">' . esc_html((string) ($labels[$idx] ?? '')) . '</text>';
+        }
+
+        $paths = '';
+        foreach ($series as $line) {
+            $values = is_array($line['values'] ?? null) ? $line['values'] : [];
+            if (count($values) !== $count) continue;
+            $points = [];
+            foreach ($values as $i => $value) {
+                $pct = max(0.0, min(100.0, (float) $value));
+                $x = $pad_l + ($i * $step_x);
+                $y = $pad_t + (1 - ($pct / 100.0)) * $plot_h;
+                $points[] = round($x, 1) . ',' . round($y, 1);
+            }
+            $color = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($line['color'] ?? '')) ? (string) $line['color'] : '#60a5fa';
+            $paths .= '<polyline fill="none" stroke="' . esc_attr($color) . '" stroke-width="3" points="' . esc_attr(implode(' ', $points)) . '"/>';
+        }
+
+        return '<svg class="rts-feedback-line-svg" viewBox="0 0 760 220" role="img" aria-label="Feedback trend chart">'
+            . '<g>' . $grid . $paths . $x_labels . '</g>'
+            . '</svg>';
     }
 }
 

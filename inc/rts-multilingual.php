@@ -494,7 +494,8 @@ class RTS_Multilingual {
 	}
 
 	public function save_language_meta(int $post_id, \WP_Post $post): void {
-		if (!isset($_POST['rts_language_nonce']) || !wp_verify_nonce($_POST['rts_language_nonce'], 'rts_language_meta')) {
+		$nonce = isset($_POST['rts_language_nonce']) ? sanitize_text_field(wp_unslash($_POST['rts_language_nonce'])) : '';
+		if (!$nonce || !wp_verify_nonce($nonce, 'rts_language_meta')) {
 			return;
 		}
 
@@ -507,7 +508,7 @@ class RTS_Multilingual {
 		}
 
 		if (!empty($_POST['rts_letter_language'])) {
-			$lang = sanitize_key($_POST['rts_letter_language']);
+			$lang = sanitize_key(wp_unslash($_POST['rts_letter_language']));
 			if (isset($this->supported_languages[$lang])) {
 				update_post_meta($post_id, 'rts_letter_language', $lang);
 			}

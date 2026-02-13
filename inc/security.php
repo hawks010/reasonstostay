@@ -99,11 +99,11 @@ class RTS_Security {
                             <div class="rts-analytics-subtitle">Powered by RTS Moderation Engine</div>
                         </div>
                         <div class="rts-analytics-actions">
-                            <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=rts-dashboard')); ?>">
+                            <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard')); ?>">
                                 <span class="dashicons dashicons-dashboard" aria-hidden="true"></span>
                                 Open Dashboard
                             </a>
-                            <a class="button button-primary" href="<?php echo esc_url(admin_url('admin.php?page=rts-security-logs')); ?>">
+                            <a class="button button-primary" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-security-logs')); ?>">
                                 <span class="dashicons dashicons-update" aria-hidden="true"></span>
                                 Refresh Status
                             </a>
@@ -322,11 +322,11 @@ class RTS_Security {
         // We also accept legacy keys for cached forms.
         $nonce = '';
         if (isset($data['rts_token'])) {
-            $nonce = $data['rts_token'];
+            $nonce = sanitize_text_field(wp_unslash((string) $data['rts_token']));
         } elseif (isset($data['nonce'])) {
-            $nonce = $data['nonce'];
+            $nonce = sanitize_text_field(wp_unslash((string) $data['nonce']));
         } elseif (isset($_REQUEST['nonce'])) {
-            $nonce = $_REQUEST['nonce'];
+            $nonce = sanitize_text_field(wp_unslash((string) $_REQUEST['nonce']));
         }
         
         if (!is_string($nonce) || empty($nonce)) {

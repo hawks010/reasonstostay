@@ -2,6 +2,16 @@
 (function ($) {
   'use strict';
 
+  var BUSY_TIMEOUT_MS = 20000;
+
+  function clearBusyTimer($btn) {
+    var timerId = parseInt($btn.data('rts-busy-timeout'), 10) || 0;
+    if (timerId) {
+      window.clearTimeout(timerId);
+      $btn.removeData('rts-busy-timeout');
+    }
+  }
+
   function setBusy($btn, busy, labelHtml) {
     if (!$btn || !$btn.length) return;
 
@@ -12,11 +22,17 @@
     }
 
     if (busy) {
+      clearBusyTimer($btn);
       $btn.prop('disabled', true);
       $btn.addClass('is-busy');
       var spinner = '<span class="rts-admin-spinner" aria-hidden="true"></span>';
       $btn.html(spinner + (labelHtml ? ' ' + labelHtml : ' Working...'));
+      var timeoutId = window.setTimeout(function () {
+        setBusy($btn, false);
+      }, BUSY_TIMEOUT_MS);
+      $btn.data('rts-busy-timeout', timeoutId);
     } else {
+      clearBusyTimer($btn);
       $btn.prop('disabled', false);
       $btn.removeClass('is-busy');
       $btn.html(original);
@@ -52,7 +68,10 @@
   });
 
   // Busy state for actions that might take a moment
-  $(document).on('click', '.rts-admin-action, .rts-queue-button', function () {
+  $(document).on('click', '.rts-admin-action, .rts-queue-button', function (e) {
+    if (e && e.isDefaultPrevented && e.isDefaultPrevented()) {
+      return;
+    }
     setBusy($(this), true);
   });
 
@@ -93,6 +112,13 @@
 
   // Release busy state if navigation is cancelled (rare)
   $(window).on('pageshow', function () {
+    $('.rts-admin-action.is-busy, .rts-queue-button.is-busy').each(function () {
+      setBusy($(this), false);
+    });
+  });
+
+  // Generic safety net for any AJAX-driven actions that do not use .rts-ajax-button.
+  $(document).ajaxComplete(function () {
     $('.rts-admin-action.is-busy, .rts-queue-button.is-busy').each(function () {
       setBusy($(this), false);
     });

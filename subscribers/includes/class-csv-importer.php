@@ -15,11 +15,14 @@ if (!defined('ABSPATH')) {
 
 class RTS_CSV_Importer {
 
-    const BATCH_SIZE = 500; // Reduced batch size for reliability
+    const BATCH_SIZE = 500; // Keep conservative for shared hosting reliability.
+    const CHUNK_DELAY_STANDARD = 1; // Seconds between chunk jobs for normal imports.
+    const CHUNK_DELAY_LARGE_IMPORT = 3; // Extra pacing for large imports to avoid server spikes.
     const SESSION_TTL = 21600; // 6 hours (6 * HOUR_IN_SECONDS)
-    const MAX_FILE_SIZE = 10485760; // 10MB
+    const MAX_FILE_SIZE = 52428800; // 50MB
     const LOCK_TIMEOUT = 300; // 5 minutes
-    const MAX_ROWS = 50000; // Hard limit to prevent abuse
+    const MAX_ROWS = 200000; // Large dataset mode.
+    const LOCK_OPTION_PREFIX = 'rts_import_lock_';
 
     public function __construct() {
         if (is_admin()) {
@@ -62,7 +65,7 @@ class RTS_CSV_Importer {
 
         // 1. Validate File Size
         if ($file['size'] > self::MAX_FILE_SIZE) {
-            wp_die(__('File too large. Maximum size is 10MB.', 'rts-subscriber-system'));
+            wp_die(__('File too large. Maximum size is 50MB.', 'rts-subscriber-system'));
         }
 
         // 2. Validate MIME Type
@@ -130,8 +133,8 @@ class RTS_CSV_Importer {
             'skipped_other'     => 0,
             'default_frequency' => $default_frequency,
             'status'            => 'processing',
-            'started_at'        => current_time('mysql'),
-            'updated_at'        => current_time('mysql'),
+            'started_at'        => current_time('mysql', true),
+            'updated_at'        => current_time('mysql', true),
             'lock_ts'           => 0, // For race condition handling
             'last_error'        => '',
             'summary'           => array(),
@@ -139,8 +142,8 @@ class RTS_CSV_Importer {
 
         set_transient('rts_import_session_' . $session_id, $session, self::SESSION_TTL);
 
-        // Kick off background job immediately
-        wp_schedule_single_event(time(), 'rts_process_import_chunk', array($session_id));
+        // Kick off background job with a tiny delay to avoid blocking admin request completion.
+        wp_schedule_single_event(time() + self::CHUNK_DELAY_STANDARD, 'rts_process_import_chunk', array($session_id));
 
         // Redirect back to the consolidated Subscribers Dashboard (shows progress card).
         wp_redirect(add_query_arg(array(
@@ -166,6 +169,8 @@ class RTS_CSV_Importer {
         if (!in_array($scope, array('all','active','bounced','unsubscribed'), true)) {
             $scope = 'all';
         }
+        $requested_columns = isset($_POST['export_columns']) ? (array) wp_unslash($_POST['export_columns']) : array();
+        $columns = $this->resolve_export_columns($requested_columns);
 
         @ini_set('memory_limit', '256M');
         @set_time_limit(0);
@@ -180,7 +185,7 @@ class RTS_CSV_Importer {
         }
 
         // Header
-        fputcsv($out, array('email','status','frequency','pref_letters','pref_newsletters'));
+        fputcsv($out, $columns);
 
         $paged = 1;
         $per_page = 500;
@@ -214,13 +219,7 @@ class RTS_CSV_Importer {
             }
 
             foreach ($q->posts as $subscriber_id) {
-                $email = get_post_field('post_title', $subscriber_id);
-                $status = get_post_meta($subscriber_id, '_rts_subscriber_status', true);
-                $frequency = get_post_meta($subscriber_id, '_rts_subscriber_frequency', true);
-                $pref_letters = (int) get_post_meta($subscriber_id, '_rts_pref_letters', true);
-                $pref_newsletters = (int) get_post_meta($subscriber_id, '_rts_pref_newsletters', true);
-
-                fputcsv($out, array($email, $status, $frequency, $pref_letters, $pref_newsletters));
+                fputcsv($out, $this->build_export_row((int) $subscriber_id, $columns));
             }
 
             $paged++;
@@ -245,6 +244,12 @@ class RTS_CSV_Importer {
         @ini_set('memory_limit', '256M');
 
         $session_id = sanitize_text_field($session_id);
+        $lock_option_key = $this->build_lock_option_key($session_id);
+        if (!$this->acquire_session_lock($lock_option_key)) {
+            return;
+        }
+
+        try {
         $transient_key = 'rts_import_session_' . $session_id;
         $session = get_transient($transient_key);
 
@@ -316,6 +321,7 @@ class RTS_CSV_Importer {
         $cpt = new RTS_Subscriber_CPT();
         $map = $session['column_map'];
         $rows_processed = 0;
+        $queued_confirmations = 0;
 
         // Process Rows
         while ($rows_processed < self::BATCH_SIZE && ($row = fgetcsv($handle)) !== false) {
@@ -374,24 +380,39 @@ class RTS_CSV_Importer {
                 $session['imported']++;
                 
                 // Handle Status
-                $verified = true; 
+                // Default to unverified when email verification is enabled so imports are GDPR-safe.
+                $verified = !get_option('rts_require_email_verification', true);
                 if ($status_col) {
                      $s = strtoupper(trim($status_col));
                      if (in_array($s, array('UNCONFIRMED', 'PENDING', 'UNVERIFIED'), true)) {
                          $verified = false;
+                     } elseif (in_array($s, array('VERIFIED', 'CONFIRMED', 'ACTIVE'), true)) {
+                         $verified = true;
                      }
                 }
                 update_post_meta($result, '_rts_subscriber_verified', $verified ? 1 : 0);
+                update_post_meta($result, '_rts_subscriber_status', $verified ? 'active' : 'pending_verification');
+                if (method_exists($cpt, 'ensure_subscriber_tokens')) {
+                    $cpt->ensure_subscriber_tokens((int) $result, !$verified);
+                }
                 
                 if (!empty($args['subscribed_date'])) {
                     update_post_meta($result, '_rts_subscriber_subscribed_date', $args['subscribed_date']);
+                }
+
+                // Keep scheduling index in sync for automated delivery.
+                $this->sync_imported_subscriber_row((int) $result, $email, $freq);
+
+                // For GDPR-safe imports, queue verification for unverified rows when live sending is enabled.
+                if (!$verified && $this->maybe_queue_import_confirmation((int) $result)) {
+                    $queued_confirmations++;
                 }
             }
         }
 
         // Update Session State
         $session['byte_offset'] = ftell($handle);
-        $session['updated_at'] = current_time('mysql');
+        $session['updated_at'] = current_time('mysql', true);
         $session['lock_ts'] = 0; // Release lock
 
         fclose($handle);
@@ -406,7 +427,7 @@ class RTS_CSV_Importer {
                     round(($session['imported'] / $session['total_rows']) * 100, 1) : 0,
                 'duration' => human_time_diff(
                     strtotime($session['started_at']), 
-                    current_time('timestamp')
+                    current_time('timestamp', true)
                 ),
             );
 
@@ -415,11 +436,22 @@ class RTS_CSV_Importer {
                 @unlink($session['file_path']);
             }
         } else {
-             // Schedule next chunk immediately
-             wp_schedule_single_event(time(), 'rts_process_import_chunk', array($session_id));
+             // Pace large imports to avoid local/shared host overload.
+             $chunk_delay = ((int) ($session['total_rows'] ?? 0) >= 20000)
+                ? self::CHUNK_DELAY_LARGE_IMPORT
+                : self::CHUNK_DELAY_STANDARD;
+             wp_schedule_single_event(time() + $chunk_delay, 'rts_process_import_chunk', array($session_id));
+        }
+
+        // Nudge queue runner once per chunk when new confirmations were queued.
+        if ($queued_confirmations > 0 && !wp_next_scheduled('rts_process_email_queue')) {
+            wp_schedule_single_event(time() + 30, 'rts_process_email_queue');
         }
 
         set_transient($transient_key, $session, self::SESSION_TTL);
+        } finally {
+            $this->release_session_lock($lock_option_key);
+        }
     }
 
     /**
@@ -460,6 +492,7 @@ class RTS_CSV_Importer {
             }
             delete_transient($transient_key);
         }
+        delete_option($this->build_lock_option_key($session_id));
         
         wp_send_json_success();
     }
@@ -540,6 +573,94 @@ class RTS_CSV_Importer {
     }
 
     /**
+     * Keep the rts_subscribers scheduling index aligned with imported rows.
+     */
+    private function sync_imported_subscriber_row($subscriber_id, $email, $frequency) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_subscribers';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return;
+        }
+
+        $frequency = in_array($frequency, array('daily', 'weekly', 'monthly'), true) ? $frequency : 'weekly';
+        $next_send = gmdate('Y-m-d H:i:s', time() + ($frequency === 'daily' ? DAY_IN_SECONDS : ($frequency === 'monthly' ? (30 * DAY_IN_SECONDS) : WEEK_IN_SECONDS)));
+
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE post_id = %d", (int) $subscriber_id));
+        $prefs = array();
+        if ((bool) get_post_meta($subscriber_id, '_rts_pref_letters', true)) {
+            $prefs[] = 'letters';
+        }
+        if ((bool) get_post_meta($subscriber_id, '_rts_pref_newsletters', true)) {
+            $prefs[] = 'newsletters';
+        }
+        $status = (string) get_post_meta($subscriber_id, '_rts_subscriber_status', true);
+        if ($status === '') {
+            $status = 'active';
+        }
+
+        if ($exists) {
+            $wpdb->update(
+                $table,
+                array(
+                    'email'          => sanitize_email($email),
+                    'status'         => $status,
+                    'frequency'      => $frequency,
+                    'preferences'    => wp_json_encode($prefs),
+                    'next_send_date' => $next_send,
+                ),
+                array('post_id' => (int) $subscriber_id),
+                array('%s', '%s', '%s', '%s', '%s'),
+                array('%d')
+            );
+            return;
+        }
+
+        $wpdb->insert(
+            $table,
+            array(
+                'post_id'        => (int) $subscriber_id,
+                'email'          => sanitize_email($email),
+                'status'         => $status,
+                'frequency'      => $frequency,
+                'preferences'    => wp_json_encode($prefs),
+                'next_send_date' => $next_send,
+                'created_at'     => current_time('mysql', true),
+            ),
+            array('%d', '%s', '%s', '%s', '%s', '%s', '%s')
+        );
+    }
+
+    /**
+     * Queue a verification email for imported subscribers when live sending is enabled.
+     */
+    private function maybe_queue_import_confirmation($subscriber_id) {
+        if (!get_option('rts_require_email_verification', true)) {
+            return false;
+        }
+        if (get_option('rts_email_demo_mode')) {
+            return false;
+        }
+        if (!get_option('rts_email_sending_enabled', true)) {
+            return false;
+        }
+        if (!class_exists('RTS_Email_Templates') && file_exists(plugin_dir_path(__FILE__) . 'class-email-templates.php')) {
+            require_once plugin_dir_path(__FILE__) . 'class-email-templates.php';
+        }
+        if (!class_exists('RTS_Email_Queue') && file_exists(plugin_dir_path(__FILE__) . 'class-email-queue.php')) {
+            require_once plugin_dir_path(__FILE__) . 'class-email-queue.php';
+        }
+        if (!class_exists('RTS_Email_Templates') || !class_exists('RTS_Email_Queue')) {
+            return false;
+        }
+
+        $templates = new RTS_Email_Templates();
+        $rendered = $templates->render('verification', (int) $subscriber_id);
+        $queue = new RTS_Email_Queue();
+        $queued_id = $queue->enqueue_email((int) $subscriber_id, 'verification', $rendered['subject'], $rendered['body'], null, 10);
+        return !is_wp_error($queued_id);
+    }
+
+    /**
      * Sanitize header cell (BOM removal + Trimming)
      */
     private function sanitize_header_cell($value) {
@@ -570,6 +691,125 @@ class RTS_CSV_Importer {
             return "'" . $value;
         }
         return $value;
+    }
+
+    /**
+     * Resolve requested export columns against an allow-list.
+     *
+     * @param array $requested_columns
+     * @return array
+     */
+    private function resolve_export_columns(array $requested_columns) {
+        $allowed = array(
+            'email',
+            'status',
+            'frequency',
+            'pref_letters',
+            'pref_newsletters',
+            'verified',
+            'source',
+            'subscribed_date',
+            'last_sent',
+            'bounce_count',
+        );
+
+        $columns = array();
+        foreach ($requested_columns as $column) {
+            $key = sanitize_key((string) $column);
+            if (in_array($key, $allowed, true)) {
+                $columns[] = $key;
+            }
+        }
+
+        $columns = array_values(array_unique($columns));
+        if (empty($columns)) {
+            $columns = array('email', 'status', 'frequency', 'pref_letters', 'pref_newsletters');
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Build export row by selected columns.
+     *
+     * @param int   $subscriber_id
+     * @param array $columns
+     * @return array
+     */
+    private function build_export_row($subscriber_id, array $columns) {
+        $subscriber_id = (int) $subscriber_id;
+        $values = array(
+            'email'            => (string) get_post_field('post_title', $subscriber_id),
+            'status'           => (string) get_post_meta($subscriber_id, '_rts_subscriber_status', true),
+            'frequency'        => (string) get_post_meta($subscriber_id, '_rts_subscriber_frequency', true),
+            'pref_letters'     => (int) get_post_meta($subscriber_id, '_rts_pref_letters', true),
+            'pref_newsletters' => (int) get_post_meta($subscriber_id, '_rts_pref_newsletters', true),
+            'verified'         => (int) get_post_meta($subscriber_id, '_rts_subscriber_verified', true),
+            'source'           => (string) get_post_meta($subscriber_id, '_rts_subscriber_source', true),
+            'subscribed_date'  => (string) get_post_meta($subscriber_id, '_rts_subscriber_subscribed_date', true),
+            'last_sent'        => (string) get_post_meta($subscriber_id, '_rts_subscriber_last_sent', true),
+            'bounce_count'     => (int) get_post_meta($subscriber_id, '_rts_subscriber_bounce_count', true),
+        );
+
+        $row = array();
+        foreach ($columns as $column) {
+            $row[] = $values[$column] ?? '';
+        }
+
+        return $row;
+    }
+
+    /**
+     * Lock option key for an import session.
+     *
+     * @param string $session_id
+     * @return string
+     */
+    private function build_lock_option_key($session_id) {
+        return self::LOCK_OPTION_PREFIX . sanitize_key((string) $session_id);
+    }
+
+    /**
+     * Acquire lock using atomic add_option and compare-and-swap fallback.
+     *
+     * @param string $option_key
+     * @return bool
+     */
+    private function acquire_session_lock($option_key) {
+        $now = time();
+        $expires = $now + self::LOCK_TIMEOUT;
+
+        if (add_option($option_key, (string) $expires, '', false)) {
+            return true;
+        }
+
+        $current = (int) get_option($option_key, 0);
+        if ($current > $now) {
+            return false;
+        }
+
+        global $wpdb;
+        $updated = $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->options}
+             SET option_value = %s
+             WHERE option_name = %s
+               AND option_value = %s",
+            (string) $expires,
+            $option_key,
+            (string) $current
+        ));
+
+        return $updated === 1;
+    }
+
+    /**
+     * Release lock for an import session.
+     *
+     * @param string $option_key
+     * @return void
+     */
+    private function release_session_lock($option_key) {
+        delete_option($option_key);
     }
 
     /**

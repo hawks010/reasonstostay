@@ -25,10 +25,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Theme version constant (used for cache-busting enqueued assets)
-// TEMPORARY: forced to time() to bust all caches after theme repair.
-// Revert to wp_get_theme()->get('Version') once deployment is stable.
 if ( ! defined( 'RTS_THEME_VERSION' ) ) {
-    define( 'RTS_THEME_VERSION', (string) time() );
+    define('RTS_THEME_VERSION', '5.3.6');
 }
 
 // =============================================================================
@@ -194,17 +192,36 @@ add_action( 'admin_enqueue_scripts', function( $hook ) {
         return;
     }
 
-    // Avoid double-enqueue from subsystem files.
-    if ( wp_style_is( 'rts-admin-complete', 'enqueued' ) ) {
+    if ( ! wp_style_is( 'rts-admin-complete', 'enqueued' ) ) {
+        wp_enqueue_style(
+            'rts-admin-complete',
+            get_stylesheet_directory_uri() . $css_rel,
+            array(),
+            (string) filemtime( $css_path )
+        );
+    }
+
+    // Letters list row behavior (placeholder + Enter-to-search) via static JS file.
+    $post_type = isset( $_GET['post_type'] ) ? sanitize_key( wp_unslash( (string) $_GET['post_type'] ) ) : '';
+    if ( $hook !== 'edit.php' || $post_type !== 'letter' ) {
         return;
     }
 
-    wp_enqueue_style(
-        'rts-admin-complete',
-        get_stylesheet_directory_uri() . $css_rel,
-        array(),
-        (string) filemtime( $css_path )
-    );
+    $tools_js_rel  = '/assets/js/rts-letter-list-tools.js';
+    $tools_js_path = get_stylesheet_directory() . $tools_js_rel;
+    if ( ! file_exists( $tools_js_path ) ) {
+        return;
+    }
+
+    if ( ! wp_script_is( 'rts-letter-list-tools', 'enqueued' ) ) {
+        wp_enqueue_script(
+            'rts-letter-list-tools',
+            get_stylesheet_directory_uri() . $tools_js_rel,
+            array(),
+            (string) filemtime( $tools_js_path ),
+            true
+        );
+    }
 }, 20 );
 
 // =============================================================================
@@ -424,6 +441,12 @@ if (!defined('RTS_LETTER_CPT')) {
  * Get total submitted letters
  */
 function rts_get_letters_submitted_count(): int {
+  $cache_key = 'rts_letters_submitted_count_v1';
+  $cached = get_transient($cache_key);
+  if ($cached !== false) {
+    return (int) $cached;
+  }
+
   $q = new WP_Query([
     'post_type'      => RTS_LETTER_CPT,
     'post_status'    => ['publish'], // add 'pending' if you want
@@ -431,7 +454,10 @@ function rts_get_letters_submitted_count(): int {
     'fields'         => 'ids',
   ]);
 
-  return (int) $q->found_posts;
+  $count = (int) $q->found_posts;
+  set_transient($cache_key, $count, 60);
+
+  return $count;
 }
 
 /**
@@ -441,7 +467,7 @@ function rts_get_letters_submitted_count(): int {
 add_action('rest_api_init', function () {
   register_rest_route('rts/v1', '/letter-count', [
     'methods'  => 'GET',
-    'permission_callback' => '__return_true',
+    'permission_callback' => 'rts_rest_public_read_permission',
     'callback' => function () {
       return [
         'count' => rts_get_letters_submitted_count(),
@@ -533,6 +559,15 @@ if (file_exists($importer_path)) {
     require_once $importer_path;
 }
 
+// Import hotfix (async batching) - prevents admin-post gateway timeouts on 40k+ CSV imports
+$import_hotfix_path = get_stylesheet_directory() . '/inc/rts-import-hotfix.php';
+if (file_exists($import_hotfix_path)) {
+    require_once $import_hotfix_path;
+    if (class_exists('RTS_Import_Hotfix_V2') && method_exists('RTS_Import_Hotfix_V2', 'init')) {
+        RTS_Import_Hotfix_V2::init();
+    }
+}
+
 // Multilingual support (11 languages with auto-detection)
 $multilingual_path = get_stylesheet_directory() . '/inc/rts-multilingual.php';
 if (file_exists($multilingual_path)) {
@@ -542,6 +577,7 @@ if (file_exists($multilingual_path)) {
 
 // Core includes with file_exists() checks for safety
 $core_includes = [
+    'rts-request-utils.php',
     'security.php',
     'rts-workflow-badges.php',
     'rts-workflow.php',
@@ -549,6 +585,7 @@ $core_includes = [
     'rts-learning-engine.php',
     'rts-content-refiner.php',
     'rts-learning-dashboard.php',
+    'rts-home-dashboard-widgets.php',
     'cpt-letters-complete.php',
     'rts-rest-api.php',
     'rts-bulk-jobs.php',
@@ -564,6 +601,46 @@ foreach ($core_includes as $file) {
         require_once $path;
     } else {
         error_log('RTS Theme: Missing required file - ' . $file);
+    }
+}
+
+if (!function_exists('rts_are_letter_submissions_enabled')) {
+    /**
+     * Frontend write-a-letter submissions toggle.
+     */
+    function rts_are_letter_submissions_enabled(): bool {
+        return (bool) apply_filters(
+            'rts_letter_submissions_enabled',
+            (bool) get_option('rts_letter_submissions_enabled', false)
+        );
+    }
+}
+
+if (!function_exists('rts_are_newsletter_signups_enabled')) {
+    /**
+     * Frontend newsletter signup toggle.
+     */
+    function rts_are_newsletter_signups_enabled(): bool {
+        return (bool) apply_filters(
+            'rts_newsletter_signups_enabled',
+            (bool) get_option('rts_newsletter_signups_enabled', false)
+        );
+    }
+}
+
+if (!function_exists('rts_get_frontend_pause_logo_url')) {
+    /**
+     * Logo shown on disabled form overlays.
+     */
+    function rts_get_frontend_pause_logo_url(): string {
+        $default_logo = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        $value = (string) get_option('rts_frontend_pause_logo_url', $default_logo);
+        $value = trim($value);
+        if ($value === '') {
+            $value = $default_logo;
+        }
+
+        return (string) apply_filters('rts_frontend_pause_logo_url', esc_url_raw($value));
     }
 }
 
@@ -791,6 +868,8 @@ function rts_enqueue_frontend_assets() {
         // Enable REST mode in the frontend letter viewer.
         // The JS will automatically fall back to admin-ajax.php on 403/404.
         'restEnabled' => true,
+        // Global tracking kill switch for privacy/debug environments.
+        'disableTracking' => (bool) apply_filters('rts_disable_tracking', false),
         'ajaxUrl'   => esc_url_raw(admin_url('admin-ajax.php')),
         // Optional, but helps in setups where security layers expect a REST nonce.
         'nonce'     => wp_create_nonce('wp_rest'),
@@ -1156,7 +1235,24 @@ add_action('rest_api_init', function() {
 // 2. BYPASS SERVER CACHING (LiteSpeed/WP Rocket) for "Random" endpoint
 // This ensures the "Random" button actually works and doesn't serve the same letter repeatedly.
 add_action('rest_post_dispatch', function($result, $server, $request) {
-    if (strpos($request->get_route(), '/rts/v1/embed/random') !== false) {
+    $route = is_object($request) && method_exists($request, 'get_route') ? (string) $request->get_route() : '';
+
+    // RTS dynamic endpoints MUST never be cached. These power "Read another letter" and live stats.
+    $no_cache_routes = [
+        '/rts/v1/embed/random',
+        '/rts/v1/letter/next',
+        '/rts/v1/site-stats',
+        '/rts/v1/letter/view',
+        '/rts/v1/letter/track',
+        '/rts/v1/share/track',
+    ];
+
+    $should_no_cache = false;
+    foreach ($no_cache_routes as $needle) {
+        if ($needle && strpos($route, $needle) !== false) { $should_no_cache = true; break; }
+    }
+
+    if ($should_no_cache) {
         // Standard headers to kill browser/proxy cache
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');

@@ -400,6 +400,18 @@ class RTS_Moderation_Learning {
                 
                 // Log for debugging
                 error_log("RTS Learning: Admin override for post {$post_id} with score {$scan_result['score']}");
+            } else {
+                $moderation_status = (string) get_post_meta($post_id, 'rts_moderation_status', true);
+                if ($moderation_status === 'pending_manual_review') {
+                    // Safe letters now route through pending manual review; record this publish decision too.
+                    $scan_result = [
+                        'pass' => true,
+                        'flags' => self::safe_json_decode(get_post_meta($post_id, 'rts_flagged_keywords', true) ?: '[]'),
+                        'score' => (int) get_post_meta($post_id, 'quality_score', true),
+                        'details' => self::safe_json_decode(get_post_meta($post_id, 'rts_safety_details', true) ?: '[]'),
+                    ];
+                    self::record_admin_decision($post_id, 'approved_after_review', $scan_result);
+                }
             }
         }
         
@@ -417,9 +429,9 @@ class RTS_Moderation_Learning {
         
         check_admin_referer('rts_feedback_action');
         
-        $post_id = absint($_POST['post_id'] ?? 0);
-        $feedback = sanitize_key($_POST['feedback'] ?? ''); // 'correct', 'too_strict', 'too_lenient'
-        $notes = sanitize_textarea_field($_POST['notes'] ?? '');
+        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
+        $feedback = isset($_POST['feedback']) ? sanitize_key(wp_unslash($_POST['feedback'])) : ''; // 'correct', 'too_strict', 'too_lenient'
+        $notes = isset($_POST['notes']) ? sanitize_textarea_field(wp_unslash($_POST['notes'])) : '';
         
         // Validation: Ensure valid feedback type
         $allowed_feedback = ['correct', 'too_strict', 'too_lenient'];
@@ -461,14 +473,14 @@ class RTS_Moderation_Learning {
             wp_send_json_error(['message' => 'Unauthorized'], 403);
         }
 
-        $nonce = $_POST['_wpnonce'] ?? '';
+        $nonce = isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
         if (!wp_verify_nonce($nonce, 'rts_feedback_action')) {
             wp_send_json_error(['message' => 'Invalid security token'], 403);
         }
 
-        $post_id = absint($_POST['post_id'] ?? 0);
-        $feedback = sanitize_key($_POST['feedback'] ?? '');
-        $notes = sanitize_textarea_field($_POST['notes'] ?? '');
+        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
+        $feedback = isset($_POST['feedback']) ? sanitize_key(wp_unslash($_POST['feedback'])) : '';
+        $notes = isset($_POST['notes']) ? sanitize_textarea_field(wp_unslash($_POST['notes'])) : '';
 
         $allowed_feedback = ['correct', 'too_strict', 'too_lenient'];
         if (!in_array($feedback, $allowed_feedback, true)) {

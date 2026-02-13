@@ -152,7 +152,7 @@ class RTS_SMTP_Settings {
         register_setting(self::OPTION_GROUP, 'rts_smtp_encryption', array(
             'type' => 'string',
             'default' => 'tls',
-            'sanitize_callback' => 'sanitize_text_field'
+            'sanitize_callback' => array($this, 'sanitize_encryption')
         ));
         register_setting(self::OPTION_GROUP, 'rts_smtp_auth', array(
             'type' => 'boolean',
@@ -200,31 +200,43 @@ class RTS_SMTP_Settings {
         // Social Links
         register_setting(self::OPTION_GROUP, 'rts_social_facebook', array(
             'type' => 'string',
-            'default' => 'https://www.facebook.com/ben.west.56884',
+            'default' => '',
             'sanitize_callback' => 'esc_url_raw'
         ));
         register_setting(self::OPTION_GROUP, 'rts_social_instagram', array(
             'type' => 'string',
-            'default' => 'https://www.instagram.com/iambenwest/',
+            'default' => '',
             'sanitize_callback' => 'esc_url_raw'
         ));
         register_setting(self::OPTION_GROUP, 'rts_social_linkedin', array(
             'type' => 'string',
-            'default' => 'https://www.linkedin.com/in/benwest2/',
+            'default' => '',
             'sanitize_callback' => 'esc_url_raw'
         ));
         register_setting(self::OPTION_GROUP, 'rts_social_linktree', array(
             'type' => 'string',
-            'default' => 'https://linktr.ee/iambenwest',
+            'default' => '',
             'sanitize_callback' => 'esc_url_raw'
         ));
 
         // Email Sending Controls
         register_setting(self::OPTION_GROUP, 'rts_email_sending_enabled', array(
             'type' => 'boolean',
+            'default' => true,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_mail_system_offline', array(
+            'type' => 'boolean',
             'default' => false,
             'sanitize_callback' => 'rest_sanitize_boolean'
         ));
+        register_setting(self::OPTION_GROUP, 'rts_capture_signups_while_offline', array(
+            'type' => 'boolean',
+            'default' => true,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+
+
         register_setting(self::OPTION_GROUP, 'rts_email_demo_mode', array(
             'type' => 'boolean',
             'default' => false,
@@ -233,6 +245,11 @@ class RTS_SMTP_Settings {
         register_setting(self::OPTION_GROUP, 'rts_email_reconsent_required', array(
             'type' => 'boolean',
             'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_letters_require_manual_review', array(
+            'type' => 'boolean',
+            'default' => true,
             'sanitize_callback' => 'rest_sanitize_boolean'
         ));
         register_setting(self::OPTION_GROUP, 'rts_email_daily_time', array(
@@ -244,6 +261,56 @@ class RTS_SMTP_Settings {
             'type' => 'integer',
             'default' => 100,
             'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_newsletter_batch_delay', array(
+            'type' => 'integer',
+            'default' => 5,
+            'sanitize_callback' => array($this, 'sanitize_newsletter_delay')
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_queue_retention_sent_days', array(
+            'type' => 'integer',
+            'default' => 90,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_queue_retention_cancelled_days', array(
+            'type' => 'integer',
+            'default' => 30,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_queue_stuck_timeout_minutes', array(
+            'type' => 'integer',
+            'default' => 60,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_retention_email_logs_days', array(
+            'type' => 'integer',
+            'default' => 90,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_retention_tracking_days', array(
+            'type' => 'integer',
+            'default' => 90,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_retention_bounce_days', array(
+            'type' => 'integer',
+            'default' => 180,
+            'sanitize_callback' => 'absint'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_webhook_enabled', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_webhook_url', array(
+            'type' => 'string',
+            'default' => '',
+            'sanitize_callback' => 'esc_url_raw'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_webhook_secret', array(
+            'type' => 'string',
+            'default' => '',
+            'sanitize_callback' => 'sanitize_text_field'
         ));
 
         // Branding
@@ -263,6 +330,21 @@ class RTS_SMTP_Settings {
             'type' => 'boolean',
             'default' => true,
             'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_letter_submissions_enabled', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_newsletter_signups_enabled', array(
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ));
+        register_setting(self::OPTION_GROUP, 'rts_frontend_pause_logo_url', array(
+            'type' => 'string',
+            'default' => 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png',
+            'sanitize_callback' => 'esc_url_raw'
         ));
 
         // Sections
@@ -339,6 +421,32 @@ class RTS_SMTP_Settings {
         return $this->encrypt($value);
     }
 
+    /**
+     * Normalize SMTP encryption options.
+     * Converts legacy "none" into empty string for PHPMailer compatibility.
+     */
+    public function sanitize_encryption($value) {
+        $value = strtolower(trim((string) $value));
+        if ($value === 'none') {
+            $value = '';
+        }
+        if (!in_array($value, array('tls', 'ssl', ''), true)) {
+            $value = 'tls';
+        }
+        return $value;
+    }
+
+    /**
+     * Clamp newsletter queue chunk delay in seconds.
+     */
+    public function sanitize_newsletter_delay($value) {
+        $value = absint($value);
+        if ($value < 1) {
+            $value = 5;
+        }
+        return min(120, $value);
+    }
+
     private function encrypt($string) {
         if (!extension_loaded('openssl')) return $string;
         $method = 'aes-256-cbc';
@@ -406,7 +514,11 @@ class RTS_SMTP_Settings {
         $phpmailer->isSMTP();
         $phpmailer->Host       = get_option('rts_smtp_host', 'mail.smtp2go.com');
         $phpmailer->Port       = get_option('rts_smtp_port', 2525);
-        $phpmailer->SMTPSecure = get_option('rts_smtp_encryption', 'tls');
+        $encryption = (string) get_option('rts_smtp_encryption', 'tls');
+        if ($encryption === 'none') {
+            $encryption = '';
+        }
+        $phpmailer->SMTPSecure = $encryption;
 
         if (get_option('rts_smtp_auth', true)) {
             $phpmailer->SMTPAuth = true;

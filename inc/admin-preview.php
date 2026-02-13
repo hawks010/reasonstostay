@@ -116,11 +116,8 @@ class RTS_Admin_Preview {
      * Handle preview mode toggle
      */
     public function handle_preview_toggle() {
-        if (!isset($_POST['rts_preview_nonce'])) {
-            return;
-        }
-        
-        if (!wp_verify_nonce($_POST['rts_preview_nonce'], 'rts_toggle_preview')) {
+        $nonce = isset($_POST['rts_preview_nonce']) ? sanitize_text_field(wp_unslash($_POST['rts_preview_nonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'rts_toggle_preview')) {
             return;
         }
         
@@ -130,13 +127,13 @@ class RTS_Admin_Preview {
         
         if (isset($_POST['rts_enable_preview'])) {
             update_option('rts_preview_mode_enabled', true);
-            wp_redirect(admin_url('edit.php?post_type=letter&page=rts-preview-mode&updated=1'));
+            wp_safe_redirect(admin_url('edit.php?post_type=letter&page=rts-preview-mode&updated=1'));
             exit;
         }
         
         if (isset($_POST['rts_disable_preview'])) {
             update_option('rts_preview_mode_enabled', false);
-            wp_redirect(admin_url('edit.php?post_type=letter&page=rts-preview-mode&updated=1'));
+            wp_safe_redirect(admin_url('edit.php?post_type=letter&page=rts-preview-mode&updated=1'));
             exit;
         }
     }

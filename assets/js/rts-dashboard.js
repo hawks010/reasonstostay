@@ -6,8 +6,9 @@
   'use strict';
 
   // If this file gets enqueued twice (even with a different ?ver=), don't start two pollers.
-  if (window.__RTS_DASHBOARD_RT_LOADED) { return; }
+  if (window.__RTS_DASHBOARD_RT_LOADED || window.__RTS_DASHBOARD_INIT) { return; }
   window.__RTS_DASHBOARD_RT_LOADED = true;
+  window.__RTS_DASHBOARD_INIT = true;
 
   // ---------------------------------------------------------
   // Capabilities (graceful degradation)
@@ -128,7 +129,21 @@
   // Init + visibility/lazy polling
   // ---------------------------------------------------------
   function initDashboard() {
-    if (!($('.rts-dashboard').length || $('.rts-letters-analytics').length)) return;
+    const hasShell = ($('.rts-dashboard').length || $('.rts-letters-analytics').length);
+    const hasControls = ($('#rts-scan-inbox-btn').length || $('#rts-rescan-quarantine-btn').length || $('#rts-refresh-status-btn').length);
+
+    // Bind scan/refresh handlers anywhere the controls exist (Letters list, dashboard, etc.)
+    if (!hasShell && !hasControls) return;
+
+    setupEventListeners();
+
+    // On non-dashboard screens we only wire actions; we do not start the poller.
+    if (!hasShell) {
+      if ($('#rts-scan-status').length) {
+        try { updateStatus(); } catch(e) {}
+      }
+      return;
+    }
 
     // Visibility API
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -140,7 +155,6 @@
       startPolling();
     }
 
-    setupEventListeners();
     updateStatus(); // initial run
 
     // Clean up when leaving page
@@ -483,6 +497,13 @@
   // Event delegation
   // ---------------------------------------------------------
   function setupEventListeners() {
+  // Ensure we never double-bind handlers (even if script is enqueued twice).
+  $(document)
+    .off('click', '#rts-scan-inbox-btn, #rts-rescan-quarantine-btn')
+    .off('click', '#rts-refresh-status-btn')
+    .off('click', '.rts-manual-process-btn')
+    .off('click', '.rts-approve-btn');
+
     $(document)
       .on('click', '#rts-scan-inbox-btn, #rts-rescan-quarantine-btn', function(e) {
         e.preventDefault();
@@ -543,7 +564,7 @@
       dataType: 'json',
       data: {
         action: 'rts_cancel_import',
-        nonce: rtsDashboard.dashboard_nonce
+        nonce: ((rtsDashboard && rtsDashboard.dashboard_nonce) ? rtsDashboard.dashboard_nonce : ((rtsDashboard && rtsDashboard.nonce) ? rtsDashboard.nonce : ''))
       }
     }, requestPriorities.rts_cancel_import)
     .done(function(response){
@@ -579,7 +600,7 @@
       data: {
         action: 'rts_start_scan',
         scan_type: type,
-        nonce: rtsDashboard.dashboard_nonce
+        nonce: ((rtsDashboard && rtsDashboard.dashboard_nonce) ? rtsDashboard.dashboard_nonce : ((rtsDashboard && rtsDashboard.nonce) ? rtsDashboard.nonce : ''))
       }
     }, requestPriorities.rts_start_scan)
     .done(function(response){
@@ -619,7 +640,7 @@
       data: {
         action: 'rts_process_single',
         post_id: postId,
-        nonce: rtsDashboard.dashboard_nonce
+        nonce: ((rtsDashboard && rtsDashboard.dashboard_nonce) ? rtsDashboard.dashboard_nonce : ((rtsDashboard && rtsDashboard.nonce) ? rtsDashboard.nonce : ''))
       }
     }, requestPriorities.rts_process_single)
     .done(function(response){
@@ -649,7 +670,7 @@
       data: {
         action: 'rts_approve_letter',
         post_id: postId,
-        nonce: rtsDashboard.dashboard_nonce
+        nonce: ((rtsDashboard && rtsDashboard.dashboard_nonce) ? rtsDashboard.dashboard_nonce : ((rtsDashboard && rtsDashboard.nonce) ? rtsDashboard.nonce : ''))
       }
     }, requestPriorities.rts_approve_letter)
     .done(function(response){
@@ -684,7 +705,7 @@
       data: {
         action: 'rts_bulk_approve',
         post_ids: ids,
-        nonce: rtsDashboard.dashboard_nonce
+        nonce: ((rtsDashboard && rtsDashboard.dashboard_nonce) ? rtsDashboard.dashboard_nonce : ((rtsDashboard && rtsDashboard.nonce) ? rtsDashboard.nonce : ''))
       }
     }, requestPriorities.rts_bulk_approve)
     .done(function(response){

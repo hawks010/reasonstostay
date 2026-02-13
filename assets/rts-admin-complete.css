@@ -4747,8 +4747,402 @@ body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.t
 }
 
 /* =========================================================
-   List layout canonical (letters/subscribers)
-   Keep WP alignment and strip conflicting legacy layout rules.
+   Letters/Subscribers list hardening (final overrides)
+   - Prevent workflow/filter/table overlap
+   - Keep controls readable
+   - Preserve horizontal scroll on smaller widths
+   ========================================================= */
+body.rts-admin-scope.edit-php.post-type-letter #rts-letter-command-center + #rts-workflow-strip-main,
+body.rts-admin-scope.edit-php.post-type-letter #rts-letter-command-center + .rts-workflow-strip {
+  margin-top: 20px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .rts-workflow-strip,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .rts-workflow-strip {
+  margin-bottom: 16px !important;
+  position: relative;
+  z-index: 2;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter .subsubsub,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber .subsubsub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  float: none !important;
+  margin: 0 0 12px !important;
+  width: 100%;
+  position: relative;
+  z-index: 2;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter {
+  clear: both;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box {
+  float: none !important;
+  margin: 0 0 10px auto !important;
+  position: relative;
+  z-index: 3;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top {
+  clear: both;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px !important;
+  padding: 0;
+  position: relative;
+  z-index: 2;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions {
+  float: none !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+  margin-left: auto;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+  width: 100% !important;
+  table-layout: auto !important;
+}
+
+@media (max-width: 1400px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    min-width: 1120px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box {
+    margin-left: 0 !important;
+    width: 100%;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box input[type="search"],
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box input[type="search"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   Canonical list layout v2 (letters/subscribers)
+   Highest-priority override to stop overlap regressions.
+   ========================================================= */
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter {
+  display: block !important;
+  overflow: visible !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .subsubsub,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .subsubsub {
+  margin: 0 0 14px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 10px;
+  align-items: start;
+  clear: both !important;
+  margin: 0 0 12px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions {
+  grid-column: 1;
+  float: none !important;
+  min-width: 0;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+  grid-column: 2;
+  justify-self: end;
+  align-self: start;
+  float: none !important;
+  position: static !important;
+  margin: 0 !important;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.bottom,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.bottom {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.bottom .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.bottom .tablenav-pages {
+  margin-left: auto !important;
+  float: none !important;
+  position: static !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+  clear: both !important;
+  display: block !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  min-width: 1180px !important;
+  margin-top: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table thead th,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table tfoot th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table thead th,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table tfoot th {
+  white-space: nowrap;
+}
+
+@media (max-width: 1680px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top {
+    grid-template-columns: 1fr;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+    grid-column: 1;
+    justify-self: start;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 900px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions select,
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions input,
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions .button,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions select,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions input,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions .button {
+    max-width: 100% !important;
+  }
+}
+
+/* =========================================================
+   Canonical list layout v3 (hard structural reset)
+   Stable stack: views -> search -> filters/pagination -> table
+   ========================================================= */
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter {
+  display: block !important;
+  clear: both !important;
+  overflow: visible !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #rts-workflow-strip-main,
+body.rts-admin-scope.edit-php.post-type-letter .rts-workflow-strip {
+  margin-top: 22px !important;
+  margin-bottom: 14px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .subsubsub,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .subsubsub {
+  display: block !important;
+  float: none !important;
+  clear: both !important;
+  margin: 0 0 12px !important;
+  line-height: 1.45 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .subsubsub li,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .subsubsub li {
+  float: none !important;
+  display: inline-block;
+  margin: 0 8px 6px 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  float: none !important;
+  clear: both !important;
+  margin: 0 0 12px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box input[type="search"],
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box input[type="search"] {
+  width: min(360px, 100%) !important;
+  max-width: 100% !important;
+  min-width: 220px !important;
+  margin: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  float: none !important;
+  clear: both !important;
+  margin: 0 0 14px !important;
+  padding: 0 0 6px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top::after,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  float: none !important;
+  margin: 0 !important;
+  min-width: 0;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions > *,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions > *,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions > *,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions > * {
+  margin: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions select,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions select {
+  max-width: 220px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+  float: none !important;
+  position: static !important;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+  clear: both !important;
+  margin-top: 14px !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+@media (min-width: 1201px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    table-layout: auto !important;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table thead,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table thead {
+    display: table-header-group !important;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table tbody,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table tbody {
+    display: table-row-group !important;
+  }
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.bottom,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.bottom {
+  clear: both !important;
+  margin-top: 12px !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (max-width: 1200px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
+    width: 100%;
+    white-space: normal;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 1160px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 900px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box {
+    width: 100%;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box input[type="search"],
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box input[type="search"] {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* =========================================================
+   Canonical list structure (JS-assisted, final)
    ========================================================= */
 body.rts-admin-scope.edit-php.post-type-letter #rts-workflow-strip-main,
 body.rts-admin-scope.edit-php.post-type-letter .rts-workflow-strip {
@@ -4756,332 +5150,238 @@ body.rts-admin-scope.edit-php.post-type-letter .rts-workflow-strip {
   margin-bottom: 16px !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-list-controls,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-list-controls {
-  display: block !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready {
   clear: both !important;
   overflow: visible !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  position: static !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .subsubsub,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .subsubsub {
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .subsubsub,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .subsubsub {
   float: none !important;
   display: block !important;
-  clear: both !important;
   margin: 0 0 12px !important;
+  clear: both !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .subsubsub li,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .subsubsub li {
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .subsubsub li,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .subsubsub li {
   float: none !important;
   display: inline-block !important;
-  margin: 0 10px 6px 0 !important;
+  margin: 0 9px 6px 0 !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.bottom,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.bottom {
-  display: block !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .rts-list-controls,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .rts-list-controls {
+  margin: 0 0 18px !important;
   clear: both !important;
-  margin: 0 0 10px !important;
-  padding: 0 !important;
-  border: 0 !important;
+  position: relative;
+  z-index: 4;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav::after,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav::after {
-  content: "";
-  display: block;
-  clear: both;
-}
-
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-search-row.search-box,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-search-row.search-box {
-  float: right !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top {
+  float: none !important;
   clear: both !important;
-  margin: 0 0 10px !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 6px !important;
+  padding: 0 0 10px !important;
+  border-bottom: none !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions {
-  float: left !important;
-  display: block !important;
-  margin: 0 8px 0 0 !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .search-box,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .search-box {
+  order: 0;
+  float: none !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 10px;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions select,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions input,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions select,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions input {
-  margin: 0 6px 0 0 !important;
-}
-
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .search-box input[type="search"],
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .search-box input[type="search"] {
-  width: 280px !important;
-  min-width: 200px !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .search-box input[type="search"],
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .search-box input[type="search"] {
+  width: min(360px, 38vw) !important;
+  min-width: 220px !important;
   max-width: 100% !important;
   margin: 0 !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top #search-submit {
-  display: none !important;
-}
-
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.bottom .tablenav-pages,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.bottom .tablenav-pages {
-  float: right !important;
-  position: static !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .search-box input[type="submit"],
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .search-box input[type="submit"] {
   margin: 0 !important;
-  white-space: nowrap !important;
+  height: 34px;
+  padding: 0 14px !important;
+  border-radius: 999px !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .pagination-links a,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .pagination-links span,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .pagination-links a,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .pagination-links span,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .paging-input,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .paging-input,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .tablenav-paging-text,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .tablenav-paging-text {
-  box-shadow: none !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-bulk,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-bulk {
+  order: 1;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  float: none !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .pagination-links a,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .pagination-links span,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .pagination-links a,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .pagination-links span {
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters {
+  order: 2;
+  flex: 1 1 560px;
+  min-width: 280px;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  float: none !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-pages {
+  order: 3;
+  margin-left: auto !important;
+  float: none !important;
+  position: static !important;
+  white-space: nowrap;
+}
+
+/* De-style paging input so it doesn't create nested "glass" pills */
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages .pagination-links,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages .pagination-links {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages .pagination-links > span.paging-input,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages .pagination-links > span.paging-input {
   background: transparent !important;
   border: 0 !important;
+  padding: 0 !important;
   border-radius: 0 !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .paging-input,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .tablenav-paging-text,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .paging-input,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .tablenav-paging-text {
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages .paging-input,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages .paging-input {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages .paging-input .tablenav-paging-text,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages .paging-input .tablenav-paging-text {
   background: transparent !important;
   border: 0 !important;
   padding: 0 !important;
+  border-radius: 0 !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav-pages .current-page,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav-pages .current-page {
-  background: #ffffff !important;
-  color: #1d2327 !important;
-  border: 1px solid #8c8f94 !important;
-  border-radius: 4px !important;
-  height: 26px !important;
-  line-height: 24px !important;
-  padding: 0 6px !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav-pages .current-page,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav-pages .current-page {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--rts-line) !important;
+  border-radius: 12px !important;
+  padding: 4px 8px !important;
+  height: 30px;
+  line-height: 22px;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-list-table-wrap,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-list-table-wrap {
-  display: block !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters > *,
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-bulk > *,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters > *,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-bulk > * {
+  margin: 0 !important;
+}
+
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .rts-list-table-wrap,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .rts-list-table-wrap {
   clear: both !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-top: 12px !important;
-  overflow-x: auto !important;
-  overflow-y: visible !important;
-  position: static !important;
-  z-index: auto !important;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 18px !important;
+  position: relative;
+  z-index: 1;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .wp-list-table,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .wp-list-table,
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-list-table-wrap .wp-list-table,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-list-table-wrap .wp-list-table {
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .rts-list-table-wrap .wp-list-table,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .rts-list-table-wrap .wp-list-table {
   display: table !important;
-  clear: both !important;
   width: 100% !important;
-  table-layout: auto !important;
-  margin-top: 0 !important;
+  min-width: 1160px !important;
+  margin: 0 !important;
+  clear: both !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .column-letter_safety,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .column-letter_safety {
-  white-space: nowrap !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.bottom,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.bottom {
+  clear: both !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px !important;
 }
 
-body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-safety,
-body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-safety {
-  display: inline-flex !important;
-  align-items: center !important;
-  flex-wrap: nowrap !important;
-  white-space: nowrap !important;
-  width: auto !important;
-  min-width: 0 !important;
-  border-radius: 999px !important;
-  padding: 4px 12px !important;
-  line-height: 1.2 !important;
+body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.bottom .tablenav-pages,
+body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.bottom .tablenav-pages {
+  margin-left: auto !important;
+  float: none !important;
+  position: static !important;
 }
 
-@media (max-width: 1200px) {
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-search-row.search-box,
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-search-row.search-box,
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .actions,
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .bulkactions,
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .actions,
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .bulkactions,
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .tablenav-pages,
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .tablenav-pages {
-    float: none !important;
-    width: 100%;
-    margin: 0 0 8px !important;
-    white-space: normal !important;
+@media (min-width: 1401px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .rts-list-table-wrap,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .rts-list-table-wrap {
+    overflow: visible;
   }
 
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .tablenav.top .search-box input[type="search"],
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .tablenav.top .search-box input[type="search"] {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .rts-list-table-wrap .wp-list-table,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .rts-list-table-wrap .wp-list-table {
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 1400px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-pages,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-pages {
+    order: 4;
+    width: 100%;
+    margin-left: 0 !important;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 900px) {
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .search-box,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .search-box {
+    width: 100%;
+  }
+
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .search-box input[type="search"],
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .search-box input[type="search"] {
     width: 100% !important;
     min-width: 0 !important;
   }
 
-  body.rts-admin-scope.edit-php.post-type-letter #posts-filter .rts-list-table-wrap .wp-list-table,
-  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter .rts-list-table-wrap .wp-list-table {
-    min-width: 1120px !important;
-  }
-}
-
-/* =========================================================
-   Frontend Controls Toggle Skin (Email Settings)
-   Restores upgraded glass switches for rts-frontend-controls card.
-   ========================================================= */
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-frontend-controls__head h2 {
-  margin: 0 0 8px 0;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-frontend-controls__head p {
-  margin: 0 0 16px 0;
-  color: rgba(226, 232, 240, 0.86);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-frontend-controls__toggles {
-  display: grid;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-copy h3 {
-  margin: 0 0 4px 0;
-  font-size: 1.04rem;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-copy p {
-  margin: 0;
-  color: rgba(226, 232, 240, 0.82);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-wrap {
-  flex: 0 0 auto;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-track {
-  width: 58px;
-  height: 32px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  padding: 3px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  transition: background .2s ease, border-color .2s ease;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-thumb {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #f8fafc;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  transform: translateX(0);
-  transition: transform .2s ease;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-state {
-  display: inline-flex;
-  align-items: center;
-  min-width: 54px;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(226, 232, 240, 0.9);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-state .state-open {
-  display: none;
-  color: #86efac;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-state .state-closed {
-  display: inline;
-  color: #fecaca;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"]:checked + .rts-glass-toggle-track {
-  background: rgba(74, 222, 128, 0.28);
-  border-color: rgba(74, 222, 128, 0.6);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"]:checked + .rts-glass-toggle-track .rts-glass-toggle-thumb {
-  transform: translateX(26px);
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"]:checked + .rts-glass-toggle-track + .rts-glass-toggle-state .state-open {
-  display: inline;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"]:checked + .rts-glass-toggle-track + .rts-glass-toggle-state .state-closed {
-  display: none;
-}
-
-body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle > input[type="checkbox"]:focus-visible + .rts-glass-toggle-track {
-  outline: 2px solid rgba(125, 211, 252, 0.9);
-  outline-offset: 2px;
-}
-
-@media (max-width: 900px) {
-  body.rts-admin-scope #wpbody-content .rts-frontend-controls .rts-glass-toggle-row {
-    flex-direction: column;
-    align-items: flex-start;
+  body.rts-admin-scope.edit-php.post-type-letter #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters,
+  body.rts-admin-scope.edit-php.post-type-rts_subscriber #posts-filter.rts-list-layout-ready .tablenav.top .rts-nav-filters {
+    min-width: 0;
+    flex-basis: 100%;
   }
 }

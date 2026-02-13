@@ -1,217 +1,318 @@
 <?php
 /**
- * RTS Workflow System
+ * RTS Workflow System (Authoritative)
  *
- * Authoritative lifecycle tracking for the Letter CPT.
+ * Non-negotiable: ALL workflow decisions must rely only on the rts_workflow_stage meta.
+ * WordPress post_status may be used for visibility, but never for workflow routing.
  */
 
 if (!defined('ABSPATH')) exit;
 
 final class RTS_Workflow {
 
-    const META_STAGE        = '_rts_workflow_stage';
-    const META_INGESTED_AT  = '_rts_workflow_ingested_at';
-    const META_PENDING_AT   = '_rts_workflow_pending_at';
-    const META_COMPLETED_AT = '_rts_workflow_completed_at';
-    const META_LEARNED_AT   = '_rts_workflow_learned_at';
-    const META_LOG          = '_rts_workflow_log';
+    /** Canonical meta keys (do not change) */
+    const META_STAGE                 = 'rts_workflow_stage';
+    const META_STAGE_LEGACY          = '_rts_workflow_stage';
 
-    const DB_OPT_INDEX_VER  = 'rts_workflow_index_ver';
+    const META_INGESTED_AT           = 'rts_workflow_ingested_at_gmt';
+    const META_PENDING_AT            = 'rts_workflow_pending_at_gmt';
+    const META_PUBLISHED_AT          = 'rts_workflow_published_at_gmt';
+    const META_ARCHIVED_AT           = 'rts_workflow_archived_at_gmt';
 
-    public static function init() {
-        add_action('admin_init', [__CLASS__, 'ensure_workflow_index']);
-        add_action('wp_insert_post', [__CLASS__, 'on_insert_post'], 10, 3);
-        add_action('transition_post_status', [__CLASS__, 'on_transition'], 10, 3);
-        add_action('rts_workflow_mark_learned', [__CLASS__, 'mark_learned'], 10, 2);
+    const META_PROCESSING_STARTED_AT = 'rts_processing_started_gmt';
+    const META_PROCESSING_LOCK       = 'rts_processing_lock'; // '1' / '0'
+
+    // Bump when migration inference rules change.
+    const OPT_MIGRATION_VER          = 'rts_workflow_migration_v3';
+
+    /** The ONLY valid stages */
+    const STAGE_UNPROCESSED   = 'unprocessed';
+    const STAGE_PROCESSING    = 'processing';
+    const STAGE_PENDING_REVIEW= 'pending_review';
+    const STAGE_QUARANTINED   = 'quarantined';
+    const STAGE_PUBLISHED     = 'published';
+    const STAGE_ARCHIVED      = 'archived';
+
+    public static function init(): void {
+        add_action('admin_init', [__CLASS__, 'maybe_migrate_legacy_workflow'], 1);
+        add_action('wp_insert_post', [__CLASS__, 'ensure_default_stage_on_insert'], 10, 3);
     }
 
-    public static function ensure_workflow_index() {
-        // ABORT: Never run schema changes on live production traffic.
-        // Creating indexes on wp_postmeta can lock the table for a long time on large sites.
-        // If you want this index, add it manually via your DB tool during a quiet window.
-        return;
+    public static function valid_stages(): array {
+        return [
+            self::STAGE_UNPROCESSED,
+            self::STAGE_PROCESSING,
+            self::STAGE_PENDING_REVIEW,
+            self::STAGE_QUARANTINED,
+            self::STAGE_PUBLISHED,
+            self::STAGE_ARCHIVED,
+        ];
+    }
 
-        if (get_option(self::DB_OPT_INDEX_VER) === '1') return;
-        global $wpdb;
-        $table = $wpdb->postmeta;
-        $idx_name = 'rts_workflow_stage_idx';
+    public static function get_stage(int $post_id): string {
+        $post_id = absint($post_id);
+        if (!$post_id) return self::STAGE_UNPROCESSED;
 
-        // Fail-soft.
-        try {
-            $existing = $wpdb->get_var($wpdb->prepare("SHOW INDEX FROM {$table} WHERE Key_name = %s", $idx_name));
-            if ($existing) {
-                update_option(self::DB_OPT_INDEX_VER, '1');
-                return;
+        $stage = (string) get_post_meta($post_id, self::META_STAGE, true);
+        if ($stage === '') {
+            $legacy = (string) get_post_meta($post_id, self::META_STAGE_LEGACY, true);
+            if ($legacy !== '') {
+                $stage = self::map_legacy_stage($legacy);
             }
-
-            // Composite index speeds up meta_key/meta_value queries for 40k+ posts.
-            $wpdb->query("ALTER TABLE {$table} ADD INDEX {$idx_name} (meta_key(191), meta_value(50))");
-            update_option(self::DB_OPT_INDEX_VER, '1');
-        } catch (Throwable $e) {
-            // no-op
         }
+
+        if (!in_array($stage, self::valid_stages(), true)) {
+            // Fail-safe default: treat unknown/missing as unprocessed (eligible for scan),
+            // unless the post is already published (migration handles this in admin context).
+            $stage = self::STAGE_UNPROCESSED;
+        }
+        return $stage;
     }
 
-    public static function on_insert_post($post_id, $post, $update) {
-        if (!($post instanceof WP_Post)) return;
-        if ($post->post_type !== 'letter') return;
+    public static function set_stage(int $post_id, string $stage, string $note = ''): bool {
+        $post_id = absint($post_id);
+        $stage = sanitize_key($stage);
+        if (!$post_id) return false;
+        if (!in_array($stage, self::valid_stages(), true)) return false;
+
+        update_post_meta($post_id, self::META_STAGE, $stage);
+
+        // Keep legacy meta in sync for backwards compatibility, but do not query it.
+        update_post_meta($post_id, self::META_STAGE_LEGACY, $stage);
+
+        $now = gmdate('c');
+        switch ($stage) {
+            case self::STAGE_UNPROCESSED:
+                if ((string) get_post_meta($post_id, self::META_INGESTED_AT, true) === '') {
+                    update_post_meta($post_id, self::META_INGESTED_AT, $now);
+                }
+                break;
+            case self::STAGE_PENDING_REVIEW:
+                update_post_meta($post_id, self::META_PENDING_AT, $now);
+                break;
+            case self::STAGE_PUBLISHED:
+                update_post_meta($post_id, self::META_PUBLISHED_AT, $now);
+                break;
+            case self::STAGE_ARCHIVED:
+                update_post_meta($post_id, self::META_ARCHIVED_AT, $now);
+                break;
+        }
+
+        if ($note !== '') {
+            self::append_log($post_id, $note);
+        }
+
+        return true;
+    }
+
+    public static function append_log(int $post_id, string $note): void {
+        $post_id = absint($post_id);
+        if (!$post_id) return;
+
+        $note = trim(wp_strip_all_tags($note));
+        if ($note === '') return;
+
+        $log = get_post_meta($post_id, 'rts_workflow_log', true);
+        if (!is_array($log)) $log = [];
+
+        $log[] = [
+            't' => gmdate('c'),
+            'u' => get_current_user_id(),
+            'n' => $note,
+        ];
+
+        // cap to last 100 entries
+        if (count($log) > 100) {
+            $log = array_slice($log, -100);
+        }
+
+        update_post_meta($post_id, 'rts_workflow_log', $log);
+    }
+
+    public static function mark_processing_started(int $post_id): void {
+        $post_id = absint($post_id);
+        if (!$post_id) return;
+
+        update_post_meta($post_id, self::META_PROCESSING_STARTED_AT, gmdate('c'));
+        update_post_meta($post_id, self::META_PROCESSING_LOCK, '1');
+    }
+
+    public static function clear_processing_lock(int $post_id): void {
+        $post_id = absint($post_id);
+        if (!$post_id) return;
+
+        delete_post_meta($post_id, self::META_PROCESSING_STARTED_AT);
+        update_post_meta($post_id, self::META_PROCESSING_LOCK, '0');
+    }
+
+    public static function is_processing_stale(int $post_id): bool {
+        $post_id = absint($post_id);
+        if (!$post_id) return false;
+
+        $stage = self::get_stage($post_id);
+        if ($stage !== self::STAGE_PROCESSING) return false;
+
+        $started = (string) get_post_meta($post_id, self::META_PROCESSING_STARTED_AT, true);
+        if ($started === '') return false;
+
+        $ts = strtotime($started);
+        if (!$ts) return false;
+
+        $threshold = (int) apply_filters('rts_processing_stale_seconds', 15 * 60); // 15 minutes default
+        return (time() - $ts) > $threshold;
+    }
+
+    public static function reset_stuck_to_unprocessed(int $post_id, string $note = ''): bool {
+        $post_id = absint($post_id);
+        if (!$post_id) return false;
+
+        if (!self::is_processing_stale($post_id)) return false;
+
+        self::clear_processing_lock($post_id);
+        return self::set_stage($post_id, self::STAGE_UNPROCESSED, $note ?: 'Rescan stuck: reset processing lock');
+    }
+
+    public static function count_by_stage(string $stage): int {
+        $stage = sanitize_key($stage);
+        if (!in_array($stage, self::valid_stages(), true)) return 0;
+
+        $q = new WP_Query([
+            'post_type'      => 'letter',
+            'post_status'    => 'any',
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+            'no_found_rows'  => false,
+            'meta_query'     => [
+                [ 'key' => self::META_STAGE, 'value' => $stage ],
+            ],
+        ]);
+
+        return (int) $q->found_posts;
+    }
+
+    /**
+     * Ensure new Letter CPT posts always have a valid workflow stage.
+     * This is a defaulting behavior only, not a routing decision.
+     */
+    public static function ensure_default_stage_on_insert(int $post_id, WP_Post $post, bool $update): void {
+        if ($update) return;
+        if (!$post || $post->post_type !== 'letter') return;
         if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) return;
 
-        if (!get_post_meta($post_id, self::META_STAGE, true)) {
-            $stage = self::infer_stage_from_post($post_id, $post);
-            self::set_stage($post_id, $stage, $update ? 'save' : 'create', false);
-        }
-    }
-
-    public static function on_transition($new_status, $old_status, $post) {
-        if (!($post instanceof WP_Post)) return;
-        if ($post->post_type !== 'letter') return;
-        if ($new_status === $old_status) return;
-
-        if ($new_status === 'pending') {
-            self::set_stage($post->ID, 'pending_review', 'status:pending', false);
-            self::touch_timestamp($post->ID, self::META_PENDING_AT);
+        $stage = (string) get_post_meta($post_id, self::META_STAGE, true);
+        if ($stage !== '' && in_array($stage, self::valid_stages(), true)) {
             return;
         }
 
-        if ($new_status === 'publish') {
-            self::set_stage($post->ID, 'approved_published', 'status:publish', false);
-            self::touch_timestamp($post->ID, self::META_COMPLETED_AT);
-            return;
-        }
-
-        if ($new_status === 'draft') {
-            $flagged = self::is_flagged($post->ID);
-            self::set_stage($post->ID, $flagged ? 'flagged_draft' : 'ingested', 'status:draft', false);
-            return;
-        }
+        // Default to unprocessed, and stamp ingest time.
+        self::set_stage($post_id, self::STAGE_UNPROCESSED, 'Auto default stage on insert');
     }
 
-    public static function mark_learned($post_id, $trigger = 'learn') {
-        $post_id = absint($post_id);
-        if (!$post_id || get_post_type($post_id) !== 'letter') return;
-        self::touch_timestamp($post_id, self::META_LEARNED_AT);
-        self::append_log($post_id, 'learned', 'learned', sanitize_key((string) $trigger));
-    }
+    /**
+     * One-time migration to canonical stage set + canonical meta key.
+     * Runs in admin only.
+     */
+    public static function maybe_migrate_legacy_workflow(): void {
+        if (get_option(self::OPT_MIGRATION_VER) === '3') return;
 
-    public static function get_stage($post_id) {
-        $post_id = absint($post_id);
-        return (string) get_post_meta($post_id, self::META_STAGE, true);
-    }
+        if (!current_user_can('manage_options')) return;
 
-    public static function set_stage($post_id, $new_stage, $trigger = 'system', $sync_status = false) {
-        $post_id = absint($post_id);
-        if (!$post_id || get_post_type($post_id) !== 'letter') return;
+        // We migrate in small batches to avoid admin timeouts.
+        $batch = 250;
+        $offset = (int) get_option('rts_workflow_migration_offset', 0);
 
-        $new_stage = sanitize_key((string) $new_stage);
-        $old_stage = (string) get_post_meta($post_id, self::META_STAGE, true);
+        $q = new WP_Query([
+            'post_type'      => 'letter',
+            'post_status'    => 'any',
+            'posts_per_page' => $batch,
+            'offset'         => $offset,
+            'fields'         => 'ids',
+            'orderby'        => 'ID',
+            'order'          => 'ASC',
+            'no_found_rows'  => true,
+        ]);
 
-        if ($old_stage === $new_stage && $old_stage !== '') {
-            if (!get_post_meta($post_id, self::META_INGESTED_AT, true)) {
-                self::touch_timestamp($post_id, self::META_INGESTED_AT);
+        foreach ((array) $q->posts as $id) {
+            $id = (int) $id;
+
+            $stage_new = (string) get_post_meta($id, self::META_STAGE, true);
+            if ($stage_new !== '' && in_array($stage_new, self::valid_stages(), true)) {
+                continue;
             }
-            return;
+
+            $legacy = (string) get_post_meta($id, self::META_STAGE_LEGACY, true);
+            if ($legacy !== '') {
+                $mapped = self::map_legacy_stage($legacy);
+                self::set_stage($id, $mapped, 'Migrated legacy workflow stage');
+                continue;
+            }
+
+            // No meta at all: infer a SAFE stage.
+            // Hard rule: do NOT default legacy content into unprocessed if it could already be in a review queue.
+            // We intentionally bias toward pending_review to avoid accidental automatic reprocessing.
+            $ps = get_post_status($id);
+
+            if ($ps === 'publish') {
+                self::set_stage($id, self::STAGE_PUBLISHED, 'Inferred stage from published post_status during migration');
+                continue;
+            }
+
+            if ($ps === 'trash') {
+                self::set_stage($id, self::STAGE_ARCHIVED, 'Inferred stage from trashed post_status during migration');
+                continue;
+            }
+
+            if ($ps === 'pending') {
+                self::set_stage($id, self::STAGE_PENDING_REVIEW, 'Inferred stage from pending post_status during migration');
+                continue;
+            }
+
+            // If the legacy quarantine flag exists, treat as quarantined.
+            $needs_review = (string) get_post_meta($id, 'needs_review', true);
+            if ($needs_review === '1') {
+                self::set_stage($id, self::STAGE_QUARANTINED, 'Inferred stage from needs_review flag during migration');
+                continue;
+            }
+
+            // Draft/private/future or anything else without stage: treat as pending_review by default.
+            // If the site owner wants these to be rescanned, they can manually push them to unprocessed.
+            self::set_stage($id, self::STAGE_PENDING_REVIEW, 'Defaulted missing stage to pending_review during migration');
         }
 
-        if (!$old_stage) {
-            self::touch_timestamp($post_id, self::META_INGESTED_AT);
-        }
+        $next = $offset + count((array) $q->posts);
+        update_option('rts_workflow_migration_offset', $next, false);
 
-        update_post_meta($post_id, self::META_STAGE, $new_stage);
-
-        if ($new_stage === 'pending_review') self::touch_timestamp($post_id, self::META_PENDING_AT);
-        if ($new_stage === 'approved_published' || $new_stage === 'skipped_published') self::touch_timestamp($post_id, self::META_COMPLETED_AT);
-
-        self::append_log($post_id, $old_stage ? $old_stage : 'none', $new_stage, sanitize_key((string) $trigger));
-
-        if ($sync_status) {
-            self::sync_status_bucket($post_id, $new_stage);
+        if (count((array) $q->posts) < $batch) {
+            update_option(self::OPT_MIGRATION_VER, '3', false);
+            delete_option('rts_workflow_migration_offset');
         }
     }
 
-    private static function sync_status_bucket($post_id, $stage) {
-        $target = null;
-        if ($stage === 'pending_review') $target = 'pending';
-        if ($stage === 'flagged_draft' || $stage === 'ingested') $target = 'draft';
-        if ($stage === 'approved_published' || $stage === 'skipped_published') $target = 'publish';
+    private static function map_legacy_stage(string $legacy): string {
+        $legacy = sanitize_key($legacy);
 
-        if ($target && get_post_status($post_id) !== $target) {
-            wp_update_post(['ID' => $post_id, 'post_status' => $target]);
-        }
-    }
-
-    private static function touch_timestamp($post_id, $meta_key) {
-        if (!get_post_meta($post_id, $meta_key, true)) {
-            update_post_meta($post_id, $meta_key, current_time('mysql', true));
-        }
-    }
-
-    private static function append_log($post_id, $from, $to, $trigger) {
-        $entry = [
-            'ts' => current_time('mysql', true),
-            'from' => (string) $from,
-            'to' => (string) $to,
-            'trigger' => (string) $trigger,
-            'user' => get_current_user_id(),
+        // Map older RTS stage keys to the canonical stage set.
+        $map = [
+            // previous "ingested" / missing -> unprocessed
+            'ingested'           => self::STAGE_UNPROCESSED,
+            'unprocessed'        => self::STAGE_UNPROCESSED,
+            // processing stays
+            'processing'         => self::STAGE_PROCESSING,
+            // waiting for human review
+            'pending_review'     => self::STAGE_PENDING_REVIEW,
+            // quarantine variants
+            'flagged_draft'      => self::STAGE_QUARANTINED,
+            'quarantined'        => self::STAGE_QUARANTINED,
+            // published variants
+            'approved_published' => self::STAGE_PUBLISHED,
+            'skipped_published'  => self::STAGE_PUBLISHED,
+            'published'          => self::STAGE_PUBLISHED,
+            // archived stays
+            'archived'           => self::STAGE_ARCHIVED,
         ];
-        add_post_meta($post_id, self::META_LOG, $entry, false);
-    }
 
-    public static function is_flagged($post_id) {
-        $post_id = absint($post_id);
-        $default = false;
-
-        $needs_review = (string) get_post_meta($post_id, 'needs_review', true);
-        if ($needs_review === '1' || $needs_review === 'yes' || $needs_review === 'true') $default = true;
-
-        $reasons = (string) get_post_meta($post_id, 'rts_flag_reasons', true);
-        $kw = (string) get_post_meta($post_id, 'rts_flagged_keywords', true);
-        if ($reasons !== '' || $kw !== '') $default = true;
-
-        return (bool) apply_filters('rts_is_flagged_letter', $default, $post_id);
-    }
-
-    public static function infer_stage_from_post($post_id, $post = null) {
-        $post_id = absint($post_id);
-        $post = ($post instanceof WP_Post) ? $post : get_post($post_id);
-        if (!$post || $post->post_type !== 'letter') return 'ingested';
-
-        $status = $post->post_status;
-
-        if ($status === 'pending') return 'pending_review';
-
-        if ($status === 'draft') {
-            return self::is_flagged($post_id) ? 'flagged_draft' : 'ingested';
-        }
-
-        if ($status === 'publish') {
-            $touched = (bool) get_post_meta($post_id, '_rts_refined', true)
-                || (bool) get_post_meta($post_id, '_rts_bot_snapshot', true)
-                || (bool) get_post_meta($post_id, self::META_PENDING_AT, true);
-
-            return $touched ? 'approved_published' : 'skipped_published';
-        }
-
-        return 'ingested';
-    }
-
-    public static function count_by_stage($stage) {
-        $stage = sanitize_key((string) $stage);
-        $cache_key = 'rts_stage_count_' . $stage;
-        $cached = wp_cache_get($cache_key, 'rts');
-        if ($cached !== false) return (int) $cached;
-
-        global $wpdb;
-        $count = (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(pm.post_id) FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key = %s AND pm.meta_value = %s AND p.post_type = %s",
-            self::META_STAGE,
-            $stage,
-            'letter'
-        ));
-
-        wp_cache_set($cache_key, $count, 'rts', 60);
-        return $count;
+        return $map[$legacy] ?? self::STAGE_UNPROCESSED;
     }
 }
 
-add_action('init', ['RTS_Workflow', 'init'], 15);
+RTS_Workflow::init();

@@ -24,7 +24,7 @@ function rts_register_embed_routes() {
     register_rest_route( 'rts/v1', '/embed/random', [
         'methods'             => [ 'GET', 'OPTIONS' ],
         'callback'            => 'rts_embed_random_letter',
-        'permission_callback' => '__return_true', // Public endpoint
+        'permission_callback' => 'rts_rest_public_read_permission',
         'args'                => [
             'exclude' => [
                 'description' => 'Comma-separated list of letter IDs to exclude.',

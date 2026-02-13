@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 
 class RTS_Database_Installer {
 
-    const VERSION = '1.2.0';
+    const VERSION = '1.4.0';
 
     public static function install() {
         global $wpdb;
@@ -42,6 +42,11 @@ class RTS_Database_Installer {
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
 
+        // Index notes:
+        // - rts_email_queue.status_scheduled supports due-item scans.
+        // - rts_newsletter_analytics.newsletter_event + occurred_at supports dashboard timelines.
+        // - rts_subscribers.status_next_send supports high-volume drip scheduling.
+        // - rts_system_audit.entity_lookup supports actor/entity investigations.
         $schemas = array();
 
         // 1. Email Logs
@@ -179,6 +184,86 @@ class RTS_Database_Installer {
             KEY frequency (frequency)
         ) $charset_collate;";
 
+        // 9. Newsletter Versions (content + builder snapshots)
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_newsletter_versions (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            newsletter_id bigint(20) unsigned NOT NULL,
+            version_no int(11) unsigned NOT NULL DEFAULT 1,
+            title text NOT NULL,
+            content longtext NOT NULL,
+            builder_json longtext,
+            reason varchar(100) DEFAULT NULL,
+            created_by bigint(20) unsigned DEFAULT NULL,
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY newsletter_version (newsletter_id, version_no),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        // 10. Newsletter Analytics Events (sent/open/click/bounce/unsubscribe)
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_newsletter_analytics (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            newsletter_id bigint(20) unsigned NOT NULL,
+            queue_id bigint(20) unsigned DEFAULT NULL,
+            subscriber_id bigint(20) unsigned DEFAULT NULL,
+            event_type varchar(30) NOT NULL,
+            target_url text,
+            url_hash char(40) DEFAULT NULL,
+            event_hash char(64) NOT NULL,
+            metadata longtext,
+            occurred_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY event_hash (event_hash),
+            KEY newsletter_event (newsletter_id, event_type),
+            KEY queue_id (queue_id),
+            KEY occurred_at (occurred_at)
+        ) $charset_collate;";
+
+        // 11. Newsletter Template Library
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_newsletter_templates (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            slug varchar(120) NOT NULL,
+            name varchar(200) NOT NULL,
+            thumbnail_url varchar(512) DEFAULT NULL,
+            structure longtext NOT NULL,
+            is_system tinyint(1) NOT NULL DEFAULT 0,
+            created_by bigint(20) unsigned DEFAULT NULL,
+            created_at datetime NOT NULL,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY slug (slug),
+            KEY is_system (is_system)
+        ) $charset_collate;";
+
+        // 12. Newsletter Audit Trail (workflow + send actions)
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_newsletter_audit (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            newsletter_id bigint(20) unsigned NOT NULL,
+            actor_id bigint(20) unsigned DEFAULT NULL,
+            event_type varchar(40) NOT NULL,
+            message text,
+            context longtext,
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY newsletter_event (newsletter_id, event_type),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        // 13. System Audit Trail (subscriber, queue, settings actions)
+        $schemas[] = "CREATE TABLE {$wpdb->prefix}rts_system_audit (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            event_type varchar(80) NOT NULL,
+            entity_type varchar(80) NOT NULL,
+            entity_id bigint(20) unsigned DEFAULT NULL,
+            actor_id bigint(20) unsigned DEFAULT NULL,
+            context longtext,
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY event_type (event_type),
+            KEY entity_lookup (entity_type, entity_id),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
         return $schemas;
     }
 
@@ -193,6 +278,11 @@ class RTS_Database_Installer {
             'rts_rate_limits',
             'rts_engagement',
             'rts_subscribers',
+            'rts_newsletter_versions',
+            'rts_newsletter_analytics',
+            'rts_newsletter_templates',
+            'rts_newsletter_audit',
+            'rts_system_audit',
         );
         
         foreach ($tables as $table) {
@@ -228,8 +318,9 @@ class RTS_Database_Installer {
     private static function maybe_upgrade_schema() {
         global $wpdb;
 
-        $logs  = $wpdb->prefix . 'rts_email_logs';
-        $queue = $wpdb->prefix . 'rts_email_queue';
+        $logs      = $wpdb->prefix . 'rts_email_logs';
+        $queue     = $wpdb->prefix . 'rts_email_queue';
+        $nla_table = $wpdb->prefix . 'rts_newsletter_analytics';
 
         // 1) Email logs: add letter_id column if missing.
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs)) === $logs) {
@@ -260,6 +351,14 @@ class RTS_Database_Installer {
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $subs)) !== $subs) {
             // Table will be created by dbDelta in the main install() flow.
             // Nothing extra needed here; just a guard for future column additions.
+        }
+
+        // 4) Newsletter analytics: ensure event hash uniqueness index exists.
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $nla_table)) === $nla_table) {
+            $has_event_hash = $wpdb->get_var("SHOW INDEX FROM {$nla_table} WHERE Key_name = 'event_hash'");
+            if (empty($has_event_hash)) {
+                $wpdb->query("ALTER TABLE {$nla_table} ADD UNIQUE KEY event_hash (event_hash)");
+            }
         }
     }
 }

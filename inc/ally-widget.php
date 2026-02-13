@@ -332,18 +332,17 @@ class RTS_Accessibility_Toolkit {
             }
 
             /* === MINIMIZED PILL === */
-			@media screen and (min-width: 769px) and (max-width: 1024px) {
-    .rts-a11y-pill {
-        top: 85% !important;
-        transform: translateY(-50%); /* Keeps it centered vertically relative to the top % */
-    }
-}
-			
+            
             .rts-a11y-pill {
                 position: fixed;
                 right: 10px;
-                top: 79%;
-                transform: translateY(-50%);
+                top: auto; /* Removed top: 75% to prevent iOS viewport resize jitter */
+                bottom: 80px; /* Anchoring to bottom is more stable on mobile Safari/Chrome */
+                
+                /* Hardware acceleration for smooth fixed positioning */
+                transform: translateZ(0);
+                -webkit-transform: translateZ(0);
+                
                 display: flex;
                 flex-direction: column;
                 gap: 12px;
@@ -353,12 +352,18 @@ class RTS_Accessibility_Toolkit {
                 border: 2px solid var(--rts-orange);
                 box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
                 transition: opacity 0.3s ease, right 0.3s ease;
+                z-index: 2147483647;
             }
 
             .rts-a11y-pill:hover {
                 opacity: 1;
             }
 
+@media (max-width: 1024px) {.rts-a11y-pill {
+        bottom: 10px;
+}
+    
+}
             .rts-a11y-quick {
                 width: 44px;
                 height: 44px;

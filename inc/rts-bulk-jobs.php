@@ -145,7 +145,11 @@ function rts_handle_bulk_admin_action(string $token, int $offset = 0): void {
 
         try {
             if ($action === 'mark_safe') {
-                // Clear ALL quarantine flags and metadata
+                // Admin asserts this letter is safe without reprocessing.
+                update_post_meta($post_id, 'rts_admin_override', '1');
+                update_post_meta($post_id, 'rts_admin_override_gmt', gmdate('c'));
+
+                // Clear quarantine flags + error metadata
                 delete_post_meta($post_id, 'needs_review');
                 delete_post_meta($post_id, 'rts_flag_reasons');
                 delete_post_meta($post_id, 'rts_moderation_reasons');
@@ -154,52 +158,66 @@ function rts_handle_bulk_admin_action(string $token, int $offset = 0): void {
                 delete_post_meta($post_id, 'rts_system_error');
                 delete_post_meta($post_id, 'rts_scan_queued_ts');
                 delete_post_meta($post_id, 'rts_scan_queued_gmt');
-                
-                // Move to pending for reprocessing
-                wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
-                $processed++;
-                
-            } elseif ($action === 'mark_review') {
-                update_post_meta($post_id, 'needs_review', '1');
-                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
-                $processed++;
-                
-            } elseif ($action === 'clear_quarantine_rescan') {
-                // Clear queue timestamps to allow reprocessing
-                delete_post_meta($post_id, 'rts_scan_queued_ts');
-                delete_post_meta($post_id, 'rts_scan_queued_gmt');
-                
-                // Clear all quarantine flags
-                delete_post_meta($post_id, 'needs_review');
-                delete_post_meta($post_id, 'rts_flag_reasons');
-                delete_post_meta($post_id, 'rts_moderation_reasons');
-                delete_post_meta($post_id, 'rts_flagged_keywords');
-                delete_post_meta($post_id, 'rts_safety_details');
-                delete_post_meta($post_id, 'rts_system_error');
-                
-                // Move to pending
-                wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
-                
-                // Queue for processing - USE EXISTING METHOD if available
-                if (class_exists('RTS_Engine_Dashboard') && method_exists('RTS_Engine_Dashboard', 'queue_letter_scan')) {
-                    RTS_Engine_Dashboard::queue_letter_scan($post_id);
-                } elseif (!as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
-                    as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
-                }
-                $processed++;
-            } elseif ($action === 'rts_send_to_review') {
-                // Workflow: Send to Review (sets workflow stage + (optionally) moves to Pending bucket)
+
                 if (class_exists('RTS_Workflow')) {
-                    RTS_Workflow::set_stage($post_id, 'pending_review', 'bulk:send_to_review', false);
+                    RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_PENDING_REVIEW, 'bulk: mark_safe -> pending_review');
+                    RTS_Workflow::clear_processing_lock($post_id);
                 }
 
-                $change_status = (bool) apply_filters('rts_send_to_review_change_status', true, $post_id);
-                if ($change_status && get_post_status($post_id) !== 'pending') {
-                    wp_update_post(['ID' => $post_id, 'post_status' => 'pending']);
+                // Keep as draft until explicitly published by the UI.
+                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
+                $processed++;
+
+            } elseif ($action === 'mark_review') {
+                // Force quarantine (manual review needed).
+                update_post_meta($post_id, 'needs_review', '1');
+                if (class_exists('RTS_Workflow')) {
+                    RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_QUARANTINED, 'bulk: mark_review -> quarantined');
+                    RTS_Workflow::clear_processing_lock($post_id);
+                }
+                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
+                $processed++;
+
+            } elseif ($action === 'clear_quarantine_rescan') {
+                // Manual recheck: move quarantined back to unprocessed so it can be processed again.
+                update_post_meta($post_id, 'rts_admin_override', '1');
+                update_post_meta($post_id, 'rts_admin_override_gmt', gmdate('c'));
+
+                delete_post_meta($post_id, 'rts_scan_queued_ts');
+                delete_post_meta($post_id, 'rts_scan_queued_gmt');
+
+                delete_post_meta($post_id, 'needs_review');
+                delete_post_meta($post_id, 'rts_flag_reasons');
+                delete_post_meta($post_id, 'rts_moderation_reasons');
+                delete_post_meta($post_id, 'rts_flagged_keywords');
+                delete_post_meta($post_id, 'rts_safety_details');
+                delete_post_meta($post_id, 'rts_system_error');
+
+                if (class_exists('RTS_Workflow')) {
+                    RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_UNPROCESSED, 'bulk: clear_quarantine_rescan -> unprocessed');
+                    RTS_Workflow::clear_processing_lock($post_id);
+                }
+
+                // Queue for processing (engine will claim the letter and move it to processing).
+                if (class_exists('RTS_Engine_Dashboard') && method_exists('RTS_Engine_Dashboard', 'queue_letter_scan')) {
+                    RTS_Engine_Dashboard::queue_letter_scan($post_id);
+                } elseif (function_exists('as_next_scheduled_action') && function_exists('as_schedule_single_action')) {
+                    if (!as_next_scheduled_action('rts_process_letter', [$post_id], 'rts')) {
+                        as_schedule_single_action(time() + 5, 'rts_process_letter', [$post_id], 'rts');
+                    }
                 }
                 $processed++;
+
+            } elseif ($action === 'rts_send_to_review') {
+                // Workflow: Send to Review (stage only).
+                if (class_exists('RTS_Workflow')) {
+                    RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_PENDING_REVIEW, 'bulk: send_to_review');
+                    RTS_Workflow::clear_processing_lock($post_id);
+                }
+                wp_update_post(['ID' => $post_id, 'post_status' => 'draft']);
+                $processed++;
             }
-        } catch (\Throwable $e) {
+} catch (\Throwable $e) {
             error_log('RTS Bulk: Error processing post ' . $post_id . ': ' . $e->getMessage());
         }
     }

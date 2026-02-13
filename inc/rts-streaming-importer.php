@@ -1203,7 +1203,7 @@ class RTSStreamingImporter {
 						// ----------------------------------------------------
 						// INSERT POST
 						// ----------------------------------------------------
-						$final_title = $title ?: 'Letter ' . wp_generate_password( 8, false, false );
+                            $final_title = $title ?: ( 'Letter ' . current_time( 'Y-m-d' ) . ' #0' );
 
 						$post_data = [
 							'post_type'    => self::POST_TYPE, // Code Quality #11
@@ -1228,6 +1228,26 @@ class RTSStreamingImporter {
 							continue;
 						}
 						
+                            $post_id = (int) $post_id;
+
+                            // Workflow: imported letters must start unprocessed.
+                            if (class_exists('RTS_Workflow')) {
+                                RTS_Workflow::set_stage($post_id, RTS_Workflow::STAGE_UNPROCESSED, 'Imported via streaming importer');
+                            } else {
+                                update_post_meta($post_id, 'rts_workflow_stage', 'unprocessed');
+                            }
+
+                            $date_seed = current_time( 'Y-m-d' );
+                            $seed_post_date = (string) get_post_field( 'post_date', $post_id );
+                            if ( $seed_post_date !== '' && $seed_post_date !== '0000-00-00 00:00:00' ) {
+                                $seed_ts = strtotime( $seed_post_date );
+                                if ( $seed_ts !== false ) {
+                                    $date_seed = wp_date( 'Y-m-d', $seed_ts );
+                                }
+                            }
+                            $canonical_title = sprintf( 'Letter %s #%d', $date_seed, $post_id );
+                            update_post_meta( $post_id, '_rts_internal_moderation_update', '1' );
+                            wp_update_post( [ 'ID' => $post_id, 'post_title' => $canonical_title ] );
 						// Store for bulk meta
 						$post_ids_map[$item_index] = $post_id;
 

@@ -71,7 +71,7 @@ class RTS_Unsubscribe {
      * @return string
      */
     private function generate_sig($token, $purpose, $date_override = null) {
-        $date = $date_override ? $date_override : date('Y-m-d');
+        $date = $date_override ? $date_override : gmdate('Y-m-d');
         return hash_hmac('sha256', $token . '|' . $purpose . '|' . $date, wp_salt('auth'));
     }
 
@@ -93,7 +93,7 @@ class RTS_Unsubscribe {
 
         // Check previous days based on expiry window
         for ($i = 1; $i <= $expiry_days; $i++) {
-            $date = date('Y-m-d', time() - ($i * 86400));
+            $date = gmdate('Y-m-d', time() - ($i * 86400));
             $expected_date = $this->generate_sig($token, $purpose, $date);
             if (hash_equals($expected_date, (string) $sig)) {
                 return true;
@@ -182,7 +182,13 @@ class RTS_Unsubscribe {
 
         // Perform Update
         update_post_meta($subscriber_id, '_rts_subscriber_status', 'unsubscribed');
-        update_post_meta($subscriber_id, '_rts_subscriber_unsubscribed_at', current_time('mysql'));
+        update_post_meta($subscriber_id, '_rts_subscriber_unsubscribed_at', current_time('mysql', true));
+        do_action('rts_subscriber_unsubscribed', (int) $subscriber_id, 'unsubscribe_link');
+
+        // Strict handling: move subscriber record to bin (trash) immediately.
+        if (function_exists('wp_trash_post')) {
+            wp_trash_post((int) $subscriber_id);
+        }
 
         // Log
         $this->log_action($subscriber_id, 'unsubscribed', array('method' => 'link'));
@@ -203,7 +209,7 @@ class RTS_Unsubscribe {
         $sig   = isset($_GET['sig']) ? sanitize_text_field(wp_unslash($_GET['sig'])) : '';
 
         // Verify Signature (30 day expiry)
-        if (!$this->verify_sig($token, 'manage', $sig, 30)) {
+        if (!$this->verify_sig($token, 'manage', $sig, 30) && !$this->verify_legacy_manage_sig($token, $sig)) {
             $this->render_error_page('Invalid Link', 'This link has expired. Please request a new one via the subscription form.');
         }
 
@@ -250,14 +256,18 @@ class RTS_Unsubscribe {
             
             update_post_meta($subscriber_id, '_rts_pref_letters', $pref_letters);
             update_post_meta($subscriber_id, '_rts_pref_newsletters', $pref_news);
-            update_post_meta($subscriber_id, '_rts_pref_updated_at', current_time('mysql'));
+            update_post_meta($subscriber_id, '_rts_pref_updated_at', current_time('mysql', true));
 
             // Record Consent (Re-confirmation)
             $this->update_consent_log($subscriber_id, 'confirmed_preferences', array('via' => 'preference_center'));
             $this->log_action($subscriber_id, 'updated_preferences');
 
             // If user was unsubscribed/bounced, set back to active
+            $previous_status = (string) get_post_meta($subscriber_id, '_rts_subscriber_status', true);
             update_post_meta($subscriber_id, '_rts_subscriber_status', 'active');
+            if (in_array($previous_status, array('unsubscribed', 'bounced'), true)) {
+                do_action('rts_subscriber_resubscribed', (int) $subscriber_id, 'preference_center');
+            }
 
             // Optional: Send confirmation email if engine supports it
             if (class_exists('RTS_Email_Engine')) {
@@ -434,6 +444,18 @@ class RTS_Unsubscribe {
             )
         ));
         return !empty($q->posts) ? intval($q->posts[0]) : 0;
+    }
+
+    /**
+     * Backward compatibility for legacy manage links signed without date.
+     *
+     * @param string $token
+     * @param string $sig
+     * @return bool
+     */
+    private function verify_legacy_manage_sig($token, $sig) {
+        $legacy = hash_hmac('sha256', $token . '|manage', wp_salt('auth'));
+        return hash_equals($legacy, (string) $sig);
     }
 
     private function get_subscriber_by_verification_token($token) {

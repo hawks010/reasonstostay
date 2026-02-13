@@ -60,7 +60,7 @@ function rts_ajax_random_letter() {
 
     wp_send_json( [
         'id'       => $post->ID,
-        'title'    => get_the_title( $post ),
+        'title'    => '',
         'content'  => apply_filters( 'the_content', $post->post_content ),
         'date'     => $post->post_date,
         'link'     => get_permalink( $post ),
@@ -73,7 +73,7 @@ function rts_register_random_letter_route() {
     register_rest_route( 'rts/v1', '/letter/random', [
         'methods'             => 'GET',
         'callback'            => 'rts_rest_random_letter',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'rts_rest_random_letter_permission',
         'args'                => [
             'exclude' => [
                 'description'       => 'Comma-separated post IDs to exclude (already viewed).',
@@ -85,6 +85,10 @@ function rts_register_random_letter_route() {
     ] );
 }
 
+function rts_rest_random_letter_permission( WP_REST_Request $request ) {
+    return true;
+}
+
 /**
  * Return a single random published letter.
  *
@@ -92,13 +96,6 @@ function rts_register_random_letter_route() {
  *   { id, title, content, date, link }
  */
 function rts_rest_random_letter( WP_REST_Request $request ) {
-    // Check if onboarder is enabled
-    if ( ! get_option( 'rts_onboarder_enabled', true ) ) {
-        return new WP_REST_Response( [
-            'error'   => 'onboarder_disabled',
-            'message' => 'The letter onboarder is currently disabled.'
-        ], 403 );
-    }
 
     $exclude_raw = $request->get_param( 'exclude' );
     $exclude_ids = [];
@@ -140,7 +137,7 @@ function rts_rest_random_letter( WP_REST_Request $request ) {
 
     return new WP_REST_Response( [
         'id'       => $post->ID,
-        'title'    => get_the_title( $post ),
+        'title'    => '',
         'content'  => apply_filters( 'the_content', $post->post_content ),
         'date'     => $post->post_date,
         'link'     => get_permalink( $post ),

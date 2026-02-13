@@ -78,7 +78,103 @@
     return null; // No errors
   }
 
-  async function handleSubmit(e) {
+  function encodeFormData(formData) {
+    var pairs = [];
+    if (!formData || typeof formData.forEach !== 'function') {
+      return '';
+    }
+    formData.forEach(function (value, key) {
+      pairs.push(encodeURIComponent(String(key)) + '=' + encodeURIComponent(String(value)));
+    });
+    return pairs.join('&');
+  }
+
+  function requestWithXHR(url, body, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      xhr.timeout = timeoutMs;
+
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+          resolve(xhr.responseText || '');
+        }
+      };
+
+      xhr.onerror = function () {
+        reject(new Error('Network request failed'));
+      };
+      xhr.ontimeout = function () {
+        var timeoutErr = new Error('Request timeout');
+        timeoutErr.name = 'AbortError';
+        reject(timeoutErr);
+      };
+      xhr.onabort = function () {
+        var abortErr = new Error('Request aborted');
+        abortErr.name = 'AbortError';
+        reject(abortErr);
+      };
+
+      xhr.send(body);
+    });
+  }
+
+  function requestSubscription(ajaxUrl, body, timeoutMs) {
+    if (typeof window.fetch === 'function') {
+      if (typeof window.AbortController === 'function') {
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () {
+          controller.abort();
+        }, timeoutMs);
+        return fetch(ajaxUrl, {
+          method: 'POST',
+          body: body,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          signal: controller.signal
+        }).then(function (res) {
+          clearTimeout(timeoutId);
+          return res.text();
+        }).catch(function (err) {
+          clearTimeout(timeoutId);
+          throw err;
+        });
+      }
+
+      return fetch(ajaxUrl, {
+        method: 'POST',
+        body: body,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(function (res) {
+        return res.text();
+      });
+    }
+
+    return requestWithXHR(ajaxUrl, body, timeoutMs);
+  }
+
+  function syncCheckboxVisualState(form) {
+    var checkboxes = form.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < checkboxes.length; i++) {
+      var ev;
+      if (typeof Event === 'function') {
+        ev = new Event('change', { bubbles: true });
+      } else {
+        ev = document.createEvent('Event');
+        ev.initEvent('change', true, true);
+      }
+      checkboxes[i].dispatchEvent(ev);
+    }
+  }
+
+  function handleSubmit(e) {
     var form = e.target && e.target.closest ? e.target.closest('form.rts-subscribe-form') : null;
     if (!form) return;
     
@@ -90,6 +186,7 @@
     var msgEl = form.querySelector('.rts-form-message');
     var submitBtn = form.querySelector('.rts-form-submit');
     var originalBtnText = submitBtn ? submitBtn.textContent : 'Submit';
+    var wasSuccessful = false;
     
     // Clear previous messages
     showMessage(msgEl, '', '');
@@ -111,95 +208,73 @@
     setFormState(form, true);
     form.classList.add('rts-submitting');
     if (submitBtn) submitBtn.textContent = 'Sending\u2026';
-    
-    var controller = null;
-    var timeoutId = null;
-    
-    try {
-      var ajaxUrl = (window.rtsSubscribe && window.rtsSubscribe.ajax_url)
-        ? window.rtsSubscribe.ajax_url
-        : '/wp-admin/admin-ajax.php';
-      
-      // Set timeout
-      controller = new AbortController();
-      timeoutId = setTimeout(function() {
-        controller.abort();
-      }, 30000); // 30s timeout
-      
-      var res = await fetch(ajaxUrl, {
-        method: 'POST',
-        body: new URLSearchParams(formData),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        signal: controller.signal
-      });
-      
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      var text = await res.text();
-      var json;
-      
-      try {
-        json = JSON.parse(text);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError, text);
-        throw new Error('Invalid server response');
-      }
-      
-      if (json && json.success) {
-        var successMsg = (json.data && json.data.message)
-          ? json.data.message
-          : 'You\'re subscribed. Thank you!';
-        showMessage(msgEl, successMsg, 'success');
+ 
+    var ajaxUrl = (window.rtsSubscribe && window.rtsSubscribe.ajax_url)
+      ? window.rtsSubscribe.ajax_url
+      : '/wp-admin/admin-ajax.php';
+    var body = encodeFormData(formData);
 
-        // Friendly lock-in feedback
-        if (submitBtn) {
-          submitBtn.textContent = "You're subscribed ✓";
-        }
-
-        // Reset form to sensible defaults (keeps the UI tidy if user returns later)
-        form.reset();
-        try {
-          var freq = form.querySelector('select[name="frequency"]');
-          if (freq) freq.value = 'weekly';
-
-          var consent = form.querySelector('input[name="privacy_consent"]');
-          if (consent) consent.checked = false;
-
-          // Force visual sync
-          form.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
-            cb.dispatchEvent(new Event('change', { bubbles: true }));
-          });
-        } catch (e) {}
-
-        // Re-enable the button text after a short moment
-        setTimeout(function() {
-          if (submitBtn) submitBtn.textContent = originalBtnText;
-        }, 4000);
-        
-      } else {
-        var errMsg = (json && json.data && json.data.message)
-          ? json.data.message
-          : 'Subscription failed. Please try again.';
-        showMessage(msgEl, errMsg, 'error');
-      }
-      
-    } catch (err) {
-      if (timeoutId) clearTimeout(timeoutId);
-      console.error('Submission error:', err);
-      var userMsg = err.name === 'AbortError' 
-        ? 'Request timeout. Please try again.' 
-        : 'Network error. Please try again.';
-      showMessage(msgEl, userMsg, 'error');
-    } finally {
-      // Unlock form
+    if (typeof Promise === 'undefined') {
+      showMessage(msgEl, 'This browser is not supported. Please update your browser.', 'error');
       setFormState(form, false);
       form.classList.remove('rts-submitting');
       if (submitBtn) submitBtn.textContent = originalBtnText;
       delete form.dataset.submitting;
+      return;
     }
+
+    var finalizeSubmit = function () {
+      setFormState(form, false);
+      form.classList.remove('rts-submitting');
+      if (submitBtn && !wasSuccessful) submitBtn.textContent = originalBtnText;
+      delete form.dataset.submitting;
+    };
+
+    requestSubscription(ajaxUrl, body, 30000)
+      .then(function (text) {
+        var json;
+        try {
+          json = JSON.parse(text);
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError, text);
+          throw new Error('Invalid server response');
+        }
+
+        if (json && json.success) {
+          var successMsg = (json.data && json.data.message)
+            ? json.data.message
+            : 'You\'re subscribed. Thank you!';
+          wasSuccessful = true;
+          showMessage(msgEl, successMsg, 'success');
+
+          if (submitBtn) {
+            submitBtn.textContent = "You're subscribed ✓";
+          }
+
+          form.reset();
+          syncCheckboxVisualState(form);
+
+          setTimeout(function () {
+            if (submitBtn) submitBtn.textContent = originalBtnText;
+          }, 4000);
+          return;
+        }
+
+        var errMsg = (json && json.data && json.data.message)
+          ? json.data.message
+          : 'Subscription failed. Please try again.';
+        showMessage(msgEl, errMsg, 'error');
+      })
+      .catch(function (err) {
+        console.error('Submission error:', err);
+        var userMsg = err && err.name === 'AbortError'
+          ? 'Request timeout. Please try again.'
+          : 'Network error. Please try again.';
+        showMessage(msgEl, userMsg, 'error');
+      })
+      .then(function () {
+        finalizeSubmit();
+      });
   }
 
   function init() {
@@ -224,8 +299,8 @@
     // Important: prevent the browser's default label-toggle *and* do our own toggle,
     // otherwise it can double-toggle and look "stuck" (especially on themes that also
     // bind click handlers).
-    document.body.addEventListener('click', function(e) {
-      var card = e.target && e.target.closest ? e.target.closest('.rts-subscribe-checkbox-label') : null;
+    document.addEventListener('click', function(e) {
+      var card = e.target && e.target.closest ? e.target.closest('.rts-subscribe-form .rts-subscribe-checkbox-label') : null;
       if (!card) return;
       if (e.target && (e.target.tagName === 'A' || e.target.closest('a'))) return;
 
@@ -237,22 +312,27 @@
 
       // Stop the default label behaviour so we don't toggle twice.
       e.preventDefault();
-      e.stopPropagation();
-      if (typeof e.stopImmediatePropagation === 'function') {
-        e.stopImmediatePropagation();
-      }
 
       cb.checked = !cb.checked;
-      cb.dispatchEvent(new Event('change', { bubbles: true }));
-    }, true);
+      var ev;
+      if (typeof Event === 'function') {
+        ev = new Event('change', { bubbles: true });
+      } else {
+        ev = document.createEvent('Event');
+        ev.initEvent('change', true, true);
+      }
+      cb.dispatchEvent(ev);
+    }, false);
 
     // Initialize checkboxes on load (handle cached values)
-    document.querySelectorAll('.rts-subscribe-form input[type="checkbox"]').forEach(function(cb) {
-        var label = cb.closest('label') || cb.parentElement;
-        if (label && cb.checked) {
-            label.classList.add('rts-checked');
-        }
-    });
+    var initialCbs = document.querySelectorAll('.rts-subscribe-form input[type="checkbox"]');
+    for (var i = 0; i < initialCbs.length; i++) {
+      var cb = initialCbs[i];
+      var label = cb.closest('label') || cb.parentElement;
+      if (label && cb.checked) {
+        label.classList.add('rts-checked');
+      }
+    }
   }
 
   // Initialize

@@ -16,17 +16,19 @@ if (!defined('ABSPATH')) {
 
 class RTS_Email_Renderer {
 
-    private $logo_url = 'https://reasonstostay.inkfire.co.uk/wp-content/uploads/2026/01/Screenshot-2026-01-27-at-00.30.21.png';
+    private $logo_url = '';
 
     /**
      * Social links configuration.
      */
-    private $socials = array(
-        'facebook'  => 'https://www.facebook.com/ben.west.56884',
-        'instagram' => 'https://www.instagram.com/iambenwest/?hl=en',
-        'linkedin'  => 'https://www.linkedin.com/in/benwest2/?originalSubdomain=uk',
-        'linktree'  => 'https://linktr.ee/iambenwest',
-    );
+    private $socials = array();
+
+    public function __construct() {
+        $default_logo = 'https://reasonstostay.inkfire.co.uk/wp-content/uploads/2026/01/Screenshot-2026-01-27-at-00.30.21.png';
+        $configured_logo = esc_url_raw((string) get_option('rts_email_logo_url', ''));
+        $this->logo_url = $configured_logo !== '' ? $configured_logo : $default_logo;
+        $this->socials = $this->get_social_links();
+    }
 
     /**
      * Render a complete email.
@@ -200,6 +202,8 @@ class RTS_Email_Renderer {
     private function get_footer($data) {
         $unsubscribe_url = isset($data['unsubscribe_url']) ? $data['unsubscribe_url'] : '#';
         $manage_url      = isset($data['manage_url']) ? $data['manage_url'] : '';
+        $site_name       = (string) get_bloginfo('name');
+        $contact_email   = sanitize_email((string) get_option('admin_email', ''));
         ob_start();
         ?>
             </div><!-- /.letter-body -->
@@ -214,7 +218,7 @@ class RTS_Email_Renderer {
                     <br><br>
                     This project was designed in memory of <strong style="color:#f8fafc;">Sam West</strong>, who took his own life in 2018. If you&rsquo;re struggling right now, reaching out to a support service or someone you trust could really help. <a href="https://reasonstostay.inkfire.co.uk/resources" style="color:#FCA311;text-decoration:underline;">Find resources here</a>.
                     <br><br>
-                    <span style="color:#64748b;">Created by Ben West. Press: <a href="mailto:info@benwest.org.uk" style="color:#FCA311;text-decoration:underline;">info@benwest.org.uk</a></span>
+                    <span style="color:#64748b;"><?php echo esc_html($site_name); ?> updates team<?php if ($contact_email !== '') : ?>. Contact: <a href="mailto:<?php echo esc_attr($contact_email); ?>" style="color:#FCA311;text-decoration:underline;"><?php echo esc_html($contact_email); ?></a><?php endif; ?></span>
                 </div>
 
                 <!-- Social Icons -->
@@ -260,6 +264,10 @@ class RTS_Email_Renderer {
      * @return string
      */
     private function render_social_icon($label, $url, $path) {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return '';
+        }
         $gold = '#FCA311';
         return sprintf(
             '<a href="%s" target="_blank" rel="noopener noreferrer" title="%s" style="display:inline-block;margin:0 6px;vertical-align:middle;text-decoration:none;">
@@ -271,6 +279,20 @@ class RTS_Email_Renderer {
             esc_attr($label),
             esc_attr($gold),
             esc_attr($path)
+        );
+    }
+
+    /**
+     * Resolve social links from settings with fallback defaults.
+     *
+     * @return array<string, string>
+     */
+    private function get_social_links() {
+        return array(
+            'facebook'  => esc_url_raw((string) get_option('rts_social_facebook', '')),
+            'instagram' => esc_url_raw((string) get_option('rts_social_instagram', '')),
+            'linkedin'  => esc_url_raw((string) get_option('rts_social_linkedin', '')),
+            'linktree'  => esc_url_raw((string) get_option('rts_social_linktree', '')),
         );
     }
 

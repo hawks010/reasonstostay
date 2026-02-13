@@ -18,6 +18,12 @@ class RTS_Email_Queue {
 
     const QUEUE_TABLE = 'rts_email_queue';
     const DLQ_TABLE   = 'rts_dead_letter_queue';
+    const DEFAULT_SENT_RETENTION_DAYS = 90;
+    const DEFAULT_CANCELLED_RETENTION_DAYS = 30;
+    const DEFAULT_STUCK_TIMEOUT_MINUTES = 60;
+    const DEFAULT_LOG_RETENTION_DAYS = 90;
+    const DEFAULT_TRACKING_RETENTION_DAYS = 90;
+    const DEFAULT_BOUNCE_RETENTION_DAYS = 180;
 
     /**
      * Prevent duplicate hook wiring if this class is instantiated more than once.
@@ -144,7 +150,7 @@ class RTS_Email_Queue {
         // Atomic update: Returns number of rows affected. 
         // If 0, someone else claimed it or it's not pending.
         $updated = $wpdb->query($wpdb->prepare(
-            "UPDATE {$table} SET status = 'processing' 
+            "UPDATE {$table} SET status = 'processing', updated_at = UTC_TIMESTAMP()
              WHERE id = %d AND status = 'pending'",
             intval($queue_id)
         ));
@@ -172,6 +178,7 @@ class RTS_Email_Queue {
         }
 
         update_option('rts_last_queue_run', current_time('mysql', true));
+        $this->recover_stuck_processing_items();
 
         $items = $this->get_pending_items($limit);
         if (empty($items)) {
@@ -396,32 +403,48 @@ class RTS_Email_Queue {
     public function cleanup_old_queue_items() {
         global $wpdb;
         $table = $wpdb->prefix . self::QUEUE_TABLE;
+        $sent_retention_days = max(1, (int) get_option('rts_queue_retention_sent_days', self::DEFAULT_SENT_RETENTION_DAYS));
+        $cancelled_retention_days = max(1, (int) get_option('rts_queue_retention_cancelled_days', self::DEFAULT_CANCELLED_RETENTION_DAYS));
+        $stuck_timeout_minutes = max(5, (int) get_option('rts_queue_stuck_timeout_minutes', self::DEFAULT_STUCK_TIMEOUT_MINUTES));
+        $logs_retention_days = max(1, (int) get_option('rts_retention_email_logs_days', self::DEFAULT_LOG_RETENTION_DAYS));
+        $tracking_retention_days = max(1, (int) get_option('rts_retention_tracking_days', self::DEFAULT_TRACKING_RETENTION_DAYS));
+        $bounce_retention_days = max(1, (int) get_option('rts_retention_bounce_days', self::DEFAULT_BOUNCE_RETENTION_DAYS));
 
-        // Clean Sent items > 90 days
+        // Clean Sent items by configured retention policy.
         $wpdb->query($wpdb->prepare(
             "DELETE FROM {$table} WHERE status = 'sent' AND sent_at < %s",
-            gmdate('Y-m-d H:i:s', strtotime('-90 days'))
+            gmdate('Y-m-d H:i:s', time() - ($sent_retention_days * DAY_IN_SECONDS))
         ));
 
-        // Clean Cancelled items > 30 days
+        // Clean Cancelled items by configured retention policy.
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$table} WHERE status = 'cancelled' AND created_at < %s",
-            gmdate('Y-m-d H:i:s', strtotime('-30 days'))
-        ));
-        
-        // Recover stuck processing items (crashed/timeout)
-        $cutoff = gmdate('Y-m-d H:i:s', strtotime('-1 hour'));
-        
-        $stuck_count = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE status = 'processing' AND created_at < %s",
-            $cutoff
+            "DELETE FROM {$table} WHERE status = 'cancelled' AND COALESCE(updated_at, created_at) < %s",
+            gmdate('Y-m-d H:i:s', time() - ($cancelled_retention_days * DAY_IN_SECONDS))
         ));
 
-        if ($stuck_count > 0) {
-            error_log(sprintf('RTS Email Queue: Recovering %d stuck processing items.', $stuck_count));
+        $this->recover_stuck_processing_items($stuck_timeout_minutes);
+
+        $logs_table = $wpdb->prefix . 'rts_email_logs';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
             $wpdb->query($wpdb->prepare(
-                "UPDATE {$table} SET status = 'pending' WHERE status = 'processing' AND created_at < %s",
-                $cutoff
+                "DELETE FROM {$logs_table} WHERE sent_at < %s",
+                gmdate('Y-m-d H:i:s', time() - ($logs_retention_days * DAY_IN_SECONDS))
+            ));
+        }
+
+        $tracking_table = $wpdb->prefix . 'rts_email_tracking';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $tracking_table)) === $tracking_table) {
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$tracking_table} WHERE created_at < %s",
+                gmdate('Y-m-d H:i:s', time() - ($tracking_retention_days * DAY_IN_SECONDS))
+            ));
+        }
+
+        $bounce_table = $wpdb->prefix . 'rts_email_bounces';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $bounce_table)) === $bounce_table) {
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$bounce_table} WHERE bounced_at < %s",
+                gmdate('Y-m-d H:i:s', time() - ($bounce_retention_days * DAY_IN_SECONDS))
             ));
         }
     }
@@ -492,13 +515,50 @@ class RTS_Email_Queue {
     public function get_queue_health() {
         global $wpdb;
         $table = $wpdb->prefix . self::QUEUE_TABLE;
+        $stuck_timeout_minutes = max(5, (int) get_option('rts_queue_stuck_timeout_minutes', self::DEFAULT_STUCK_TIMEOUT_MINUTES));
+        $stuck_cutoff = gmdate('Y-m-d H:i:s', time() - ($stuck_timeout_minutes * MINUTE_IN_SECONDS));
 
         return array(
             'total_pending'     => intval($wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='pending'")),
-            'stuck_items'       => intval($wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='processing' AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)")),
+            'stuck_items'       => intval($wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE status='processing' AND COALESCE(updated_at, created_at) < %s", $stuck_cutoff))),
             'avg_wait_minutes'  => floatval($wpdb->get_var("SELECT AVG(TIMESTAMPDIFF(MINUTE, created_at, NOW())) FROM {$table} WHERE status='pending'")),
             'hourly_throughput' => intval($wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='sent' AND sent_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)")),
             'is_paused'         => $this->is_paused(),
         );
+    }
+
+    /**
+     * Recover queue items stuck in processing due to crash/timeout.
+     *
+     * @param int|null $timeout_minutes
+     * @return int Number of recovered items.
+     */
+    private function recover_stuck_processing_items($timeout_minutes = null) {
+        global $wpdb;
+        $table = $wpdb->prefix . self::QUEUE_TABLE;
+        $timeout_minutes = $timeout_minutes !== null
+            ? max(5, (int) $timeout_minutes)
+            : max(5, (int) get_option('rts_queue_stuck_timeout_minutes', self::DEFAULT_STUCK_TIMEOUT_MINUTES));
+
+        $cutoff = gmdate('Y-m-d H:i:s', time() - ($timeout_minutes * MINUTE_IN_SECONDS));
+        $stuck_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table}
+             WHERE status = 'processing'
+               AND COALESCE(updated_at, created_at) < %s",
+            $cutoff
+        ));
+        if ($stuck_count <= 0) {
+            return 0;
+        }
+
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$table}
+             SET status = 'pending', updated_at = UTC_TIMESTAMP()
+             WHERE status = 'processing'
+               AND COALESCE(updated_at, created_at) < %s",
+            $cutoff
+        ));
+
+        return $stuck_count;
     }
 }

@@ -35,10 +35,23 @@ class RTS_Shortcodes {
         register_rest_route('rts/v1', '/letter/submit', [
             'methods'             => 'POST',
             'callback'            => [$this, 'rest_submit_letter'],
-            // Public submission is allowed, we enforce nonces + bot checks inside.
-            'permission_callback' => '__return_true',
+            // Public submission is allowed, but a valid submission nonce is required.
+            'permission_callback' => [$this, 'rest_submit_permission'],
             'args'                => [],
         ]);
+    }
+
+    public function rest_submit_permission(\WP_REST_Request $request) {
+        if (!function_exists('rts_rest_request_nonce') || !function_exists('rts_verify_nonce_actions')) {
+            return new \WP_Error('rts_security_component_missing', 'Security component unavailable.', ['status' => 500]);
+        }
+
+        $nonce = rts_rest_request_nonce($request, ['rts_token', 'nonce', '_wpnonce']);
+        if (!rts_verify_nonce_actions($nonce, ['rts_submit_letter'])) {
+            return new \WP_Error('rts_invalid_nonce', 'Invalid security token.', ['status' => 403]);
+        }
+
+        return true;
     }
 
     /**
@@ -110,7 +123,19 @@ class RTS_Shortcodes {
         ], $atts);
 
         ob_start();
-        ?>
+        $letter_submissions_enabled = function_exists('rts_are_letter_submissions_enabled') ? (bool) rts_are_letter_submissions_enabled() : (bool) get_option('rts_letter_submissions_enabled', false);
+        $pause_logo_url = function_exists('rts_get_frontend_pause_logo_url') ? (string) rts_get_frontend_pause_logo_url() : (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
+        
+        // Loader logo (used for the Next Letter loading overlay)
+        // Keep this separate from the pause logo so we can use a transparent asset.
+        $loader_logo_url = (string) get_option('rts_frontend_loader_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1.png');
+        if ($loader_logo_url === '') {
+            $loader_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1.png';
+        }
+?>
         <div class="rts-letter-share">
             <p class="rts-share-label"><?php echo esc_html($atts['label']); ?></p>
             <div class="rts-share-buttons">
@@ -160,16 +185,25 @@ class RTS_Shortcodes {
             'show_onboarding' => 'yes'], $atts);
 
         ob_start();
+        $letter_submissions_enabled = function_exists('rts_are_letter_submissions_enabled') ? (bool) rts_are_letter_submissions_enabled() : (bool) get_option('rts_letter_submissions_enabled', false);
+        $pause_logo_url = function_exists('rts_get_frontend_pause_logo_url') ? (string) rts_get_frontend_pause_logo_url() : (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
         
         // Only show onboarding if enabled
         if ($atts['show_onboarding'] === 'yes') {
             echo $this->onboarding([]);
         }
         ?>
-        <div class="rts-letter-viewer" data-component="viewer">
-            <div class="rts-loading">
-                <div class="rts-spinner"></div>
-                <p>Finding a letter for you...</p>
+        <div class="rts-letter-viewer" data-component="viewer" data-loader-logo="<?php echo esc_url($loader_logo_url); ?>">
+            <div class="rts-loading" role="status" aria-live="polite" aria-label="Loading next letter">
+                <div class="rts-loading-inner">
+                    <img class="rts-loading-logo" src="<?php echo esc_url($loader_logo_url); ?>" alt="Reasons to Stay" loading="eager" decoding="async" onerror="this.onerror=null;this.src='https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';" />
+                    <div class="rts-loading-text" aria-hidden="true">Loading <span class="rts-loading-percent">0%</span></div>
+                    <div class="rts-loading-bar" aria-hidden="true"><span class="rts-loading-bar-fill" style="width:0%"></span></div>
+                    <p class="rts-loading-subtext">Finding a letter for you...</p>
+                </div>
             </div>
             
             <div class="rts-letter-display" style="display:none;">
@@ -291,6 +325,11 @@ class RTS_Shortcodes {
         self::$onboarding_rendered = true;
 
         ob_start();
+        $letter_submissions_enabled = function_exists('rts_are_letter_submissions_enabled') ? (bool) rts_are_letter_submissions_enabled() : (bool) get_option('rts_letter_submissions_enabled', false);
+        $pause_logo_url = function_exists('rts_get_frontend_pause_logo_url') ? (string) rts_get_frontend_pause_logo_url() : (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
         ?>
         <div class="rts-onboarding-wrapper">
         <div class="rts-onboarding-overlay" style="display:none;" aria-hidden="true">
@@ -316,7 +355,7 @@ class RTS_Shortcodes {
                 
                 <!-- Skip button -->
                 <div class="rts-skip-container">
-                    <button class="rts-btn-skip rts-skip-trigger" type="button" aria-label="Skip onboarding" onclick="(function(){var w=document.querySelector('.rts-onboarding-wrapper'); if(w) w.style.display='none';})();">
+                    <button class="rts-btn-skip rts-skip-trigger" type="button" aria-label="Skip onboarding">
                         Skip
                     </button>
                 </div>
@@ -395,6 +434,29 @@ class RTS_Shortcodes {
                 function initOnboarding() {
                     const wrapper = document.querySelector('.rts-onboarding-overlay');
                     if(!wrapper) return;
+                    const skipBtn = wrapper.querySelector('.rts-btn-skip');
+
+                    if (skipBtn && !skipBtn.dataset.rtsFallbackBound) {
+                        skipBtn.dataset.rtsFallbackBound = '1';
+                        skipBtn.addEventListener('click', function() {
+                            try {
+                                sessionStorage.setItem('rts_onboarded', 'true');
+                                document.documentElement.classList.remove('rts-onboarding_active');
+                                document.documentElement.classList.remove('rts-onboarding-active');
+                            } catch (err) {}
+
+                            if (window.RTSLetterSystem && typeof window.RTSLetterSystem.skipOnboarding === 'function') {
+                                window.RTSLetterSystem.skipOnboarding();
+                                return;
+                            }
+
+                            wrapper.classList.add('rts-hidden-force');
+                            wrapper.setAttribute('aria-hidden', 'true');
+                            wrapper.style.setProperty('display', 'none', 'important');
+                            wrapper.style.setProperty('visibility', 'hidden', 'important');
+                            wrapper.style.setProperty('pointer-events', 'none', 'important');
+                        });
+                    }
 
                     wrapper.querySelectorAll('input').forEach(input => {
                         if(input.checked) input.closest('label').classList.add('selected');
@@ -433,8 +495,23 @@ class RTS_Shortcodes {
     public function submit_form($atts) {
       try {
         ob_start();
+        $letter_submissions_enabled = function_exists('rts_are_letter_submissions_enabled') ? (bool) rts_are_letter_submissions_enabled() : (bool) get_option('rts_letter_submissions_enabled', false);
+        $pause_logo_url = function_exists('rts_get_frontend_pause_logo_url') ? (string) rts_get_frontend_pause_logo_url() : (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
         ?>
-        <div class="rts-submit-form-wrapper">
+        <div class="rts-submit-form-wrapper rts-form-gated <?php echo $letter_submissions_enabled ? "" : "is-disabled"; ?>">
+
+            <?php if (!$letter_submissions_enabled) : ?>
+                <div class="rts-form-overlay" role="status" aria-live="polite">
+                    <div class="rts-form-overlay-card">
+                        <img src="<?php echo esc_url($pause_logo_url); ?>" alt="Reasons to Stay" class="rts-form-overlay-logo" loading="lazy" decoding="async">
+                        <h3>Write a Letter Is Temporarily Closed</h3>
+                        <p>This form is temporily paused. We recommend you write your letter somewhere safe and come back soon.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
             <div class="rts-submit-grid">
                 <form id="rts-submit-form" class="rts-form" novalidate data-rts-inline-handler="1">
                     <div class="rts-form-header">
@@ -753,7 +830,8 @@ class RTS_Shortcodes {
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('RTS submit_form shortcode error: ' . $e->getMessage());
         }
-        return '<div class="rts-submit-form-wrapper"><p>Unable to load the submission form. Please refresh the page.</p></div>';
+                return '<div class="rts-submit-form-wrapper"><p>Unable to load the submission form. Please refresh the page.</p></div>';
+
       }
     }
 
@@ -837,12 +915,11 @@ class RTS_Shortcodes {
             define('RTS_FRONTEND_SUBMISSION_IN_PROGRESS', true);
         }
 
-        // Create a quarantined letter.
-        $title_seed = $author_name ? "Letter from {$author_name}" : 'New Letter Submission';
-        $post_title = wp_trim_words($title_seed, 10, '');
+        // Create a quarantined letter (internal canonical title only).
+        $post_title = 'Letter ' . current_time('Y-m-d') . ' #0';
         $post_id = wp_insert_post([
             'post_type'    => 'letter',
-            'post_status'  => 'pending', // queued for moderation review
+            'post_status'  => 'draft', // workflow uses rts_workflow_stage only
             'post_title'   => $post_title,
             'post_content' => $letter_text,
         ], true);
@@ -851,10 +928,24 @@ class RTS_Shortcodes {
             return ['success' => false, 'message' => 'Could not save your letter. Please try again.', 'status' => 500];
         }
 
+        $post_id = (int) $post_id;
+
+        // Canonical workflow stage (only source of truth for processing lifecycle)
+        update_post_meta($post_id, 'rts_workflow_stage', 'unprocessed');
+        $date_seed = current_time('Y-m-d');
+        $seed_post_date = (string) get_post_field('post_date', $post_id);
+        if ($seed_post_date !== '' && $seed_post_date !== '0000-00-00 00:00:00') {
+            $seed_ts = strtotime($seed_post_date);
+            if ($seed_ts !== false) {
+                $date_seed = wp_date('Y-m-d', $seed_ts);
+            }
+        }
+        $canonical_title = sprintf('Letter %s #%d', $date_seed, $post_id);
+        update_post_meta($post_id, '_rts_internal_moderation_update', '1');
+        wp_update_post(['ID' => $post_id, 'post_title' => $canonical_title]);
+
         // Meta used by moderation/admin
-        update_post_meta($post_id, 'needs_review', '1');
-        update_post_meta($post_id, 'rts_moderation_status', 'pending_review');
-        update_post_meta($post_id, 'rts_submission_source', 'frontend');
+update_post_meta($post_id, 'rts_submission_source', 'frontend');
         update_post_meta($post_id, 'rts_author_name', $author_name);
         update_post_meta($post_id, '_rts_submission_hash', $submission_hash);
         if ($author_email && is_email($author_email)) {
@@ -880,7 +971,7 @@ class RTS_Shortcodes {
         $subscribed = false;
         $subscribe_opt_in = isset($payload['subscribe_opt_in']) ? (int) $payload['subscribe_opt_in'] : 0;
         if ($subscribe_opt_in && $author_email && is_email($author_email)) {
-            $subscribed = $this->add_letter_writer_to_subscribers($author_email, $ip);
+            $subscribed = $this->add_letter_writer_to_subscribers($author_email, $ip, array('newsletters'));
         }
 
         return [
@@ -920,11 +1011,17 @@ class RTS_Shortcodes {
      * @param string $ip IP address for consent logging
      * @return bool True if subscribed successfully, false otherwise
      */
-    private function add_letter_writer_to_subscribers(string $email, string $ip = ''): bool {
+    private function add_letter_writer_to_subscribers(string $email, string $ip = '', array $prefs = array('newsletters')): bool {
         // Get the subscriber system instance
         $subscriber_system = class_exists('RTS_Subscriber_System') ? RTS_Subscriber_System::get_instance() : null;
         if (!$subscriber_system || !isset($subscriber_system->subscriber_cpt)) {
             return false;
+
+        // Respect global newsletter signup toggle.
+        if (!(bool) get_option('rts_newsletter_signups_enabled', false)) {
+            return false;
+        }
+
         }
 
         $subscriber_cpt = $subscriber_system->subscriber_cpt;
@@ -959,8 +1056,8 @@ class RTS_Shortcodes {
             [
                 'ip_address'       => $ip,
                 'user_agent'       => $user_agent,
-                'pref_letters'     => 1, // Enable letters
-                'pref_newsletters' => 1, // Enable newsletters
+                'pref_letters'     => in_array('letters', $prefs, true) ? 1 : 0,
+                'pref_newsletters' => in_array('newsletters', $prefs, true) ? 1 : 0
             ]
         );
 
@@ -969,15 +1066,25 @@ class RTS_Shortcodes {
         }
 
         // Store explicit preferences
-        update_post_meta($subscriber_id, '_rts_pref_letters', 1);
-        update_post_meta($subscriber_id, '_rts_pref_newsletters', 1);
+        update_post_meta($subscriber_id, '_rts_pref_letters', in_array('letters', $prefs, true) ? 1 : 0);
+        update_post_meta($subscriber_id, '_rts_pref_newsletters', in_array('newsletters', $prefs, true) ? 1 : 0);
 
         // Sync to rts_subscribers table for drip scheduling
         if (method_exists($subscriber_system, 'sync_subscriber_to_table')) {
-            $subscriber_system->sync_subscriber_to_table($subscriber_id, $email, 'monthly', ['letters', 'newsletters']);
+            $subscriber_system->sync_subscriber_to_table($subscriber_id, $email, 'monthly', $prefs);
         }
 
         // Send verification or welcome email
+        // Mail offline mode: capture subscriber record but do NOT queue any emails.
+        if ((bool) get_option('rts_mail_system_offline', false)) {
+            update_post_meta($subscriber_id, '_rts_subscriber_status', 'captured_offline');
+            if (method_exists($subscriber_system, 'sync_subscriber_to_table')) {
+                $subscriber_system->sync_subscriber_to_table($subscriber_id, $email, 'monthly', $prefs);
+            }
+            return true;
+        }
+
+
         $require_verification = (bool) get_option('rts_require_email_verification', true);
         if ($require_verification && isset($subscriber_system->email_engine) && method_exists($subscriber_system->email_engine, 'send_verification_email')) {
             $subscriber_system->email_engine->send_verification_email($subscriber_id);
@@ -1105,6 +1212,13 @@ class RTS_Shortcodes {
         // Enqueue styles cleanly
         wp_enqueue_style('rts-special-elite', 'https://fonts.googleapis.com/css2?family=Special+Elite&display=swap', [], null);
         wp_enqueue_style('rts-stats-row', get_stylesheet_directory_uri() . '/assets/css/rts-stats-row.css', ['rts-special-elite'], '2.4.1');
+        $stats_js_file = get_stylesheet_directory() . '/assets/js/rts-stats-row.js';
+        $stats_js_ver  = file_exists($stats_js_file) ? (string) filemtime($stats_js_file) : '1.0.0';
+        wp_enqueue_script('rts-stats-row', get_stylesheet_directory_uri() . '/assets/js/rts-stats-row.js', [], $stats_js_ver, true);
+        wp_localize_script('rts-stats-row', 'RTS_STATS_ROW', [
+            'restUrl' => esc_url_raw(rest_url('rts/v1/site-stats')),
+            'timeout' => 8000,
+        ]);
 
         $stats = $this->get_site_stats([
             'offset_delivered'  => $atts['offset_delivered'],
@@ -1115,6 +1229,11 @@ class RTS_Shortcodes {
         $uid = 'rts-stats-' . uniqid();
 
         ob_start();
+        $letter_submissions_enabled = function_exists('rts_are_letter_submissions_enabled') ? (bool) rts_are_letter_submissions_enabled() : (bool) get_option('rts_letter_submissions_enabled', false);
+        $pause_logo_url = function_exists('rts_get_frontend_pause_logo_url') ? (string) rts_get_frontend_pause_logo_url() : (string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png');
+        if ($pause_logo_url === '') {
+            $pause_logo_url = 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png';
+        }
         ?>
         <div class="rts-stats-row" id="<?php echo esc_attr($uid); ?>">
             <div class="rts-stat">
@@ -1192,8 +1311,8 @@ class RTS_Shortcodes {
 
         $use_admin_offsets = !empty($admin_overrides['enabled']);
 
-        // Allow forcing bypass of cache for admins / debugging
-        $force = !empty($overrides['force']) || (is_user_logged_in() && current_user_can('manage_options'));
+        // Allow forcing bypass of cache for admins / debugging only when explicitly requested.
+        $force = !empty($overrides['force']) && is_user_logged_in() && current_user_can('manage_options');
 
         // Back-compat: shortcode-level offsets (optional)
         $short_offset_submitted  = (int) ($overrides['offset_submitted'] ?? 0);
@@ -1301,7 +1420,8 @@ class RTS_Shortcodes {
         try {
             $force = false;
             if (is_object($request) && method_exists($request, 'get_param')) {
-                $force = (bool) $request->get_param('force');
+                $force_requested = filter_var($request->get_param('force'), FILTER_VALIDATE_BOOLEAN);
+                $force = (bool) $force_requested && current_user_can('manage_options');
             }
 
             $stats = $this->get_site_stats([
@@ -1322,8 +1442,30 @@ class RTS_Shortcodes {
         register_rest_route('rts/v1', '/site-stats', [
             'methods' => 'GET',
             'callback' => [$this, 'rest_site_stats'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => [$this, 'rest_site_stats_permission'],
         ]);
+    }
+
+    public function rest_site_stats_permission(\WP_REST_Request $request) {
+        $force_requested = filter_var($request->get_param('force'), FILTER_VALIDATE_BOOLEAN);
+        if (!$force_requested) {
+            return true;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return new \WP_Error('rts_forbidden_force_refresh', 'Only administrators can force a stats refresh.', ['status' => 403]);
+        }
+
+        if (!function_exists('rts_rest_request_nonce') || !function_exists('rts_verify_nonce_actions')) {
+            return new \WP_Error('rts_security_component_missing', 'Security component unavailable.', ['status' => 500]);
+        }
+
+        $nonce = rts_rest_request_nonce($request, ['nonce', '_wpnonce']);
+        if (!rts_verify_nonce_actions($nonce, ['wp_rest'])) {
+            return new \WP_Error('rts_invalid_nonce', 'Invalid security token.', ['status' => 403]);
+        }
+
+        return true;
     }
 }
 

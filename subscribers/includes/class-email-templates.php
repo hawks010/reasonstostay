@@ -36,7 +36,8 @@ class RTS_Email_Templates {
             'monthly_digest', 
             'reconsent', 
             'newsletter_custom',
-            'all_caught_up'
+            'all_caught_up',
+            'automated_letter',
         );
 
         if (!in_array($template, $valid_templates, true)) {
@@ -108,23 +109,25 @@ class RTS_Email_Templates {
         $site = get_bloginfo('name');
         switch ($template) {
             case 'welcome':
-                return "Welcome to {$site}";
+                return sprintf(__('Welcome to %s', 'rts-subscriber-system'), $site);
             case 'verification':
-                return "Confirm your subscription to {$site}";
+                return sprintf(__('Confirm your subscription to %s', 'rts-subscriber-system'), $site);
             case 'daily_digest':
-                return "{$site} - Your daily letter";
+                return sprintf(__('%s - Your daily letter', 'rts-subscriber-system'), $site);
             case 'weekly_digest':
-                return "{$site} - Your weekly letters";
+                return sprintf(__('%s - Your weekly letters', 'rts-subscriber-system'), $site);
             case 'monthly_digest':
-                return "{$site} - Your monthly letters";
+                return sprintf(__('%s - Your monthly letters', 'rts-subscriber-system'), $site);
             case 'reconsent':
-                return 'Please confirm what you want to receive from {site_name}';
+                return __('Please confirm what you want to receive from {site_name}', 'rts-subscriber-system');
             case 'newsletter_custom':
                 return '{newsletter_subject}';
             case 'all_caught_up':
-                return "{$site} - All caught up";
+                return sprintf(__('%s - All caught up', 'rts-subscriber-system'), $site);
+            case 'automated_letter':
+                return sprintf(__('%s - A letter for you', 'rts-subscriber-system'), $site);
             default:
-                return "{$site} Updates";
+                return sprintf(__('%s Updates', 'rts-subscriber-system'), $site);
         }
     }
 
@@ -157,6 +160,11 @@ class RTS_Email_Templates {
 case 'all_caught_up':
     return '<h2>You\'re all caught up</h2>'
         . '<p>We\'ve already sent you every email-ready letter we have right now. We\'ll email you as soon as there\'s something new.</p>';
+            case 'automated_letter':
+                return '<h2>A Letter for You</h2>'
+                    . '{letters}'
+                    . '<p>Manage your preferences here: <a href="{manage_url}">{manage_url}</a>.</p>'
+                    . '<p><a href="{unsubscribe_url}">Unsubscribe</a></p>';
 default:
                 return "<p>Updates from {$site}.</p>";
         }
@@ -185,6 +193,7 @@ default:
             'daily_digest',
             'weekly_digest',
             'monthly_digest',
+            'automated_letter',
             'newsletter_custom',
         );
 
@@ -230,20 +239,29 @@ default:
 
     private function manage_url($token) {
         if (!$token) return home_url('/');
-        $sig = hash_hmac('sha256', $token . '|manage', wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|manage|' . $this->signature_date(), wp_salt('auth'));
         return add_query_arg(array('rts_manage' => $token, 'sig' => $sig), home_url('/'));
     }
 
     private function unsubscribe_url($token) {
         if (!$token) return home_url('/');
-        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . date('Y-m-d'), wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|unsubscribe|' . $this->signature_date(), wp_salt('auth'));
         return add_query_arg(array('rts_unsubscribe' => $token, 'sig' => $sig), home_url('/'));
     }
 
     private function verification_url($subscriber_id) {
         $token = get_post_meta($subscriber_id, '_rts_subscriber_verification_token', true);
         if (!$token) return home_url('/');
-        $sig = hash_hmac('sha256', $token . '|verify|' . date('Y-m-d'), wp_salt('auth'));
+        $sig = hash_hmac('sha256', $token . '|verify|' . $this->signature_date(), wp_salt('auth'));
         return add_query_arg(array('rts_verify' => $token, 'sig' => $sig), home_url('/'));
+    }
+
+    /**
+     * Signature day in UTC to keep links stable across site timezone changes.
+     *
+     * @return string
+     */
+    private function signature_date() {
+        return gmdate('Y-m-d');
     }
 }

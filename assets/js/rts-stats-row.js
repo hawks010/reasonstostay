@@ -3,7 +3,8 @@
   'use strict';
 
   function toInt(v) {
-    var n = parseInt(v, 10);
+    var cleaned = String(v === null || v === undefined ? '' : v).replace(/[^0-9\-]/g, '');
+    var n = parseInt(cleaned, 10);
     return isNaN(n) ? 0 : n;
   }
 
@@ -68,7 +69,8 @@
     return fetch(url, {
       method: 'GET',
       credentials: 'same-origin',
-      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
       signal: controller.signal
     }).finally(function () {
       window.clearTimeout(id);
@@ -98,8 +100,11 @@
         return res.json();
       })
       .then(function (json) {
-        if (json && json.success && json.data) {
-          updateRow(row, json.data);
+        if (!json) return;
+        // Accept both plain object responses and WP-style { success, data } responses.
+        var payload = (json && json.success && json.data) ? json.data : json;
+        if (payload && typeof payload === 'object') {
+          updateRow(row, payload);
         }
       })
       .catch(function () {
@@ -117,7 +122,7 @@
       var deliveredEl = row.querySelector('[data-stat="letters_delivered"]');
       if (!deliveredEl) return;
       var current = toInt(deliveredEl.textContent);
-      if (current <= 0) return;
+      if (current < 0) return;
       setText(deliveredEl, formatNumber(current + 1));
     });
   }

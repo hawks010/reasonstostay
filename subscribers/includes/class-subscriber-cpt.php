@@ -259,18 +259,10 @@ class RTS_Subscriber_CPT {
         update_post_meta($post_id, '_rts_subscriber_verified', !$require_verification ? 1 : 0);
         
         if ($require_verification) {
-            // Generate unique verification token
-            global $wpdb;
-            do {
-                $ver_token = bin2hex(random_bytes(16));
-                $exists = $wpdb->get_var($wpdb->prepare(
-                    "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_rts_subscriber_verification_token' AND meta_value = %s",
-                    $ver_token
-                ));
-            } while ($exists);
-
-            update_post_meta($post_id, '_rts_subscriber_verification_token', $ver_token);
-            update_post_meta($post_id, '_rts_subscriber_verification_sent', current_time('mysql'));
+            $tokens = $this->ensure_subscriber_tokens((int) $post_id, true);
+            if (!empty($tokens['verification_token'])) {
+                update_post_meta($post_id, '_rts_subscriber_verification_sent', current_time('mysql', true));
+            }
             update_post_meta($post_id, '_rts_subscriber_status', 'pending_verification');
         }
 
@@ -292,8 +284,42 @@ class RTS_Subscriber_CPT {
             )
         );
         update_post_meta($post_id, '_rts_subscriber_consent_log', $consent_log);
+
+        do_action('rts_subscriber_created', (int) $post_id, $email, $source);
         
         return $post_id;
+    }
+
+    /**
+     * Ensure subscriber has required token(s) for manage/unsubscribe/verify flows.
+     *
+     * @param int  $subscriber_id
+     * @param bool $ensure_verification Whether to ensure verification token exists.
+     * @return array{token:string,verification_token:string}
+     */
+    public function ensure_subscriber_tokens($subscriber_id, $ensure_verification = false) {
+        $subscriber_id = (int) $subscriber_id;
+        if ($subscriber_id <= 0 || get_post_type($subscriber_id) !== 'rts_subscriber') {
+            return array('token' => '', 'verification_token' => '');
+        }
+
+        $token = (string) get_post_meta($subscriber_id, '_rts_subscriber_token', true);
+        if ($token === '') {
+            $token = $this->generate_unique_token();
+            update_post_meta($subscriber_id, '_rts_subscriber_token', $token);
+        }
+
+        $verification_token = (string) get_post_meta($subscriber_id, '_rts_subscriber_verification_token', true);
+        if ($ensure_verification && $verification_token === '') {
+            $verification_token = $this->generate_unique_verification_token();
+            update_post_meta($subscriber_id, '_rts_subscriber_verification_token', $verification_token);
+            update_post_meta($subscriber_id, '_rts_subscriber_verification_sent', current_time('mysql', true));
+        }
+
+        return array(
+            'token' => $token,
+            'verification_token' => $verification_token,
+        );
     }
 
     /**
@@ -365,6 +391,25 @@ class RTS_Subscriber_CPT {
             ));
         } while ($exists);
         
+        return $token;
+    }
+
+    /**
+     * Generate unique verification token.
+     *
+     * @return string
+     */
+    private function generate_unique_verification_token() {
+        global $wpdb;
+
+        do {
+            $token = bin2hex(random_bytes(16));
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_rts_subscriber_verification_token' AND meta_value = %s",
+                $token
+            ));
+        } while ($exists);
+
         return $token;
     }
     

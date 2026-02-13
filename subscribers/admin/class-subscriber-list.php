@@ -121,12 +121,29 @@ class RTS_Subscriber_List_Table extends WP_List_Table {
         $items = array();
 
         foreach ($q->posts as $post_id) {
-            $email = get_post_meta($post_id, '_rts_email', true);
+            $email = get_post_meta($post_id, '_rts_subscriber_email', true);
+            if (!$email) {
+                $email = get_post_meta($post_id, '_rts_email', true);
+            }
+            if (!$email || !is_email($email)) {
+                $title_email = get_the_title($post_id);
+                $email = is_email($title_email) ? $title_email : '';
+            }
             $status = get_post_meta($post_id, '_rts_subscriber_status', true);
             $frequency = get_post_meta($post_id, '_rts_subscriber_frequency', true);
             $subs = get_post_meta($post_id, '_rts_subscriptions', true);
             if (is_array($subs)) {
                 $subs = implode(', ', array_map('sanitize_text_field', $subs));
+            }
+            if (!$subs) {
+                $pref_labels = array();
+                if ((bool) get_post_meta($post_id, '_rts_pref_letters', true)) {
+                    $pref_labels[] = 'letters';
+                }
+                if ((bool) get_post_meta($post_id, '_rts_pref_newsletters', true)) {
+                    $pref_labels[] = 'newsletters';
+                }
+                $subs = !empty($pref_labels) ? implode(', ', $pref_labels) : '';
             }
 
             $items[] = array(
@@ -135,8 +152,8 @@ class RTS_Subscriber_List_Table extends WP_List_Table {
                 'status'       => $status ?: 'active',
                 'frequency'    => $frequency ?: 'weekly',
                 'subscriptions'=> $subs ?: 'letters, newsletters',
-                'last_sent'    => get_post_meta($post_id, '_rts_last_sent', true) ?: '—',
-                'total_sent'   => intval(get_post_meta($post_id, '_rts_total_sent', true) ?: 0),
+                'last_sent'    => get_post_meta($post_id, '_rts_subscriber_last_sent', true) ?: (get_post_meta($post_id, '_rts_last_sent', true) ?: '—'),
+                'total_sent'   => intval(get_post_meta($post_id, '_rts_subscriber_total_sent', true) ?: (get_post_meta($post_id, '_rts_total_sent', true) ?: 0)),
                 'date'         => get_the_date('Y-m-d', $post_id),
             );
         }

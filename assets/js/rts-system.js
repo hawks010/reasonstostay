@@ -1,4 +1,4 @@
-window.RTS_DISABLE_TRACKING = true;
+window.RTS_DISABLE_TRACKING = (typeof window.RTS_DISABLE_TRACKING === 'boolean') ? window.RTS_DISABLE_TRACKING : false;
 /**
  * Reasons to Stay - Main JavaScript
  * Handles letter viewer, onboarding, and form submission
@@ -102,11 +102,20 @@ window.RTS_DISABLE_TRACKING = true;
             return;
           }
           if (typeof this.showHelpfulToast === 'function') {
-            window.RTSLetterSystem.safeToast(message, type);
+            this.showHelpfulToast(message, type);
             return;
           }
         } catch (e) {}
         try { console.log('[RTS]', message); } catch(e) {}
+      },
+
+      isTrackingDisabled() {
+        try {
+          const cfg = (typeof window.RTS_CONFIG !== 'undefined' && window.RTS_CONFIG) ? window.RTS_CONFIG : {};
+          return !!(window.RTS_DISABLE_TRACKING === true || cfg.disableTracking === true);
+        } catch (e) {
+          return !!(window.RTS_DISABLE_TRACKING === true);
+        }
       },
 
       // State
@@ -230,6 +239,9 @@ window.RTS_DISABLE_TRACKING = true;
         },
 
         logMetric(label, duration, success = true) {
+          const root = (window && window.RTSLetterSystem) ? window.RTSLetterSystem : {};
+          if (root && typeof root.isTrackingDisabled === 'function' && root.isTrackingDisabled()) return;
+
           const metric = {
             label,
             duration,
@@ -252,6 +264,7 @@ window.RTS_DISABLE_TRACKING = true;
         reportSlowOperation(metric) {
           // Optional endpoint: /performance
           const root = (window && window.RTSLetterSystem) ? window.RTSLetterSystem : {};
+          if (root && typeof root.isTrackingDisabled === 'function' && root.isTrackingDisabled()) return;
           const features = (root && root.features) ? root.features : {};
           if (!features.remotePerfReporting) return;
           if (!navigator.sendBeacon) return;
@@ -363,7 +376,7 @@ try {
           try { console.error('[RTS] initialization failed:', error); } catch(e){}
           const fallbackMsg = document.createElement('div');
           fallbackMsg.innerHTML = '<p style="color:#666;padding:20px;text-align:center;">Unable to load letters system. Please refresh the page.</p>';
-          const viewer = document.querySelector('.rts-letter-viewer') || document.body;
+          const viewer = document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card') || document.body;
           viewer.prepend(fallbackMsg);
         }
       },
@@ -380,18 +393,23 @@ try {
         }
 
         if (!window.RTS_CONFIG.timeoutMs) {
-          window.RTS_CONFIG.timeoutMs = isLocalhost ? 30000 : 9000;
+          window.RTS_CONFIG.timeoutMs = isLocalhost ? 30000 : 15000;
         }
 
         if (!window.RTS_CONFIG.restBase) {
           window.RTS_CONFIG.restBase = '/wp-json/rts/v1/';
         }
 
+        if (typeof window.RTS_CONFIG.disableTracking === 'undefined') {
+          window.RTS_CONFIG.disableTracking = !!window.RTS_DISABLE_TRACKING;
+        }
+        window.RTS_DISABLE_TRACKING = !!window.RTS_CONFIG.disableTracking;
+
         this.features.prefetch = ('fetch' in window) && ('AbortController' in window);
         this.features.toastNotifications = ('Promise' in window);
-        this.features.analytics = true;
-        this.features.remoteErrorReporting = !!window.RTS_CONFIG.remoteErrorReporting;
-        this.features.remotePerfReporting = !!window.RTS_CONFIG.remotePerfReporting;
+        this.features.analytics = !this.isTrackingDisabled();
+        this.features.remoteErrorReporting = !this.isTrackingDisabled() && !!window.RTS_CONFIG.remoteErrorReporting;
+        this.features.remotePerfReporting = !this.isTrackingDisabled() && !!window.RTS_CONFIG.remotePerfReporting;
       },
 
       addResourceHints() {
@@ -484,6 +502,7 @@ injectCriticalStyles() {
 
 
       setupPerformanceTracking() {
+        if (this.isTrackingDisabled()) return;
         if (!('PerformanceObserver' in window)) return;
         try {
           // Largest Contentful Paint
@@ -579,7 +598,7 @@ cleanupMemory() {
 
       
 cacheDomElements() {
-        const container = document.querySelector('.rts-letter-viewer');
+        const container = document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card');
         if (!container) return;
 
         // If the container hasn't changed, keep cached references
@@ -619,12 +638,10 @@ cacheDomElements() {
       },
 
       getHeaders() {
-        const cfg = (typeof window.RTS_CONFIG !== 'undefined' && window.RTS_CONFIG) ? window.RTS_CONFIG : {};
-        const headers = {
-          'Content-Type': 'application/json',
-          'X-WP-Nonce': cfg.nonce || ''
+        return {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         };
-        return headers;
       },
 
       
@@ -680,7 +697,7 @@ cacheDomElements() {
 
 
 
-      async queueRequest(requestFn, priority = 'normal', requestId = null, timeout = 30000) {
+      async queueRequest(requestFn, priority = 'normal', requestId = null, timeout = 45000) {
         const reqId = requestId || (Date.now() + Math.random().toString(36).slice(2));
 
         if (this.pendingRequests && this.pendingRequests.has(reqId)) {
@@ -774,7 +791,9 @@ async processQueue() {
         }
       },
 
+
       async robustFetch(url, options = {}, maxRetries = 2, baseDelay = 700) {
+
         if (!this.rateLimit.canMakeRequest()) throw new Error('Rate limit exceeded. Please wait a moment.');
         if (!this.circuitBreaker.canExecute()) throw new Error('Service temporarily unavailable');
 
@@ -897,7 +916,7 @@ async processQueue() {
       },
 
       showDegradedMode() {
-        const viewer = document.querySelector('.rts-letter-viewer');
+        const viewer = document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card');
         if (!viewer || document.querySelector('.rts-degraded-warning')) return;
 
         const warning = document.createElement('div');
@@ -935,6 +954,7 @@ async processQueue() {
       },
 
       maybeReportError(entry) {
+        if (this.isTrackingDisabled()) return;
         if (!this.features.remoteErrorReporting) return;
         if (Math.random() > 0.01) return;
         if (!navigator.sendBeacon) return;
@@ -1227,7 +1247,7 @@ getCacheKey() {
 
       checkOnboarding() {
         const onboardingEl = document.querySelector('.rts-onboarding-overlay');
-        const viewerEl = document.querySelector('.rts-letter-viewer');
+        const viewerEl = document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card');
         if (!viewerEl) return;
 
         const hasOnboarded = sessionStorage.getItem('rts_onboarded');
@@ -1262,8 +1282,8 @@ getCacheKey() {
         const excludeParam = viewed.length ? 'exclude=' + viewed.join(',') : '';
 
         // Strategy A: Try the REST endpoint first (fast, cache-friendly).
-        // Strategy B: If REST returns 403 (Cloudflare / WAF block), fall back
-        //             to admin-ajax.php which is never blocked.
+        // If the route is blocked/missing, getNextLetter() handles fallback via
+        // /rts/v1/letter/next and ajaxPost('rts_get_next_letter').
         let raw = null;
 
         if (!this.restBlocked) {
@@ -1276,10 +1296,10 @@ getCacheKey() {
           const response = await this.robustFetch(restUrl, {
             method: 'GET',
             credentials: 'same-origin',
-            headers: { 'X-WP-Nonce': ((window.RTS_CONFIG || {}).nonce || '') }
-          });
+            headers: this.getHeaders()
+          }, 0);
 
-          if (response && response.status === 403) {
+          if (response && (response.status === 403 || response.status === 404 || response.status === 405)) {
             this.restBlocked = true;
             try { sessionStorage.setItem('rts_rest_blocked', '1'); } catch (e) {}
           }
@@ -1288,25 +1308,6 @@ getCacheKey() {
             raw = await this.parseJson(response);
           }
         } catch (e) { /* REST failed – fall through to AJAX */ }
-        }
-
-        // Strategy B: AJAX fallback (admin-ajax.php is never blocked by WAF)
-        if (!raw || !raw.id) {
-          try {
-            const ajaxUrl = (window.RTS_CONFIG && window.RTS_CONFIG.ajaxUrl)
-              ? window.RTS_CONFIG.ajaxUrl
-              : '/wp-admin/admin-ajax.php';
-            const ajaxEndpoint = ajaxUrl + '?action=rts_random_letter' + (excludeParam ? '&' + excludeParam : '');
-
-            const ajaxResp = await this.robustFetch(ajaxEndpoint, {
-              method: 'GET',
-              credentials: 'same-origin'
-            });
-
-            if (ajaxResp && ajaxResp.ok) {
-              raw = await this.parseJson(ajaxResp);
-            }
-          } catch (e) { /* both paths failed */ }
         }
 
         if (!raw || !raw.id) return null;
@@ -1334,6 +1335,12 @@ getCacheKey() {
         return this.queueRequest(async () => {
           this.startTimer('getNextLetter');
 
+          // If the user explicitly asked for another letter, always show a proper loader
+          // (even if the next letter is served from cache/prefetch) to avoid white flashes.
+          if (forceFresh) {
+            try { this.startViewerLoader(260); } catch (e) {}
+          }
+
           if (!this.isOnline) {
             this.showError('You are offline. Please check your connection.');
             this.endTimer('getNextLetter', false);
@@ -1351,6 +1358,7 @@ getCacheKey() {
           if (!forceFresh && cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
             this.currentLetter = cached.letter;
             this.renderLetter(cached.letter);
+            try { if (forceFresh) this.finishViewerLoader(true); } catch (e) {}
             this.endTimer('getNextLetter');
             return;
           }
@@ -1365,7 +1373,9 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackViewOnce(letter ? (letter.id || letter.ID) : null);
+            this.trackViewOnce(letter ? (letter.id || letter.ID) : null, !!forceFresh);
+
+            try { if (forceFresh) this.finishViewerLoader(true); } catch (e) {}
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1382,7 +1392,9 @@ getCacheKey() {
             this.saveState();
 
             this.renderLetter(letter);
-            this.trackViewOnce(letter ? (letter.id || letter.ID) : null);
+            this.trackViewOnce(letter ? (letter.id || letter.ID) : null, !!forceFresh);
+
+            try { if (forceFresh) this.finishViewerLoader(true); } catch (e) {}
 
             if (this.features.prefetch) this.prefetchNextLetter();
             this.endTimer('getNextLetter');
@@ -1392,16 +1404,11 @@ getCacheKey() {
           const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
           const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
 
-          // Skeleton loading: show shimmer placeholders for better perceived performance
+          // Loading UI: logo spinner + % (prevents blank white flashes between letters)
           if (loadingEl) {
-            loadingEl.innerHTML = '<div class="rts-skeleton-block">'
-              + '<div class="rts-skeleton rts-skeleton-title"></div>'
-              + '<div class="rts-skeleton rts-skeleton-line"></div>'
-              + '<div class="rts-skeleton rts-skeleton-line"></div>'
-              + '<div class="rts-skeleton rts-skeleton-line"></div>'
-              + '<div class="rts-skeleton rts-skeleton-line"></div>'
-              + '<div class="rts-skeleton rts-skeleton-line"></div>'
-              + '</div>';
+            try { this.ensureViewerLoaderMarkup(loadingEl); } catch (e) {}
+            // If we didn't start the loader above (initial load), start it now.
+            try { if (!this._viewerLoader || !this._viewerLoader.active) this.startViewerLoader(260); } catch (e) {}
             loadingEl.style.display = 'block';
           }
           if (displayEl) displayEl.style.display = 'none';
@@ -1422,7 +1429,7 @@ getCacheKey() {
                   this.letterCache[cacheKey] = { letter: nativeLetter, timestamp: Date.now() };
 
                   this.renderLetter(nativeLetter);
-                  this.trackViewOnce(nativeLetter ? (nativeLetter.id || nativeLetter.ID) : null);
+                  this.trackViewOnce(nativeLetter ? (nativeLetter.id || nativeLetter.ID) : null, !!forceFresh);
                   this.trackSuccess('nextLetter');
 
                   loadedOk = true;
@@ -1439,27 +1446,59 @@ getCacheKey() {
                   };
 
                   const fetchLetterData = async () => {
+                    const restBase = this.getRestBase() + 'letter/next';
+                    const viewedCsv = (Array.isArray(payload.viewed) && payload.viewed.length)
+                      ? payload.viewed.join(',')
+                      : '';
+                    const restGetUrl = viewedCsv ? (restBase + '?viewed=' + encodeURIComponent(viewedCsv)) : restBase;
+
                     if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
-                      const response = await this.robustFetch(this.getRestBase() + 'letter/next', {
-                        method: 'POST',
-                        headers: this.getHeaders(),
-                        credentials: 'same-origin',
-                        body: JSON.stringify(payload)
-                      });
+                      try {
+                        const response = await this.robustFetch(restBase, {
+                          method: 'POST',
+                          headers: this.getHeaders(),
+                          credentials: 'same-origin',
+                          body: JSON.stringify(payload)
+                        }, 0);
 
-                      if (response && response.ok) {
-                        try {
-                          return await this.parseJson(response);
-                        } catch (e) {
-                          return { success: false, message: 'Invalid response format' };
+                        if (response && response.ok) {
+                          try {
+                            return await this.parseJson(response);
+                          } catch (e) {
+                            return { success: false, message: 'Invalid response format' };
+                          }
                         }
-                      }
 
-                      if (response && (response.status === 403 || response.status === 404)) {
+                        if (response && (response.status === 403 || response.status === 404 || response.status === 405)) {
+                          const getResp = await this.robustFetch(restGetUrl, {
+                            method: 'GET',
+                            headers: this.getHeaders(),
+                            credentials: 'same-origin'
+                          }, 0);
+
+                          if (getResp && getResp.ok) {
+                            return await this.parseJson(getResp);
+                          }
+
+                          if (getResp && (getResp.status === 403 || getResp.status === 404 || getResp.status === 405)) {
+                            return await this.ajaxPost('rts_get_next_letter', payload);
+                          }
+                        }
+                      } catch (e) {
+                        try {
+                          const getResp = await this.robustFetch(restGetUrl, {
+                            method: 'GET',
+                            headers: this.getHeaders(),
+                            credentials: 'same-origin'
+                          }, 0);
+                          if (getResp && getResp.ok) {
+                            return await this.parseJson(getResp);
+                          }
+                        } catch (ignored) {}
                         return await this.ajaxPost('rts_get_next_letter', payload);
                       }
 
-                      return { success: false, message: `HTTP ${response ? response.status : '0'}` };
+                      return await this.ajaxPost('rts_get_next_letter', payload);
                     }
 
                     return await this.ajaxPost('rts_get_next_letter', payload);
@@ -1494,7 +1533,7 @@ getCacheKey() {
                     this.letterCache[cacheKey] = { letter: normalized.letter, timestamp: Date.now() };
 
                     this.renderLetter(normalized.letter);
-                    this.trackViewOnce(normalized && normalized.letter ? (normalized.letter.id || normalized.letter.ID) : null);
+                    this.trackViewOnce(normalized && normalized.letter ? (normalized.letter.id || normalized.letter.ID) : null, !!forceFresh);
                     this.trackSuccess('nextLetter');
 
                     loadedOk = true;
@@ -1512,15 +1551,113 @@ getCacheKey() {
             this.showError('Unable to load letter. Please check your connection and refresh the page.');
           } finally {
             if (loadedOk) {
-              if (loadingEl) loadingEl.style.display = 'none';
-              if (displayEl) displayEl.style.display = 'block';
+              // Let finishViewerLoader handle hiding the loader, so the % can reach 100.
+              try { this.finishViewerLoader(true); } catch (e) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (displayEl) displayEl.style.display = 'block';
+              }
             } else {
+              try { this.finishViewerLoader(false); } catch (e) {}
               if (loadingEl) loadingEl.style.display = 'block';
               if (displayEl) displayEl.style.display = 'none';
             }
             this.endTimer('getNextLetter');
           }
         }, 'high');
+      },
+
+      // --- Viewer Loader (logo spinner + progress %) ---
+      ensureViewerLoaderMarkup(loadingEl) {
+        if (!loadingEl) return;
+        if (loadingEl.querySelector && loadingEl.querySelector('.rts-loading-logo')) return;
+
+        const viewerEl = document.querySelector('.rts-letter-viewer');
+        const logo = viewerEl && viewerEl.dataset && viewerEl.dataset.loaderLogo ? viewerEl.dataset.loaderLogo : '';
+
+        loadingEl.setAttribute('role', 'status');
+        loadingEl.setAttribute('aria-live', 'polite');
+        loadingEl.setAttribute('aria-label', 'Loading next letter');
+        loadingEl.innerHTML =
+          '<div class="rts-loading-inner">'
+            + '<img class="rts-loading-logo" src="' + (logo ? String(logo).replace(/\"/g,'&quot;') : '') + '" alt="Reasons to Stay" loading="eager" decoding="async" />'
+            + '<div class="rts-loading-text" aria-hidden="true">Loading <span class="rts-loading-percent">0%</span></div>'
+            + '<div class="rts-loading-bar" aria-hidden="true"><span class="rts-loading-bar-fill" style="width:0%"></span></div>'
+            + '<p class="rts-loading-subtext">Finding a letter for you...</p>'
+          + '</div>';
+      },
+
+      setViewerLoaderPercent(pct) {
+        const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
+        if (!loadingEl) return;
+        const pctEl = loadingEl.querySelector ? loadingEl.querySelector('.rts-loading-percent') : null;
+        const barEl = loadingEl.querySelector ? loadingEl.querySelector('.rts-loading-bar-fill') : null;
+        if (pctEl) pctEl.textContent = p + '%';
+        if (barEl) barEl.style.width = p + '%';
+      },
+
+      startViewerLoader(minDurationMs = 260) {
+        const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
+        const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
+        if (!loadingEl) return;
+
+        try { this.ensureViewerLoaderMarkup(loadingEl); } catch (e) {}
+
+        // Clear any previous loader timers
+        try {
+          if (this._viewerLoader && this._viewerLoader.timer) clearInterval(this._viewerLoader.timer);
+        } catch (e) {}
+
+        this._viewerLoader = {
+          active: true,
+          started: Date.now(),
+          min: Math.max(0, Number(minDurationMs) || 0),
+          pct: 0,
+          timer: null
+        };
+
+        this.setViewerLoaderPercent(0);
+
+        loadingEl.style.display = 'block';
+        if (displayEl) displayEl.style.display = 'none';
+
+        // Soft fake progress that caps at 92% until finishViewerLoader()
+        this._viewerLoader.timer = setInterval(() => {
+          if (!this._viewerLoader || !this._viewerLoader.active) return;
+          const current = Number(this._viewerLoader.pct) || 0;
+          const bump = 2 + Math.floor(Math.random() * 6);
+          const next = Math.min(92, current + bump);
+          this._viewerLoader.pct = next;
+          this.setViewerLoaderPercent(next);
+        }, 140);
+      },
+
+      finishViewerLoader(success = true) {
+        const loadingEl = this.domElements.loading || document.querySelector('.rts-loading');
+        const displayEl = this.domElements.display || document.querySelector('.rts-letter-display');
+        if (!loadingEl) return;
+
+        const state = this._viewerLoader || { active: false, started: Date.now(), min: 0, timer: null };
+        try { if (state.timer) clearInterval(state.timer); } catch (e) {}
+
+        if (!success) {
+          // Stop progress animation but leave loader visible (error UI is rendered elsewhere)
+          this._viewerLoader = { active: false, started: state.started, min: state.min, pct: state.pct, timer: null };
+          return;
+        }
+
+        // Snap to 100% then hide after min duration is satisfied
+        this.setViewerLoaderPercent(100);
+
+        const elapsed = Date.now() - (state.started || Date.now());
+        const remaining = Math.max(0, (Number(state.min) || 0) - elapsed);
+
+        this._viewerLoader = { active: false, started: state.started, min: state.min, pct: 100, timer: null };
+
+        setTimeout(() => {
+          try { if (loadingEl) loadingEl.style.display = 'none'; } catch (e) {}
+          try { if (displayEl) displayEl.style.display = 'block'; } catch (e) {}
+        }, Math.min(900, remaining + 140));
       },
       getConnectionInfo() {
         const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -1636,6 +1773,20 @@ progressiveRender(contentEl, html) {
         const contentEl = this.domElements.content || document.querySelector('.rts-letter-body');
         const signatureEl = null;
 
+        // A11y + mobile UX: prevent page "jump" when swapping letters
+        // (especially when the next letter is prefetched and loads instantly).
+        // Lock the card height briefly while we replace content.
+        let _heightLockEl = null;
+        let _heightLockVal = '';
+        try {
+          _heightLockEl = document.querySelector('.rts-letter-card') || displayEl;
+          if (_heightLockEl) {
+            _heightLockVal = _heightLockEl.style.minHeight || '';
+            const h = Math.max(0, Math.round(_heightLockEl.getBoundingClientRect().height));
+            if (h > 0) _heightLockEl.style.minHeight = h + 'px';
+          }
+        } catch (e) {}
+
         if (!contentEl || !displayEl) {
             console.error('RTS: Required DOM elements not found for rendering');
             return;
@@ -1648,12 +1799,21 @@ progressiveRender(contentEl, html) {
         // Use requestAnimationFrame for smoother rendering and reduced layout thrashing
         requestAnimationFrame(() => {
             // Batch visibility changes
-            if (loadingEl) loadingEl.style.display = 'none';
+            // If a loader is active, let finishViewerLoader() hide it so the % can reach 100.
+            const loaderActive = !!(this._viewerLoader && this._viewerLoader.active);
+            if (loadingEl && !loaderActive) loadingEl.style.display = 'none';
             displayEl.style.display = 'block';
             
             // Use progressive rendering for large letters
             const sanitized = this.sanitizeHtml(letter.content);
             this.progressiveRender(contentEl, sanitized);
+
+            // Release height lock after the swap settles
+            setTimeout(() => {
+              try {
+                if (_heightLockEl) _heightLockEl.style.minHeight = _heightLockVal;
+              } catch (e) {}
+            }, 220);
 
             // Defer non-critical work
             setTimeout(() => { try { this.setupLazyLoading(contentEl); } catch(e){} }, 0);
@@ -1735,42 +1895,64 @@ progressiveRender(contentEl, html) {
         } catch(e) {}
       },
 
-      async trackView(letterId) {
-        if (!this.features.analytics || !letterId) return;
+      async trackView(letterId, viewNonceOverride = '') {
+        if (this.isTrackingDisabled()) return false;
+        if (!this.features.analytics || !letterId) return false;
         const pageNonce = (window.__RTS_PAGE_LOAD_NONCE) ? String(window.__RTS_PAGE_LOAD_NONCE) : '';
+        const viewNonce = (viewNonceOverride && String(viewNonceOverride).trim() !== '')
+          ? String(viewNonceOverride).trim()
+          : pageNonce;
+        const payload = { letter_id: letterId, view_nonce: viewNonce };
+
         try {
           if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
-            await this.robustFetch(this.getRestBase() + 'track/view', {
+            const response = await this.robustFetch(this.getRestBase() + 'track/view', {
               method: 'POST',
               headers: this.getHeaders(),
               credentials: 'same-origin',
-              body: JSON.stringify({ letter_id: letterId, view_nonce: pageNonce })
+              body: JSON.stringify(payload)
             });
-          } else {
-            await this.ajaxPost('rts_track_view', { letter_id: letterId, view_nonce: pageNonce });
+
+            const parsed = await this.parseJson(response).catch(() => ({}));
+            if (response && response.ok && (!parsed || parsed.ok !== false)) {
+              return true;
+            }
           }
+
+          const ajaxResp = await this.ajaxPost('rts_track_view', payload);
+          return !!(ajaxResp && (ajaxResp.success === true || ajaxResp.ok === true || (ajaxResp.data && ajaxResp.data.ok === true)));
         } catch (error) {
           this.logError('trackView', error);
+          try {
+            const ajaxResp = await this.ajaxPost('rts_track_view', payload);
+            return !!(ajaxResp && (ajaxResp.success === true || ajaxResp.ok === true || (ajaxResp.data && ajaxResp.data.ok === true)));
+          } catch (ignored) {
+            return false;
+          }
         }
       },
-
       // Track exactly one view per rendered letter (prevents double increments).
-      async trackViewOnce(letterId) {
+      async trackViewOnce(letterId, allowRepeatForNext = false) {
         if (!letterId) return;
         const idStr = String(letterId);
+        const pv = (window.__RTS_PAGE_LOAD_NONCE) ? String(window.__RTS_PAGE_LOAD_NONCE) : 'no-pv';
+        const viewedIndex = Array.isArray(this.viewedLetterIds) ? this.viewedLetterIds.length : 0;
+        const globalKey = allowRepeatForNext
+          ? (pv + '::' + idStr + '::' + String(viewedIndex))
+          : (pv + '::' + idStr);
+
         // Instance guard (prevents repeated increments within the same viewer instance)
-        if (this._viewCountedFor === idStr) return;
+        if (!allowRepeatForNext && this._viewCountedFor === idStr) return;
 
         // Global guard (prevents double increments if this script is accidentally
-        // initialised twice on the same page load). Uses a stable per-load nonce.
-        const pv = (window.__RTS_PAGE_LOAD_NONCE) ? String(window.__RTS_PAGE_LOAD_NONCE) : 'no-pv';
-        const globalKey = pv + '::' + idStr;
+        // initialised twice on the same page load).
         window.__RTS_VIEW_ONCE = window.__RTS_VIEW_ONCE || Object.create(null);
         if (window.__RTS_VIEW_ONCE[globalKey]) return;
         window.__RTS_VIEW_ONCE[globalKey] = true;
 
-        this._viewCountedFor = idStr;
-        await this.trackView(letterId);
+        this._viewCountedFor = allowRepeatForNext ? globalKey : idStr;
+        const viewNonce = allowRepeatForNext ? (pv + ':' + String(viewedIndex)) : pv;
+        await this.trackView(letterId, viewNonce);
 
         // Notify other UI widgets (e.g., [rts_site_stats_row]) that a view was recorded
         try {
@@ -1779,6 +1961,7 @@ progressiveRender(contentEl, html) {
       },
 
       async trackHelpful() {
+        if (this.isTrackingDisabled()) return;
         if (!this.currentLetter) return;
         this.diagLog('trackHelpful', { letter_id: this.currentLetter.id || null });
 
@@ -1814,6 +1997,7 @@ progressiveRender(contentEl, html) {
       },
 
       async trackUnhelpful() {
+        if (this.isTrackingDisabled()) return;
         if (!this.currentLetter) return;
 
         try { this.currentLetter._rtsRated = true; } catch (e) {}
@@ -1847,6 +2031,7 @@ progressiveRender(contentEl, html) {
       },
 
       async trackShare(platform) {
+        if (this.isTrackingDisabled()) return;
         if (!this.currentLetter || !this.features.analytics) return;
         try {
           if (window.RTS_CONFIG && window.RTS_CONFIG.restEnabled) {
@@ -1882,7 +2067,13 @@ progressiveRender(contentEl, html) {
           window.open(shareUrl, '_blank', 'noopener,noreferrer');
         };
 
-        switch ((platform || '').toLowerCase()) {
+        const p = (platform || '').toLowerCase();
+
+        // Normalise common aliases used across templates.
+        // Some buttons use data-platform="link" instead of "copy".
+        const norm = (p === 'link' || p === 'sharelink' || p === 'copylink') ? 'copy' : p;
+
+        switch (norm) {
           case 'facebook':
             openPopup(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`);
             break;
@@ -1903,12 +2094,15 @@ progressiveRender(contentEl, html) {
             break;
           case 'email':
             // Use location change (not popup)
+            try { this.safeToast('Opening email…', 'info'); } catch(e) {}
             window.location.href = `mailto:?subject=${encodedTitle}&body=${shareText}`;
             break;
           case 'copy':
             // Copy link with fallback
             if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(url).catch(() => {
+              navigator.clipboard.writeText(url).then(() => {
+                try { this.safeToast('Link copied ✅', 'success'); } catch(e) {}
+              }).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = url;
                 ta.setAttribute('readonly', '');
@@ -1918,6 +2112,7 @@ progressiveRender(contentEl, html) {
                 ta.select();
                 try { document.execCommand('copy'); } catch(e) {}
                 document.body.removeChild(ta);
+                try { this.safeToast('Link copied ✅', 'success'); } catch(e) {}
               });
             } else {
               const ta = document.createElement('textarea');
@@ -1929,6 +2124,7 @@ progressiveRender(contentEl, html) {
               ta.select();
               try { document.execCommand('copy'); } catch(e) {}
               document.body.removeChild(ta);
+              try { this.safeToast('Link copied ✅', 'success'); } catch(e) {}
             }
             break;
           default:
@@ -2219,6 +2415,7 @@ showRatePrompt() {
       skipOnboarding() {
         
         this.preferences.skipOnboarding = true;
+        this.saveState();
         sessionStorage.setItem('rts_onboarded', 'true');
         document.documentElement.classList.remove('rts-onboarding_active');
         document.documentElement.classList.remove('rts-onboarding-active');
@@ -2406,6 +2603,11 @@ cleanup() {
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
       },
 
+      destroy() {
+        this.cleanup();
+        this._booted = false;
+      },
+
       debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -2418,7 +2620,54 @@ cleanup() {
         };
       },
 
-      
+      showIPhoneTranslateHelper(lang, e) {
+        try {
+          const ua = navigator.userAgent || '';
+          const isIOS = /iP(hone|od)/.test(ua);
+          const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+          if (!isIOS || !isSafari) return false;
+
+          if (e && e.cancelable) e.preventDefault();
+          if (e && e.stopPropagation) e.stopPropagation();
+
+          document.documentElement.setAttribute('lang', lang || 'en');
+          const rtl = (lang === 'ar' || lang === 'he');
+          document.documentElement.setAttribute('dir', rtl ? 'rtl' : 'ltr');
+          if (document.body) document.body.classList.toggle('rts-rtl', rtl);
+
+          const existing = document.getElementById('rts-iphone-translate-helper');
+          if (existing) existing.remove();
+          const styleId = 'rts-iphone-translate-style';
+          if (!document.getElementById(styleId)) {
+            const st = document.createElement('style');
+            st.id = styleId;
+            st.textContent = '#rts-iphone-translate-helper{position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;} .rts-iphone-translate-card{width:100%;max-width:520px;background:#fff;border-radius:18px;padding:16px 16px 14px;box-shadow:0 14px 40px rgba(0,0,0,0.25);position:relative;font-family:inherit;color:#111;} .rts-iphone-translate-close{position:absolute;top:8px;right:10px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(0,0,0,0.06);font-size:22px;line-height:34px;cursor:pointer;} .rts-iphone-translate-title{font-weight:700;font-size:16px;margin-bottom:8px;padding-right:36px;} .rts-iphone-translate-steps{font-size:14px;line-height:1.45;margin-bottom:10px;} .rts-iphone-translate-tip{font-size:12.5px;opacity:0.8;}';
+            document.head.appendChild(st);
+          }
+
+          const langNameMap = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',pt:'Portuguese',nl:'Dutch',pl:'Polish',ro:'Romanian',hu:'Hungarian',cs:'Czech',sv:'Swedish',no:'Norwegian',da:'Danish',fi:'Finnish',el:'Greek',ru:'Russian',uk:'Ukrainian',ar:'Arabic',he:'Hebrew',tr:'Turkish',hi:'Hindi',zh:'Chinese',ja:'Japanese',ko:'Korean',vi:'Vietnamese',th:'Thai',id:'Indonesian'};
+          const langName = langNameMap[lang] || lang;
+          const wrap = document.createElement('div');
+          wrap.id = 'rts-iphone-translate-helper';
+          wrap.setAttribute('role', 'dialog');
+          wrap.setAttribute('aria-modal', 'true');
+          wrap.innerHTML = '<div class="rts-iphone-translate-card">' +
+            '<button class="rts-iphone-translate-close" aria-label="Close">×</button>' +
+            '<div class="rts-iphone-translate-title">Translate on iPhone</div>' +
+            '<div class="rts-iphone-translate-steps">1) Tap the <strong>AA</strong> button in Safari’s address bar<br>2) Tap <strong>Translate to ' + langName + '</strong></div>' +
+            '<div class="rts-iphone-translate-tip">Tip: If you can’t see “Translate”, make sure you’re not in Private Browsing.</div>' +
+            '</div>';
+          document.body.appendChild(wrap);
+          wrap.addEventListener('click', (ev) => { if (ev.target === wrap) wrap.remove(); });
+          const btn = wrap.querySelector('.rts-iphone-translate-close');
+          if (btn) btn.addEventListener('click', () => wrap.remove());
+          return true;
+        } catch (err) {
+          return false;
+        }
+      },
+
+
 
 bindEvents() {
         // Debounced activity tracker - reduces CPU usage
@@ -2441,6 +2690,90 @@ bindEvents() {
           document.addEventListener('touchstart', debouncedActivity, { passive: true });
           this.eventListeners.push({ element: document, type: 'touchstart', handler: debouncedActivity });
         }
+        const pointerUpHandler = (ev) => {
+          try {
+            const pointerType = (ev && typeof ev.pointerType === 'string') ? ev.pointerType.toLowerCase() : '';
+            const isTouchFallback = !!(ev && ev.type === 'touchend');
+            if (pointerType === 'touch' || pointerType === 'pen' || isTouchFallback) {
+              this._lastTouchPointerUpTs = Date.now();
+            }
+          } catch (err) {}
+        };
+        if ('onpointerup' in window || window.PointerEvent) {
+          document.addEventListener('pointerup', pointerUpHandler, { passive: true });
+          this.eventListeners.push({ element: document, type: 'pointerup', handler: pointerUpHandler });
+        } else if ('ontouchend' in window) {
+          document.addEventListener('touchend', pointerUpHandler, { passive: true });
+          this.eventListeners.push({ element: document, type: 'touchend', handler: pointerUpHandler });
+        }
+
+        const resolveLangMenuConfig = (wrapper) => {
+          if (!wrapper || !wrapper.classList) return null;
+          if (wrapper.classList.contains('rts-lang-compact-wrapper')) {
+            return {
+              wrapperSelector: '.rts-lang-compact-wrapper',
+              buttonSelector: '.rts-lang-compact-button',
+              menuSelector: '.rts-lang-compact-menu',
+              optionSelector: '.rts-lang-compact-option',
+              openDisplay: 'grid'
+            };
+          }
+          if (wrapper.classList.contains('rts-lang-dropdown-wrapper')) {
+            return {
+              wrapperSelector: '.rts-lang-dropdown-wrapper',
+              buttonSelector: '.rts-lang-dropdown-button',
+              menuSelector: '.rts-lang-dropdown-menu',
+              optionSelector: '.rts-lang-option',
+              openDisplay: 'block'
+            };
+          }
+          return null;
+        };
+
+        const listLangOptions = (menu, selector) => {
+          if (!menu) return [];
+          try { return Array.from(menu.querySelectorAll(selector)); } catch (err) { return []; }
+        };
+
+        const setLangMenuExpanded = (btn, menu, expanded, openDisplay) => {
+          if (!btn || !menu) return;
+          btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          menu.style.display = expanded ? openDisplay : 'none';
+          menu.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+        };
+
+        const focusLangOption = (menu, selector, index) => {
+          const options = listLangOptions(menu, selector);
+          if (!options.length) return;
+          const bounded = Math.max(0, Math.min(options.length - 1, index));
+          const node = options[bounded];
+          if (node && typeof node.focus === 'function') {
+            node.focus();
+          }
+        };
+
+        const moveLangOptionFocus = (menu, selector, currentNode, delta) => {
+          const options = listLangOptions(menu, selector);
+          if (!options.length) return;
+          let currentIndex = options.indexOf(currentNode);
+          if (currentIndex < 0) currentIndex = 0;
+          const nextIndex = (currentIndex + delta + options.length) % options.length;
+          const next = options[nextIndex];
+          if (next && typeof next.focus === 'function') {
+            next.focus();
+          }
+        };
+
+        const closeAllLangMenus = (exceptButton) => {
+          document.querySelectorAll('.rts-lang-compact-button[aria-expanded="true"], .rts-lang-dropdown-button[aria-expanded="true"]').forEach((btn) => {
+            if (exceptButton && btn === exceptButton) return;
+            const wrapper = btn.closest('.rts-lang-compact-wrapper, .rts-lang-dropdown-wrapper');
+            const cfg = resolveLangMenuConfig(wrapper);
+            if (!cfg || !wrapper) return;
+            const menu = wrapper.querySelector(cfg.menuSelector);
+            setLangMenuExpanded(btn, menu, false, cfg.openDisplay);
+          });
+        };
 
         // Keep existing online/offline handlers
         const onlineHandler = () => {
@@ -2463,11 +2796,22 @@ bindEvents() {
 
           
             if (e && e.rtsHandled) return;
-// Touchscreen reliability: avoid double-fire (pointerup + click)
+// Touchscreen reliability: avoid duplicate synthetic click after touch/pen pointerup
           try {
             const now = Date.now();
-            if (e.type === 'click' && this._lastPointerUpTs && (now - this._lastPointerUpTs) < 350) {
-              return;
+            if (e.type === 'click' && this._lastTouchPointerUpTs && (now - this._lastTouchPointerUpTs) < 350) {
+              // iOS/Safari often triggers a synthetic click after touchend/pointerup.
+              // We ignore that click to prevent double-activations, BUT we must allow
+              // the language switcher dropdown to work (it relies on click on many builds).
+              try {
+                const t = e.target;
+                const isLang = t && (t.closest && t.closest('.rts-lang-compact-button, .rts-lang-dropdown-button, .rts-lang-compact-option, .rts-lang-option'));
+                if (!isLang) {
+                  return;
+                }
+              } catch (err) {
+                return;
+              }
             }
             } catch (err) {}
 
@@ -2486,14 +2830,14 @@ bindEvents() {
             const menu = wrapper.querySelector ? wrapper.querySelector('.rts-lang-compact-menu') : null;
             if (menu) {
               const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-              btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-              menu.style.display = isExpanded ? 'none' : 'grid';
+              closeAllLangMenus(btn);
+              setLangMenuExpanded(btn, menu, !isExpanded, 'grid');
             }
             return;
           }
 
           // If a language option is clicked, set cookie early (navigation still happens)
-          const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option, .rts-lang-option, .rts-lang-flag') : null;
+          const langOption = e.target && e.target.closest ? e.target.closest('.rts-lang-compact-option, .rts-lang-flag') : null;
           if (langOption) {
             this.diagLog('lang_option', { lang: langOption.getAttribute('data-lang'), href: langOption.getAttribute('href') });
             try {
@@ -2503,63 +2847,23 @@ bindEvents() {
                 // Always persist preference for UI consistency.
                 document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
 
-                // iPhone Safari: guide user to use Safari’s built-in Translate (cannot be triggered programmatically).
-                try {
-                  const ua = navigator.userAgent || '';
-                  const isIOS = /iP(hone|od)/.test(ua);
-                  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-                  if (isIOS && isSafari) {
-                    if (e.cancelable) e.preventDefault();
-                    e.stopPropagation();
-
-                    // Hint language + direction for better Safari Translate prompts
-                    document.documentElement.setAttribute('lang', lang || 'en');
-                    const rtl = (lang === 'ar' || lang === 'he');
-                    document.documentElement.setAttribute('dir', rtl ? 'rtl' : 'ltr');
-                    if (document.body) document.body.classList.toggle('rts-rtl', rtl);
-
-                    // Minimal helper overlay
-                    const existing = document.getElementById('rts-iphone-translate-helper');
-                    if (existing) existing.remove();
-                    const styleId = 'rts-iphone-translate-style';
-                    if (!document.getElementById(styleId)) {
-                      const st = document.createElement('style');
-                      st.id = styleId;
-                      st.textContent = '#rts-iphone-translate-helper{position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;} .rts-iphone-translate-card{width:100%;max-width:520px;background:#fff;border-radius:18px;padding:16px 16px 14px;box-shadow:0 14px 40px rgba(0,0,0,0.25);position:relative;font-family:inherit;color:#111;} .rts-iphone-translate-close{position:absolute;top:8px;right:10px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(0,0,0,0.06);font-size:22px;line-height:34px;cursor:pointer;} .rts-iphone-translate-title{font-weight:700;font-size:16px;margin-bottom:8px;padding-right:36px;} .rts-iphone-translate-steps{font-size:14px;line-height:1.45;margin-bottom:10px;} .rts-iphone-translate-tip{font-size:12.5px;opacity:0.8;}';
-                      document.head.appendChild(st);
-                    }
-                    const langNameMap = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',pt:'Portuguese',nl:'Dutch',pl:'Polish',ro:'Romanian',hu:'Hungarian',cs:'Czech',sv:'Swedish',no:'Norwegian',da:'Danish',fi:'Finnish',el:'Greek',ru:'Russian',uk:'Ukrainian',ar:'Arabic',he:'Hebrew',tr:'Turkish',hi:'Hindi',zh:'Chinese',ja:'Japanese',ko:'Korean',vi:'Vietnamese',th:'Thai',id:'Indonesian'};
-                    const langName = langNameMap[lang] || lang;
-                    const wrap = document.createElement('div');
-                    wrap.id = 'rts-iphone-translate-helper';
-                    wrap.setAttribute('role', 'dialog');
-                    wrap.setAttribute('aria-modal', 'true');
-                    wrap.innerHTML = '<div class="rts-iphone-translate-card">' +
-                      '<button class="rts-iphone-translate-close" aria-label="Close">×</button>' +
-                      '<div class="rts-iphone-translate-title">Translate on iPhone</div>' +
-                      '<div class="rts-iphone-translate-steps">1) Tap the <strong>AA</strong> button in Safari’s address bar<br>2) Tap <strong>Translate to ' + langName + '</strong></div>' +
-                      '<div class="rts-iphone-translate-tip">Tip: If you can’t see “Translate”, make sure you’re not in Private Browsing.</div>' +
-                      '</div>';
-                    document.body.appendChild(wrap);
-                    wrap.addEventListener('click', (ev) => { if (ev.target === wrap) wrap.remove(); });
-                    const btn = wrap.querySelector('.rts-iphone-translate-close');
-                    if (btn) btn.addEventListener('click', () => wrap.remove());
-                    return;
-                  }
-                } catch (err3) {}
+                if (this.showIPhoneTranslateHelper(lang, e)) {
+                  e.rtsHandled = true;
+                  return;
+                }
 
                 // Prefer Google Translate integration when available (cookie method + reload).
                 if (window.RTSGoogleTranslate && typeof window.RTSGoogleTranslate.setLang === 'function' && window.RTSGoogleTranslate.isReady) {
                   if (e.cancelable) e.preventDefault();
                   e.stopPropagation();
+                  e.rtsHandled = true;
                   try { window.RTSGoogleTranslate.setLang(lang); } catch (err2) {}
                   return;
                 }
               }
 
             } catch (err) {}
-            // Allow default navigation (?rts_lang=xx) if GT isn't ready/available.
-            return;
+            // Allow default navigation (?rts_lang=xx) if no integration intercepted.
           }
 
 
@@ -2569,25 +2873,17 @@ bindEvents() {
           if (langDropdownToggle) {
             if (e.cancelable) e.preventDefault();
             e.stopPropagation();
+            e.rtsHandled = true;
 
             const btn = langDropdownToggle;
             const wrapper = btn.closest('.rts-lang-dropdown-wrapper') || document;
             const menu = wrapper.querySelector ? wrapper.querySelector('.rts-lang-dropdown-menu') : null;
 
-            // Close any other open dropdown menus
-            document.querySelectorAll('.rts-lang-dropdown-button[aria-expanded="true"]').forEach((other) => {
-              if (other !== btn) {
-                other.setAttribute('aria-expanded', 'false');
-                const w = other.closest('.rts-lang-dropdown-wrapper');
-                const m = w ? w.querySelector('.rts-lang-dropdown-menu') : null;
-                if (m) m.style.display = 'none';
-              }
-            });
+            closeAllLangMenus(btn);
 
             if (menu) {
               const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-              btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-              menu.style.display = isExpanded ? 'none' : 'block';
+              setLangMenuExpanded(btn, menu, !isExpanded, 'block');
             }
             return;
           }
@@ -2602,107 +2898,67 @@ bindEvents() {
                 // Always persist preference for UI consistency.
                 document.cookie = 'rts_language=' + lang + '; path=/; max-age=' + (365 * 24 * 60 * 60);
 
-                // iPhone Safari: guide user to use Safari’s built-in Translate (cannot be triggered programmatically).
-                try {
-                  const ua = navigator.userAgent || '';
-                  const isIOS = /iP(hone|od)/.test(ua);
-                  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-                  if (isIOS && isSafari) {
-                    if (e.cancelable) e.preventDefault();
-                    e.stopPropagation();
-
-                    // Hint language + direction for better Safari Translate prompts
-                    document.documentElement.setAttribute('lang', lang || 'en');
-                    const rtl = (lang === 'ar' || lang === 'he');
-                    document.documentElement.setAttribute('dir', rtl ? 'rtl' : 'ltr');
-                    if (document.body) document.body.classList.toggle('rts-rtl', rtl);
-
-                    // Minimal helper overlay
-                    const existing = document.getElementById('rts-iphone-translate-helper');
-                    if (existing) existing.remove();
-                    const styleId = 'rts-iphone-translate-style';
-                    if (!document.getElementById(styleId)) {
-                      const st = document.createElement('style');
-                      st.id = styleId;
-                      st.textContent = '#rts-iphone-translate-helper{position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;} .rts-iphone-translate-card{width:100%;max-width:520px;background:#fff;border-radius:18px;padding:16px 16px 14px;box-shadow:0 14px 40px rgba(0,0,0,0.25);position:relative;font-family:inherit;color:#111;} .rts-iphone-translate-close{position:absolute;top:8px;right:10px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(0,0,0,0.06);font-size:22px;line-height:34px;cursor:pointer;} .rts-iphone-translate-title{font-weight:700;font-size:16px;margin-bottom:8px;padding-right:36px;} .rts-iphone-translate-steps{font-size:14px;line-height:1.45;margin-bottom:10px;} .rts-iphone-translate-tip{font-size:12.5px;opacity:0.8;}';
-                      document.head.appendChild(st);
-                    }
-                    const langNameMap = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',pt:'Portuguese',nl:'Dutch',pl:'Polish',ro:'Romanian',hu:'Hungarian',cs:'Czech',sv:'Swedish',no:'Norwegian',da:'Danish',fi:'Finnish',el:'Greek',ru:'Russian',uk:'Ukrainian',ar:'Arabic',he:'Hebrew',tr:'Turkish',hi:'Hindi',zh:'Chinese',ja:'Japanese',ko:'Korean',vi:'Vietnamese',th:'Thai',id:'Indonesian'};
-                    const langName = langNameMap[lang] || lang;
-                    const wrap = document.createElement('div');
-                    wrap.id = 'rts-iphone-translate-helper';
-                    wrap.setAttribute('role', 'dialog');
-                    wrap.setAttribute('aria-modal', 'true');
-                    wrap.innerHTML = '<div class="rts-iphone-translate-card">' +
-                      '<button class="rts-iphone-translate-close" aria-label="Close">×</button>' +
-                      '<div class="rts-iphone-translate-title">Translate on iPhone</div>' +
-                      '<div class="rts-iphone-translate-steps">1) Tap the <strong>AA</strong> button in Safari’s address bar<br>2) Tap <strong>Translate to ' + langName + '</strong></div>' +
-                      '<div class="rts-iphone-translate-tip">Tip: If you can’t see “Translate”, make sure you’re not in Private Browsing.</div>' +
-                      '</div>';
-                    document.body.appendChild(wrap);
-                    wrap.addEventListener('click', (ev) => { if (ev.target === wrap) wrap.remove(); });
-                    const btn = wrap.querySelector('.rts-iphone-translate-close');
-                    if (btn) btn.addEventListener('click', () => wrap.remove());
-                    return;
-                  }
-                } catch (err3) {}
+                if (this.showIPhoneTranslateHelper(lang, e)) {
+                  e.rtsHandled = true;
+                  return;
+                }
 
                 // Prefer Google Translate integration when available (cookie method + reload).
                 if (window.RTSGoogleTranslate && typeof window.RTSGoogleTranslate.setLang === 'function' && window.RTSGoogleTranslate.isReady) {
                   if (e.cancelable) e.preventDefault();
                   e.stopPropagation();
+                  e.rtsHandled = true;
                   try { window.RTSGoogleTranslate.setLang(lang); } catch (err2) {}
                   return;
                 }
               }
 
             } catch (err) {}
-            return;
+            // Allow default navigation (?rts_lang=xx) if no integration intercepted.
           }
 
           // Close any open dropdown menus when clicking outside
           if (!e.target.closest || !e.target.closest('.rts-lang-dropdown-wrapper')) {
-            document.querySelectorAll('.rts-lang-dropdown-button[aria-expanded="true"]').forEach((btn) => {
-              btn.setAttribute('aria-expanded', 'false');
-              const wrap = btn.closest('.rts-lang-dropdown-wrapper');
-              const menu = wrap ? wrap.querySelector('.rts-lang-dropdown-menu') : null;
-              if (menu) menu.style.display = 'none';
-            });
+            closeAllLangMenus();
           }
 
           // Close any open compact language menus when clicking outside
           if (!e.target.closest || !e.target.closest('.rts-lang-compact-wrapper')) {
-            document.querySelectorAll('.rts-lang-compact-button[aria-expanded="true"]').forEach((btn) => {
-              btn.setAttribute('aria-expanded', 'false');
-              const wrap = btn.closest('.rts-lang-compact-wrapper');
-              const menu = wrap ? wrap.querySelector('.rts-lang-compact-menu') : null;
-              if (menu) menu.style.display = 'none';
-            });
+            closeAllLangMenus();
           }
 
           // Performance: ignore clicks outside relevant RTS UI areas
           const target = e.target;
           if (!target) return;
 
-          const viewerContainer = (this.domElements && this.domElements.container)
-            ? this.domElements.container
-            : document.querySelector('.rts-letter-viewer');
-
-          const onboardingOverlay = document.querySelector('.rts-onboarding-overlay');
-          const isOnboardingClick = onboardingOverlay && onboardingOverlay.contains(target);
-
-          // Allow onboarding interactions (mobile taps on labels/inputs) and language switcher
-          if (!isOnboardingClick) {
-            if (!viewerContainer || !viewerContainer.contains(target)) return;
-          }
-
-          // Only react to actionable controls (supports taps on SVG/path inside buttons)
+          // Only react to actionable controls (supports taps on SVG/path inside buttons).
           // IMPORTANT: Do not intercept generic <button> or <a> elements.
           // Intercept only RTS controls, otherwise we break navigation, forms, and Elementor widgets.
           const actionable = target.closest(
             '[data-rts-close], [data-rts-action], .rts-btn-next, .rts-rate-up, .rts-rate-down, .rts-rate-skip, .rts-btn-helpful, .rts-btn-unhelpful, .rts-share-btn, .rts-skip-tag, .rts-btn-skip, .rts-btn-next-step, .rts-btn-complete, .rts-feedback-open, .rts-trigger-open'
           );
           if (!actionable) return;
+
+          // NOTE (Mobile Safari stability): Do not require the click to be inside a cached
+          // "viewer container" element once we've confirmed it's an RTS control.
+          // The letter DOM is replaced dynamically and Safari can drop references,
+          // making the Next button appear "dead".
+
+          const viewerContainer = (this.domElements && this.domElements.container)
+            ? this.domElements.container
+            : document.querySelector('.rts-letter-viewer') || document.querySelector('.rts-letter-card');
+
+          const onboardingOverlay = document.querySelector('.rts-onboarding-overlay');
+          const isOnboardingClick = onboardingOverlay && onboardingOverlay.contains(target);
+
+          // For non-onboarding clicks, we used to ignore clicks outside the viewer container.
+          // Keep that optimisation for non-actionable clicks only. Actionable RTS controls always run.
+          if (!isOnboardingClick) {
+            // If a viewer container exists and this click is outside it, still allow actionable
+            // controls to run (handled above). No additional gating needed here.
+          }
+
+          e.rtsHandled = true;
 
 // 1. Next Letter Button
           if (e.target.closest('.rts-btn-next')) {
@@ -2713,13 +2969,8 @@ bindEvents() {
 const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-rate-prompt');
 
             if (this.currentLetter && !this.currentLetter._rtsRated && ratePrompt) {
-              // If the prompt is already open and user presses Next again, override and load next.
-              if (this.pendingNextAfterRate && ratePrompt.classList && ratePrompt.classList.contains('is-open')) {
-                this.pendingNextAfterRate = false;
-                this.hideRatePrompt();
-                this.getNextLetter(true);
-                return;
-              }
+              // Always show the rating prompt before loading the next letter.
+              // Users can choose Up/Down/Skip inside the prompt.
               this.pendingNextAfterRate = true;
               this.showRatePrompt();
               return;
@@ -2806,8 +3057,51 @@ const ratePrompt = this.domElements.ratePrompt || document.querySelector('.rts-r
           if (e.target.closest('[data-rts-close]')) { if (e.cancelable) e.preventDefault(); this.closeFeedbackModal(); return; }
         };
 
-        document.addEventListener('click', clickHandler, { passive: false });
-this.eventListeners.push({ element: document, type: 'click', handler: clickHandler });
+        // Click + tap handling
+        // iOS Safari can fail to dispatch click events if another layer calls preventDefault
+        // on touchstart/touchmove, or when DOM is replaced mid-tap. To make the Next button
+        // (and other RTS controls) bulletproof, we also listen to pointerup/touchend.
+        // We de-dupe so one tap does not fire twice.
+        this._lastPointerTs = 0;
+        this._lastPointerHandledTs = 0;
+        const pointerWrapper = (ev) => {
+          // iOS can fire multiple end events for a single tap (pointerup + touchend).
+          // Deduplicate here so we don't trigger "Next" twice, which would instantly
+          // bypass the rating prompt and cause a flash/jump.
+          const now = Date.now();
+          try {
+            if (this._lastPointerHandledTs && (now - this._lastPointerHandledTs) < 350) {
+              return;
+            }
+            this._lastPointerHandledTs = now;
+            this._lastPointerTs = now;
+          } catch (e) {}
+
+          // Prevent the synthetic click where possible (reduces double-fire on iOS).
+          try { if (ev && ev.cancelable) ev.preventDefault(); } catch (e) {}
+
+          return clickHandler(ev);
+        };
+        const clickWrapper = (ev) => {
+          try {
+            // If a pointer/touch event just fired, ignore the following click.
+            if (this._lastPointerTs && (Date.now() - this._lastPointerTs) < 600) {
+              return;
+            }
+          } catch (e) {}
+          return clickHandler(ev);
+        };
+
+        document.addEventListener('click', clickWrapper, { passive: false });
+        this.eventListeners.push({ element: document, type: 'click', handler: clickWrapper });
+
+        // Pointer events cover modern iOS Safari (13+) and most browsers.
+        document.addEventListener('pointerup', pointerWrapper, { passive: false });
+        this.eventListeners.push({ element: document, type: 'pointerup', handler: pointerWrapper });
+
+        // Touch fallback for older iOS or when pointer events are disabled.
+        document.addEventListener('touchend', pointerWrapper, { passive: false });
+        this.eventListeners.push({ element: document, type: 'touchend', handler: pointerWrapper });
 
         // Touch-safety: ensure onboarding overlay remains interactive on iOS
         try {
@@ -2828,7 +3122,91 @@ this.eventListeners.push({ element: document, type: 'click', handler: clickHandl
         } catch(e) {}
 // Keydown handler (Escape handling)
         const keydownHandler = (e) => {
+          const target = e.target || null;
+          const langWrapper = target && target.closest ? target.closest('.rts-lang-compact-wrapper, .rts-lang-dropdown-wrapper') : null;
+          if (langWrapper) {
+            const cfg = resolveLangMenuConfig(langWrapper);
+            if (cfg) {
+              const btn = langWrapper.querySelector(cfg.buttonSelector);
+              const menu = langWrapper.querySelector(cfg.menuSelector);
+              const option = target.closest ? target.closest(cfg.optionSelector) : null;
+              const key = e.key;
+              const isMenuKey = key === 'ArrowDown' || key === 'ArrowUp' || key === 'Home' || key === 'End' || key === 'Escape';
+              const isButtonActivation = key === 'Enter' || key === ' ';
+
+              if (btn && target && (target === btn || btn.contains(target))) {
+                if (isMenuKey || isButtonActivation) {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                }
+                if (key === 'Escape') {
+                  closeAllLangMenus();
+                  btn.focus();
+                  return;
+                }
+                if (key === 'ArrowDown' || key === 'Enter' || key === ' ' || key === 'Home') {
+                  closeAllLangMenus(btn);
+                  setLangMenuExpanded(btn, menu, true, cfg.openDisplay);
+                  focusLangOption(menu, cfg.optionSelector, 0);
+                  return;
+                }
+                if (key === 'ArrowUp' || key === 'End') {
+                  closeAllLangMenus(btn);
+                  setLangMenuExpanded(btn, menu, true, cfg.openDisplay);
+                  const options = listLangOptions(menu, cfg.optionSelector);
+                  focusLangOption(menu, cfg.optionSelector, options.length - 1);
+                  return;
+                }
+              }
+
+              if (option) {
+                if (key === 'ArrowDown') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  moveLangOptionFocus(menu, cfg.optionSelector, option, 1);
+                  return;
+                }
+                if (key === 'ArrowUp') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  moveLangOptionFocus(menu, cfg.optionSelector, option, -1);
+                  return;
+                }
+                if (key === 'Home') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  focusLangOption(menu, cfg.optionSelector, 0);
+                  return;
+                }
+                if (key === 'End') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  const options = listLangOptions(menu, cfg.optionSelector);
+                  focusLangOption(menu, cfg.optionSelector, options.length - 1);
+                  return;
+                }
+                if (key === 'Escape') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  setLangMenuExpanded(btn, menu, false, cfg.openDisplay);
+                  if (btn && typeof btn.focus === 'function') btn.focus();
+                  return;
+                }
+                if (key === ' ') {
+                  if (e.cancelable) e.preventDefault();
+                  e.rtsHandled = true;
+                  option.click();
+                  return;
+                }
+                if (key === 'Tab') {
+                  setLangMenuExpanded(btn, menu, false, cfg.openDisplay);
+                }
+              }
+            }
+          }
+
           if (e.key !== 'Escape') return;
+          closeAllLangMenus();
           const modal = document.getElementById('rts-feedback-modal');
           if (modal && modal.getAttribute('aria-hidden') === 'false') this.closeFeedbackModal();
 

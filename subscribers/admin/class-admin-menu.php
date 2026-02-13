@@ -22,6 +22,7 @@ class RTS_Admin_Menu {
         // IMPORTANT: We do not use `manage_posts_extra_tablenav` because it
         // renders *inside* the list-table navigation area (filters/pagination)
         // which can cause the tablenav controls to merge into the card.
+        add_action('admin_notices', array($this, 'render_mail_system_status_banner'), 2);
         add_action('admin_notices', array($this, 'render_add_subscriber_card'), 5);
 
         add_action('admin_post_rts_save_template', array($this, 'handle_save_template'));
@@ -41,11 +42,29 @@ class RTS_Admin_Menu {
 
         add_submenu_page(
             'edit.php?post_type=rts_subscriber',
-            'Dashboard',
-            'Dashboard',
+            'Audience & Email',
+            'Audience & Email',
             'manage_options',
             'rts-subscribers-dashboard',
-            array($this, 'render_dashboard')
+            array($this, 'render_analytics_hub')
+        );
+
+        add_submenu_page(
+            'edit.php?post_type=rts_subscriber',
+            'Letter Mailing',
+            'Letter Mailing',
+            'manage_options',
+            'rts-subscriber-mailing',
+            array($this, 'render_mailing_hub')
+        );
+
+        add_submenu_page(
+            'edit.php?post_type=rts_subscriber',
+            'Import / Export',
+            'Import / Export',
+            'manage_options',
+            'rts-subscriber-import-export',
+            array($this, 'render_import_export_hub')
         );
 
         add_submenu_page(
@@ -63,7 +82,18 @@ class RTS_Admin_Menu {
             'Email Settings',
             'manage_options',
             'rts-email-settings',
-            array($this, 'render_settings')
+            array($this, 'render_settings_hub')
+        );
+
+        // Convenience mirror under Letters: keeps audience/mail controls one click away
+        // from the letter moderation workflow while preserving a clear separation.
+        add_submenu_page(
+            'edit.php?post_type=letter',
+            'Audience & Email',
+            'Audience & Email',
+            'manage_options',
+            'rts-subscribers-dashboard',
+            array($this, 'render_analytics_hub')
         );
     }
 
@@ -82,7 +112,7 @@ class RTS_Admin_Menu {
         $is_subscriber_context = (
             $post_type === 'rts_subscriber'
             || $post_type === 'rts_newsletter'
-            || in_array($page, array('rts-subscribers-dashboard', 'rts-email-templates', 'rts-email-settings'), true)
+            || in_array($page, $this->get_subscriber_admin_pages(), true)
         );
 
         if (!$is_subscriber_context) {
@@ -132,6 +162,8 @@ class RTS_Admin_Menu {
 
         $desired = array(
             'rts-subscribers-dashboard',
+            'rts-subscriber-mailing',
+            'rts-subscriber-import-export',
             'edit.php?post_type=rts_subscriber',
             'edit.php?post_type=rts_newsletter',
             'rts-email-templates',
@@ -156,6 +188,21 @@ class RTS_Admin_Menu {
         $submenu[$parent] = $new;
     }
 
+    /**
+     * Page slugs owned by the subscriber admin shell.
+     *
+     * @return array<int, string>
+     */
+    private function get_subscriber_admin_pages() {
+        return array(
+            'rts-subscribers-dashboard',
+            'rts-subscriber-mailing',
+            'rts-subscriber-import-export',
+            'rts-email-templates',
+            'rts-email-settings',
+        );
+    }
+
     /* ------------------------------------------------------------------
      * "Add Subscriber" card above Subscribers list table
      * ----------------------------------------------------------------*/
@@ -167,7 +214,59 @@ class RTS_Admin_Menu {
      * so it sits on its own row above filters + pagination, rather than
      * being nested inside the list-table tablenav container.
      */
-    public function render_add_subscriber_card() {
+    
+    /**
+     * Global delivery status banner for subscriber email system.
+     * Shows a clear red/green state so admins know if emails are currently suppressed.
+     */
+    public function render_mail_system_status_banner() {
+        if (!is_admin() || !current_user_can('manage_options')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen) return;
+
+        // Only show on subscriber/email related pages to avoid noisy global notices.
+        $is_subscriber_area = (
+            ($screen->post_type === 'rts_subscriber' || $screen->post_type === 'rts_newsletter') ||
+            (isset($_GET['page']) && is_string($_GET['page']) && 0 === strpos((string) $_GET['page'], 'rts-')) ||
+            (isset($_GET['post_type']) && in_array((string) $_GET['post_type'], ['rts_subscriber','rts_newsletter'], true))
+        );
+        if (!$is_subscriber_area) return;
+
+        $offline = (bool) get_option('rts_mail_system_offline', false);
+        $enabled = (bool) get_option('rts_email_sending_enabled', true);
+        $paused  = (bool) get_option('rts_pause_all_sending', false);
+
+        $settings_url = admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings');
+
+        // Green only when everything is permitted to send.
+        $online = (!$offline && $enabled && !$paused);
+
+        $bg = $online ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)';
+        $border = $online ? 'rgba(22,163,74,0.35)' : 'rgba(220,38,38,0.35)';
+        $title = $online ? 'Mail system online' : 'Mail system offline';
+        $detail = [];
+
+        if ($offline) $detail[] = 'Offline toggle is enabled (blocks all subscriber emails).';
+        if (!$enabled) $detail[] = 'Sending engine is disabled.';
+        if ($paused) $detail[] = 'Pause switch is active (Command Center).';
+
+        if (empty($detail) && !$online) {
+            $detail[] = 'Emails are currently suppressed.';
+        }
+        if ($online) {
+            $detail[] = 'Subscriber emails can send normally.';
+        }
+
+        echo '<div class="notice" style="border:1px solid ' . esc_attr($border) . '; background:' . esc_attr($bg) . '; padding:12px 14px; border-radius:12px;">';
+        echo '<p style="margin:0; font-weight:700;">' . esc_html($title) . '</p>';
+        echo '<p style="margin:6px 0 0;">' . esc_html(implode(' ', $detail)) . ' <a href="' . esc_url($settings_url) . '">Open Email Settings</a></p>';
+        echo '</div>';
+    }
+
+public function render_add_subscriber_card() {
         // Reuse the existing renderer; force "top" so it prints.
         $this->render_add_subscriber_above_list('top');
     }
@@ -186,48 +285,1552 @@ class RTS_Admin_Menu {
         }
         echo $notice;
         ?>
-        <div id="rts-inline-add-subscriber" class="rts-card rts-card--green" style="padding:25px;border-radius:35px;margin:0 0 20px 0;">
-            <h2 style="margin:0 0 10px 0;">Add Subscriber</h2>
-            <p style="margin:0 0 15px 0;color:#ffffff;opacity:0.95;">Quickly add a subscriber without leaving this list.</p>
+        <div id="rts-inline-add-subscriber" class="rts-card rts-card--green">
+            <h2>Add Subscriber</h2>
+            <p class="rts-inline-add__intro">Quickly add a subscriber without leaving this list.</p>
 
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="rts-inline-add-form">
                 <input type="hidden" name="action" value="rts_add_subscriber" />
                 <?php wp_nonce_field('rts_add_subscriber', '_wpnonce'); ?>
 
-                <div style="flex:1;min-width:240px;">
-                    <label class="rts-form-label" for="rts_email_inline" style="display:block;margin-bottom:6px;">Email</label>
+                <div class="rts-inline-add__field rts-inline-add__field--email">
+                    <label class="rts-form-label" for="rts_email_inline">Email</label>
                     <input id="rts_email_inline" type="email" name="email" required placeholder="name@example.com"
-                           style="display:block;width:100%;padding:12px 14px;background:#0f172a;border:2px solid #334155;border-radius:14px;color:#f1f5f9;" />
+                           class="rts-inline-add__input" />
                 </div>
 
-                <div style="min-width:180px;">
-                    <label class="rts-form-label" for="rts_frequency_inline" style="display:block;margin-bottom:6px;">Frequency</label>
-                    <select id="rts_frequency_inline" name="frequency" style="display:block;width:100%;padding:12px 14px;background:#0f172a;border:2px solid #334155;border-radius:14px;color:#f1f5f9;">
+                <div class="rts-inline-add__field rts-inline-add__field--frequency">
+                    <label class="rts-form-label" for="rts_frequency_inline">Frequency</label>
+                    <select id="rts_frequency_inline" name="frequency" class="rts-inline-add__input">
                         <option value="weekly">Weekly</option>
                         <option value="daily">Daily</option>
                         <option value="monthly">Monthly</option>
                     </select>
                 </div>
 
-                <div style="min-width:220px;">
-                    <label style="display:block;margin-bottom:6px;">Subscriptions</label>
-                    <label style="display:inline-flex;align-items:center;gap:8px;margin-right:12px;">
+                <div class="rts-inline-add__field rts-inline-add__field--subscriptions">
+                    <label class="rts-form-label">Subscriptions</label>
+                    <label class="rts-inline-add__choice">
                         <input type="checkbox" name="pref_letters" value="1" /> Letters
                     </label>
-                    <label style="display:inline-flex;align-items:center;gap:8px;">
+                    <label class="rts-inline-add__choice">
                         <input type="checkbox" name="pref_newsletters" value="1" /> Newsletters
                     </label>
                 </div>
 
-                <div style="min-width:160px;">
-                    <button type="submit" class="rts-button success" style="margin:0;">
+                <div class="rts-inline-add__field rts-inline-add__field--submit">
+                    <button type="submit" class="rts-button success">
                         <span class="dashicons dashicons-yes"></span> Save Subscriber
                     </button>
                 </div>
             </form>
-            <p style="margin:12px 0 0 0;color:#ffffff;opacity:0.9;font-size:13px;">If Re-consent Required is enabled, subscribers will not receive anything until they confirm in the preference centre.</p>
+            <p class="rts-inline-add__note">If Re-consent Required is enabled, subscribers will not receive anything until they confirm in the preference centre.</p>
         </div>
         <?php
+    }
+
+    /* ==================================================================
+     *  NEW ADMIN SHELL (Analytics, Mailing, Import/Export, Settings)
+     * =================================================================*/
+
+    public function render_analytics_hub() {
+        $post_type = isset($_GET['post_type']) ? sanitize_key((string) wp_unslash($_GET['post_type'])) : '';
+        if ($post_type === 'letter') {
+            $this->render_letters_audience_mail_bridge();
+            return;
+        }
+
+        $subscriber = $this->get_subscriber_status_snapshot();
+        $delivery   = $this->get_delivery_snapshot();
+        $moderation = $this->get_moderation_snapshot();
+        $features   = $this->get_newsletter_feature_snapshot();
+        $open_rate  = $this->get_open_rate();
+        $click_rate = $this->get_click_rate();
+        $recent     = $this->get_recent_delivery_rows(12);
+        $session_id = isset($_GET['session']) ? sanitize_text_field(wp_unslash($_GET['session'])) : '';
+        ?>
+        <div class="wrap rts-mail-admin rts-ui-wrapper">
+            <div class="rts-page-header rts-mail-header">
+                <div>
+                    <h1><span class="dashicons dashicons-chart-line"></span> Audience &amp; Email Hub</h1>
+                    <p class="rts-page-description">Summary-first dashboard for audience health, delivery, and newsletter operations.</p>
+                </div>
+                <div class="rts-mail-header-actions">
+                    <a class="rts-button primary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">
+                        <span class="dashicons dashicons-megaphone"></span> Newsletter Builder
+                    </a>
+                    <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">
+                        <span class="dashicons dashicons-email-alt"></span> Letter Mailing
+                    </a>
+                    <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard')); ?>">
+                        <span class="dashicons dashicons-admin-generic"></span> Letters Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <?php if ($session_id) : ?>
+                <div class="rts-card rts-mail-callout">
+                    <strong>Import in progress:</strong>
+                    Track this import session in <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-import-export&session=' . rawurlencode($session_id))); ?>">Import / Export</a>.
+                </div>
+            <?php endif; ?>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'    => 'Audience & Email Command Center',
+                'subtitle' => 'Shared queue state, system health, and quick links for subscriber operations.',
+            ));
+            ?>
+
+            <section class="rts-card rts-mail-card rts-mail-summary-shell">
+                <div class="rts-mail-summary-header">
+                    <div>
+                        <h2>Client Snapshot</h2>
+                        <p class="rts-mail-muted">Top-line numbers only. Deep-dive metrics stay in dedicated tabs.</p>
+                    </div>
+                    <div class="rts-mail-chip-row">
+                        <span class="rts-badge"><?php echo $features['delivery_live'] ? 'Live Delivery' : 'Testing Delivery'; ?></span>
+                        <span class="rts-badge"><?php echo $features['tracking_enabled'] ? 'Open Tracking On' : 'Open Tracking Off'; ?></span>
+                        <span class="rts-badge"><?php echo $features['click_tracking_enabled'] ? 'Click Tracking On' : 'Click Tracking Off'; ?></span>
+                        <span class="rts-badge">Open (30d): <?php echo esc_html($open_rate); ?>%</span>
+                        <span class="rts-badge">Click (30d): <?php echo esc_html($click_rate); ?>%</span>
+                    </div>
+                </div>
+                <div class="rts-mail-metrics rts-mail-metrics--compact" aria-label="Audience and delivery summary">
+                    <?php $this->render_metric_card('Active Subscribers', number_format_i18n((int) $subscriber['active']), 'Can receive email'); ?>
+                    <?php $this->render_metric_card('Pending Verification', number_format_i18n((int) $subscriber['pending_verification']), 'Needs confirmation'); ?>
+                    <?php $this->render_metric_card('Verified Subscribers', number_format_i18n((int) $subscriber['verified']), 'Confirmed for sends'); ?>
+                    <?php $this->render_metric_card('Queue Due Now', number_format_i18n((int) $delivery['due']), 'Ready this cycle'); ?>
+                    <?php $this->render_metric_card('Dead Letters', number_format_i18n((int) $delivery['dead_letters']), 'Failed deliveries'); ?>
+                    <?php $this->render_metric_card('Emails Sent Today', number_format_i18n((int) $delivery['sent_today']), 'Across all templates'); ?>
+                </div>
+            </section>
+
+            <div class="rts-mail-grid-2">
+                <section class="rts-card rts-mail-card">
+                    <h2>What Needs Attention</h2>
+                    <p class="rts-mail-muted">Action queue grouped by urgency, so your client knows what to do next.</p>
+                    <ul class="rts-mail-attention-list">
+                        <li><span>Pending verification</span><strong><?php echo number_format_i18n((int) $subscriber['pending_verification']); ?></strong></li>
+                        <li><span>Queue pending</span><strong><?php echo number_format_i18n((int) $delivery['pending']); ?></strong></li>
+                        <li><span>Dead letter queue</span><strong><?php echo number_format_i18n((int) $delivery['dead_letters']); ?></strong></li>
+                        <li><span>Pending manual review</span><strong><?php echo number_format_i18n((int) $moderation['pending_manual']); ?></strong></li>
+                        <li><span>Quarantined letters</span><strong><?php echo number_format_i18n((int) $moderation['quarantined']); ?></strong></li>
+                    </ul>
+                    <div class="rts-mail-chip-row">
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&post_status=pending')); ?>">Review Pending Letters</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">Open Mailing Queue</a>
+                    </div>
+                </section>
+
+                <section class="rts-card rts-mail-card">
+                    <h2>Newsletter Feature Center</h2>
+                    <p class="rts-mail-muted">Feature status pulled from your newsletter PHP modules and current runtime settings.</p>
+                    <div class="rts-mail-feature-grid">
+                        <div class="rts-mail-feature-item"><span>Visual Builder</span><strong><?php echo $features['builder_enabled'] ? 'Enabled' : 'Unavailable'; ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>REST API</span><strong><?php echo $features['rest_api_enabled'] ? 'Enabled' : 'Unavailable'; ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>Needs Editorial Review</span><strong><?php echo number_format_i18n((int) $features['workflow_review']); ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>Scheduled Campaigns</span><strong><?php echo number_format_i18n((int) $features['workflow_scheduled']); ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>Recurring Campaigns</span><strong><?php echo number_format_i18n((int) $features['recurring_campaigns']); ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>Saved Templates</span><strong><?php echo number_format_i18n((int) $features['template_count']); ?></strong></div>
+                        <div class="rts-mail-feature-item"><span>Version Snapshots</span><strong><?php echo number_format_i18n((int) $features['version_count']); ?></strong></div>
+                    </div>
+                    <div class="rts-mail-chip-row">
+                        <span class="rts-badge"><?php echo $features['consent_required'] ? 'Consent Required' : 'Consent Optional'; ?></span>
+                        <span class="rts-badge"><?php echo $features['send_engine_enabled'] ? 'Sending Engine On' : 'Sending Engine Off'; ?></span>
+                        <span class="rts-badge"><?php echo $features['demo_mode'] ? 'Demo Mode On' : 'Demo Mode Off'; ?></span>
+                        <span class="rts-badge">Analytics Events: <?php echo number_format_i18n((int) $features['analytics_event_count']); ?></span>
+                    </div>
+                    <div class="rts-mail-chip-row">
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('post-new.php?post_type=rts_newsletter')); ?>">Create Newsletter</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates')); ?>">Manage Templates</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">Email Settings</a>
+                    </div>
+                </section>
+            </div>
+
+            <section class="rts-card rts-mail-card">
+                <h2>Navigation Map</h2>
+                <p class="rts-mail-muted">Use these groups to jump directly to the right endpoint.</p>
+                <div class="rts-mail-endpoints">
+                    <div class="rts-mail-endpoint">
+                        <h3>Audience</h3>
+                        <ul>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber')); ?>">Subscriber records</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-import-export')); ?>">Import / Export</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">Email settings</a></li>
+                        </ul>
+                    </div>
+                    <div class="rts-mail-endpoint">
+                        <h3>Mailing</h3>
+                        <ul>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">Newsletter builder</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('post-new.php?post_type=rts_newsletter')); ?>">Create newsletter</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">Queue and pacing</a></li>
+                        </ul>
+                    </div>
+                    <div class="rts-mail-endpoint">
+                        <h3>Letters</h3>
+                        <ul>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter')); ?>">Letter queue and review</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard')); ?>">Letters dashboard</a></li>
+                            <li><a href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard&tab=settings')); ?>">Moderation settings</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rts-card rts-mail-card">
+                <h2>Recent Delivery Activity</h2>
+                <div class="rts-status-legend" style="margin:10px 0 14px 0;opacity:0.9;">
+                    <span class="rts-badge" style="margin-right:6px;">Pending</span> queued to send
+                    <span class="rts-badge" style="margin-left:10px;margin-right:6px;">Sent</span> delivered
+                    <span class="rts-badge" style="margin-left:10px;margin-right:6px;">Failed</span> will retry / moved to DLQ
+                    <span class="rts-badge" style="margin-left:10px;margin-right:6px;">Cancelled</span> blocked (mail offline, paused, or unsubscribed)
+                </div>
+                <div class="rts-activity-table">
+                    <table class="widefat striped">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Recipient</th>
+                                <th>Template</th>
+                                <th>Letter</th>
+                                <th>Status</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($recent)) : ?>
+                                <tr><td colspan="6">No delivery logs available yet.</td></tr>
+                            <?php else : ?>
+                                <?php foreach ($recent as $row) : ?>
+                                    <tr>
+                                        <td><?php echo esc_html((string) (($row['sent_at'] ?? '') ?: ($row['created_at'] ?? ''))); ?></td>
+                                        <td><?php echo esc_html($this->obfuscate_email((string) ($row['email'] ?? ''))); ?></td>
+                                        <td><?php echo esc_html((string) ($row['template'] ?? '')); ?></td>
+                                        <td>
+                                            <?php if (!empty($row['letter_id'])) : ?>
+                                                <a href="<?php echo esc_url(get_edit_post_link((int) $row['letter_id'])); ?>">#<?php echo (int) $row['letter_id']; ?></a>
+                                            <?php else : ?>
+                                                —
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><span class="rts-badge"><?php echo esc_html(ucfirst((string) ($row['status'] ?? ''))); ?></span></td>
+                                        <td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="<?php echo esc_attr((string) ($row['error_log'] ?? '')); ?>"><?php echo esc_html((string) ($row['error_log'] ?? '')); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+        <?php
+    }
+
+    /**
+     * Lightweight bridge when Audience & Email is opened from the Letters admin.
+     * Keeps context-specific metrics visible without duplicating the full hub.
+     */
+    private function render_letters_audience_mail_bridge() {
+        $subscriber = $this->get_subscriber_status_snapshot();
+        $delivery   = $this->get_delivery_snapshot();
+        $moderation = $this->get_moderation_snapshot();
+        $letters    = $this->get_letter_snapshot();
+        $open_rate  = $this->get_open_rate();
+        $click_rate = $this->get_click_rate();
+        ?>
+        <div class="wrap rts-mail-admin rts-ui-wrapper">
+            <div class="rts-page-header rts-mail-header">
+                <div>
+                    <h1><span class="dashicons dashicons-groups"></span> Audience &amp; Email (Letters View)</h1>
+                    <p class="rts-page-description">Trimmed view for letter operators. Open the full audience hub for complete analytics.</p>
+                </div>
+                <div class="rts-mail-header-actions">
+                    <a class="rts-button primary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard')); ?>">
+                        <span class="dashicons dashicons-chart-line"></span> Open Full Audience Hub
+                    </a>
+                    <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">
+                        <span class="dashicons dashicons-admin-settings"></span> Email Settings
+                    </a>
+                </div>
+            </div>
+
+            <div class="rts-card rts-mail-callout">
+                <strong>Why this page is shorter:</strong> metrics are scoped to what letter moderators need during review.
+                Full audience import/template analytics remain under <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard')); ?>">Subscribers &gt; Audience &amp; Email</a>.
+            </div>
+
+            <div class="rts-mail-metrics" aria-label="Letters-context audience and mail snapshot">
+                <?php $this->render_metric_card('Active Subscribers', number_format_i18n((int) $subscriber['active']), 'Eligible for send workflows'); ?>
+                <?php $this->render_metric_card('Queue Due Now', number_format_i18n((int) $delivery['due']), 'Immediate send workload'); ?>
+                <?php $this->render_metric_card('Queue Pending', number_format_i18n((int) $delivery['pending']), 'Backlog waiting to process'); ?>
+                <?php $this->render_metric_card('Dead Letter Queue', number_format_i18n((int) $delivery['dead_letters']), 'Failed sends needing inspection'); ?>
+                <?php $this->render_metric_card('Pending Manual Review', number_format_i18n((int) $moderation['pending_manual']), 'Letters awaiting human review'); ?>
+                <?php $this->render_metric_card('Quarantined', number_format_i18n((int) $moderation['quarantined']), 'Held for safety or quality checks'); ?>
+                <?php $this->render_metric_card('Letters Live', number_format_i18n((int) $letters['published']), 'Published to site'); ?>
+                <?php $this->render_metric_card('Open Rate (30d)', esc_html($open_rate) . '%', 'Subscriber engagement trend'); ?>
+                <?php $this->render_metric_card('Click Rate (30d)', esc_html($click_rate) . '%', 'Link engagement trend'); ?>
+            </div>
+
+            <div class="rts-mail-grid-2">
+                <section class="rts-card rts-mail-card">
+                    <h2>Where to Manage What</h2>
+                    <ul class="rts-mail-list">
+                        <li><strong>Letters Dashboard:</strong> moderation, inbox, quarantine, and review flow.</li>
+                        <li><strong>Audience &amp; Email (Subscribers):</strong> subscriber analytics, import/export, templates.</li>
+                        <li><strong>Email Settings:</strong> SMTP, delivery mode, pacing, sender identity.</li>
+                    </ul>
+                </section>
+                <section class="rts-card rts-mail-card">
+                    <h2>Quick Links</h2>
+                    <div class="rts-mail-chip-row">
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard')); ?>">
+                            <span class="dashicons dashicons-admin-generic"></span> Letters Dashboard
+                        </a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">
+                            <span class="dashicons dashicons-email-alt"></span> Letter Mailing
+                        </a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">
+                            <span class="dashicons dashicons-megaphone"></span> Newsletter Builder
+                        </a>
+                    </div>
+                </section>
+            </div>
+        </div>
+        <?php
+    }
+
+    public function render_mailing_hub() {
+        $delivery     = $this->get_delivery_snapshot();
+        $letters      = $this->get_letter_snapshot();
+        $batch_size   = max(10, (int) get_option('rts_email_batch_size', 100));
+        $batch_delay  = max(1, (int) get_option('rts_newsletter_batch_delay', 5));
+        $last_health  = (string) get_option('rts_last_cron_health_check', '');
+        $status_filter = isset($_GET['rts_mailing_status']) ? sanitize_key((string) wp_unslash($_GET['rts_mailing_status'])) : 'all';
+        $search_query  = isset($_GET['rts_mailing_search']) ? sanitize_text_field((string) wp_unslash($_GET['rts_mailing_search'])) : '';
+        $allowed_filters = array('all', 'draft', 'queued', 'sending', 'sent', 'failed', 'cancelled', 'review', 'approved', 'scheduled');
+        if (!in_array($status_filter, $allowed_filters, true)) {
+            $status_filter = 'all';
+        }
+
+        $mini_newsletters = get_posts(array(
+            'post_type'      => 'rts_newsletter',
+            'post_status'    => array('draft', 'publish', 'future', 'private'),
+            'posts_per_page' => 5,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+        ));
+
+        $query_args = array(
+            'post_type'      => 'rts_newsletter',
+            'post_status'    => array('draft', 'publish', 'future', 'private'),
+            'posts_per_page' => 25,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+        );
+        if ($status_filter !== 'all') {
+            $query_args['meta_query'] = array(
+                array(
+                    'key'     => '_rts_newsletter_send_status',
+                    'value'   => $status_filter,
+                    'compare' => '=',
+                ),
+            );
+        }
+        if ($search_query !== '') {
+            $query_args['s'] = $search_query;
+        }
+        $newsletters = get_posts($query_args);
+        ?>
+        <div class="wrap rts-mail-admin rts-ui-wrapper">
+            <div class="rts-page-header rts-mail-header">
+                <div>
+                    <h1><span class="dashicons dashicons-email-alt"></span> Letter Mailing</h1>
+                    <p class="rts-page-description">Queue health, pacing, and newsletter delivery from the letter CPT pool.</p>
+                </div>
+                <div class="rts-mail-header-actions">
+                    <a class="rts-button primary" href="<?php echo esc_url(admin_url('post-new.php?post_type=rts_newsletter')); ?>">
+                        <span class="dashicons dashicons-plus-alt2"></span> New Newsletter
+                    </a>
+                    <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">
+                        <span class="dashicons dashicons-admin-settings"></span> Adjust Pacing
+                    </a>
+                </div>
+            </div>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'            => 'Mailing Operations Dashboard',
+                'subtitle'         => 'Queue state, processing health, and shortcut links for delivery operations.',
+                'mini_newsletters' => $mini_newsletters,
+                'metric_labels'    => array(
+                    'pending'    => 'Pending in Queue',
+                    'due'        => 'Due This Run',
+                    'processing' => 'Worker Claimed',
+                    'failed'     => 'Retry Required (24h)',
+                    'sent_today' => 'Sent Today',
+                    'dead'       => 'Dead Letters',
+                ),
+            ));
+            ?>
+
+            <div class="rts-mail-grid-2">
+                <section class="rts-card rts-mail-card">
+                    <h2>Send Pacing</h2>
+                    <p class="rts-mail-muted">These controls stagger delivery so local hosting is not overwhelmed.</p>
+                    <ul class="rts-mail-list">
+                        <li><strong>Queue batch size:</strong> <?php echo number_format_i18n($batch_size); ?> emails per queue run</li>
+                        <li><strong>Newsletter batch delay:</strong> <?php echo number_format_i18n($batch_delay); ?> seconds between newsletter queue chunks</li>
+                        <li><strong>Next queue run:</strong> <?php echo esc_html((string) $delivery['next_run']); ?></li>
+                        <li><strong>Last cron health check:</strong> <?php echo esc_html($last_health ?: 'Not recorded yet'); ?></li>
+                    </ul>
+                    <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">
+                        <span class="dashicons dashicons-admin-tools"></span> Open Sending Settings
+                    </a>
+                </section>
+
+                <section class="rts-card rts-mail-card">
+                    <h2>CPT Hooking</h2>
+                    <p class="rts-mail-muted">Newsletter sends are linked directly to the letter pool and subscriber preference rules.</p>
+                    <ul class="rts-mail-list">
+                        <li>Only <strong>active + verified</strong> subscribers are eligible.</li>
+                        <li>Newsletter sends respect newsletter opt-in and consent rules.</li>
+                        <li>Letters come from published `letter` posts in the email-ready pool.</li>
+                    </ul>
+                    <div class="rts-mail-chip-row">
+                        <span class="rts-badge">Letters Published: <?php echo number_format_i18n((int) $letters['published']); ?></span>
+                        <span class="rts-badge">Quarantined: <?php echo number_format_i18n((int) $letters['quarantined']); ?></span>
+                    </div>
+                </section>
+            </div>
+
+            <section class="rts-card rts-mail-card">
+                <h2>Delivery Queue Activity</h2>
+                <p class="rts-mail-muted">Search and filter newsletter queue history before opening records.</p>
+                <div class="rts-mailing-ledger-controls">
+                    <form method="get" class="rts-mailing-ledger-filter">
+                        <input type="hidden" name="post_type" value="rts_subscriber">
+                        <input type="hidden" name="page" value="rts-subscriber-mailing">
+                        <select name="rts_mailing_status" class="rts-form-select">
+                            <?php
+                            $status_options = array(
+                                'all'       => 'All statuses',
+                                'draft'     => 'Draft',
+                                'queued'    => 'Queued',
+                                'sending'   => 'Sending',
+                                'sent'      => 'Sent',
+                                'failed'    => 'Failed',
+                                'cancelled' => 'Cancelled',
+                                'review'    => 'In Review',
+                                'approved'  => 'Approved',
+                                'scheduled' => 'Scheduled',
+                            );
+                            foreach ($status_options as $value => $label) :
+                            ?>
+                                <option value="<?php echo esc_attr($value); ?>" <?php selected($status_filter, $value); ?>><?php echo esc_html($label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input type="search" name="rts_mailing_search" class="rts-form-input" placeholder="Search by newsletter title..." value="<?php echo esc_attr($search_query); ?>">
+                        <button type="submit" class="rts-button secondary">Apply</button>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">Reset</a>
+                    </form>
+                    <div class="rts-mailing-ledger-actions">
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('post-new.php?post_type=rts_newsletter')); ?>">New Newsletter</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">Open Builder</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">Mail Settings</a>
+                    </div>
+                </div>
+                <div class="rts-activity-table">
+                    <table class="widefat striped">
+                        <thead>
+                            <tr>
+                                <th>Newsletter</th>
+                                <th>Status</th>
+                                <th>Reason</th>
+                                <th>Queued</th>
+                                <th>Total</th>
+                                <th>Sent At</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($newsletters)) : ?>
+                                <tr><td colspan="6">No newsletter records match these filters.</td></tr>
+                            <?php else : ?>
+                                <?php foreach ($newsletters as $post) : ?>
+                                    <?php
+                                    $state = (string) get_post_meta($post->ID, '_rts_newsletter_send_status', true);
+                                    $queued = (int) get_post_meta($post->ID, '_rts_newsletter_queued_count', true);
+                                    $total = (int) get_post_meta($post->ID, '_rts_newsletter_total_recipients', true);
+                                    $sent_at = (string) get_post_meta($post->ID, '_rts_newsletter_sent_at', true);
+                                    ?>
+                                    <tr>
+                                        <td><?php echo esc_html(get_the_title($post)); ?></td>
+                                        <td><span class="rts-badge"><?php echo esc_html($state ?: 'draft'); ?></span></td>
+                                        <td><?php echo number_format_i18n($queued); ?></td>
+                                        <td><?php echo number_format_i18n($total); ?></td>
+                                        <td><?php echo esc_html($sent_at ?: '—'); ?></td>
+                                        <td><a href="<?php echo esc_url(get_edit_post_link($post->ID)); ?>">Open</a></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+        <?php
+    }
+
+    public function render_import_export_hub() {
+        $import_batch = class_exists('RTS_CSV_Importer') ? (int) RTS_CSV_Importer::BATCH_SIZE : 500;
+        $chunk_delay  = class_exists('RTS_CSV_Importer') ? (int) RTS_CSV_Importer::CHUNK_DELAY_LARGE_IMPORT : 3;
+        $max_rows     = class_exists('RTS_CSV_Importer') ? (int) RTS_CSV_Importer::MAX_ROWS : 50000;
+        $max_file_mb  = class_exists('RTS_CSV_Importer') ? (int) round(((int) RTS_CSV_Importer::MAX_FILE_SIZE) / 1048576) : 10;
+        ?>
+        <div class="wrap rts-mail-admin rts-ui-wrapper">
+            <div class="rts-page-header rts-mail-header">
+                <div>
+                    <h1><span class="dashicons dashicons-database-import"></span> Import / Export</h1>
+                    <p class="rts-page-description">Background CSV processing with progress tracking and safe export streaming.</p>
+                </div>
+            </div>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'    => 'Import / Export Command Center',
+                'subtitle' => 'Monitor queue health while handling large dataset subscriber imports.',
+            ));
+            ?>
+
+            <div class="rts-card rts-mail-card">
+                <h2>Large Dataset Mode</h2>
+                <p class="rts-mail-muted">Importer runs in background chunks to prevent timeouts on shared/local servers.</p>
+                <ul class="rts-mail-list">
+                    <li><strong>Chunk size:</strong> <?php echo number_format_i18n($import_batch); ?> rows per pass</li>
+                    <li><strong>Large import pace:</strong> one chunk every <?php echo number_format_i18n($chunk_delay); ?> seconds (stability mode)</li>
+                    <li><strong>Max rows per file:</strong> <?php echo number_format_i18n($max_rows); ?></li>
+                    <li><strong>Max file size:</strong> <?php echo number_format_i18n($max_file_mb); ?> MB</li>
+                </ul>
+            </div>
+
+            <?php $this->render_import_inner(); ?>
+        </div>
+        <?php
+    }
+
+    public function render_settings_hub() {
+        $is_live = (bool) get_option('rts_smtp_enabled', false);
+        ?>
+        <div class="wrap rts-mail-admin rts-ui-wrapper">
+            <div class="rts-page-header rts-mail-header">
+                <div>
+                    <h1><span class="dashicons dashicons-admin-settings"></span> Email Settings</h1>
+                    <p class="rts-page-description">Single source of truth for delivery mode, pacing, sender identity, and branding.</p>
+                </div>
+            </div>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'    => 'Email Settings Command Center',
+                'subtitle' => 'Delivery health and endpoint quick links while you adjust mail configuration.',
+            ));
+            ?>
+
+            <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>">
+                <?php settings_fields('rts_smtp_settings_group'); ?>
+
+                <section class="rts-card rts-mail-card">
+                    <h2>Settings Control Map</h2>
+                    <p class="rts-mail-muted">Controls are grouped by responsibility so teams can find changes faster.</p>
+                    <div class="rts-mail-endpoints">
+                        <div class="rts-mail-endpoint">
+                            <h3>Delivery Controls</h3>
+                            <ul>
+                                <li>Delivery mode (testing/live)</li>
+                                <li>Engine toggle, demo mode, consent gate</li>
+                                <li>Digest time, queue batch size, newsletter delay</li>
+                            </ul>
+                        </div>
+                        <div class="rts-mail-endpoint">
+                            <h3>SMTP + Sender</h3>
+                            <ul>
+                                <li>SMTP host, port, encryption, auth</li>
+                                <li>From identity, reply-to, CC</li>
+                                <li>SMTP debug and test email tools</li>
+                            </ul>
+                        </div>
+                        <div class="rts-mail-endpoint">
+                            <h3>Brand + Newsletter</h3>
+                            <ul>
+                                <li>Email logo and privacy link</li>
+                                <li>Social profile links for templates</li>
+                                <li>Onboarder toggle + re-consent campaign</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="rts-mail-chip-row">
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates')); ?>">Open Templates</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">Open Newsletter Builder</a>
+                        <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">Open Mailing Queue</a>
+                    </div>
+                </section>
+
+                <section class="rts-card rts-mail-card">
+                    <h2>Delivery Mode</h2>
+                    <p class="rts-mail-muted">Testing uses default WordPress mail. Live uses SMTP settings below.</p>
+                    <div class="rts-mail-inline-fields">
+                        <label><input type="radio" name="rts_smtp_enabled" value="0" <?php checked(!$is_live); ?>> Testing</label>
+                        <label><input type="radio" name="rts_smtp_enabled" value="1" <?php checked($is_live); ?>> Live (SMTP)</label>
+                    </div>
+                    <div class="rts-mail-chip-row">
+                        <span class="rts-badge"><?php echo $is_live ? 'Live routing enabled' : 'Testing mode active'; ?></span>
+                    </div>
+                </section>
+
+                <div class="rts-mail-grid-2">
+                    <section class="rts-card rts-mail-card">
+                        <h2>Sending Controls</h2>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_email_sending_enabled" value="0">
+                            <label><input type="checkbox" name="rts_email_sending_enabled" value="1" <?php checked((bool) get_option('rts_email_sending_enabled', true)); ?>> Enable sending engine</label>
+                        </div>
+                        <div class="rts-form-row" style="padding:10px 12px; border-radius:12px; border:1px solid rgba(220,38,38,0.25); background:rgba(220,38,38,0.06);">
+                            <input type="hidden" name="rts_mail_system_offline" value="0">
+                            <label><input type="checkbox" name="rts_mail_system_offline" value="1" <?php checked((bool) get_option('rts_mail_system_offline', false)); ?>> <strong>Mail system offline</strong> (block ALL subscriber emails until SMTP is ready)</label>
+                            <p class="description" style="margin:6px 0 0;">When enabled, verification emails, newsletters, and letter mailings will not send.</p>
+                        </div>
+                        <div class="rts-form-row" style="margin-top:10px;">
+                            <input type="hidden" name="rts_capture_signups_while_offline" value="0">
+                            <label><input type="checkbox" name="rts_capture_signups_while_offline" value="1" <?php checked((bool) get_option('rts_capture_signups_while_offline', true)); ?>> Capture new signups while offline (store in database, no emails sent)</label>
+                            <p class="description" style="margin:6px 0 0;">Recommended for high-traffic periods. New signups are saved as <strong>Captured (Mail Offline)</strong> until you switch mail back on.</p>
+                        </div>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_email_demo_mode" value="0">
+                            <label><input type="checkbox" name="rts_email_demo_mode" value="1" <?php checked((bool) get_option('rts_email_demo_mode', false)); ?>> Demo mode (log only, no live sends)</label>
+                        </div>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_email_reconsent_required" value="0">
+                            <label><input type="checkbox" name="rts_email_reconsent_required" value="1" <?php checked((bool) get_option('rts_email_reconsent_required', false)); ?>> Require consent confirmation</label>
+                        </div>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_letters_require_manual_review" value="0">
+                            <label><input type="checkbox" name="rts_letters_require_manual_review" value="1" <?php checked((bool) get_option('rts_letters_require_manual_review', true)); ?>> Require manual review before publishing safe letters</label>
+                        </div>
+                        <div class="rts-mail-inline-fields">
+                            <div class="rts-form-row">
+                                <label class="rts-form-label">Digest Time</label>
+                                <input class="rts-form-input" type="time" name="rts_email_daily_time" value="<?php echo esc_attr((string) get_option('rts_email_daily_time', '09:00')); ?>">
+                            </div>
+                            <div class="rts-form-row">
+                                <label class="rts-form-label">Queue Batch Size</label>
+                                <input class="rts-form-input" type="number" min="10" max="500" name="rts_email_batch_size" value="<?php echo esc_attr((int) get_option('rts_email_batch_size', 100)); ?>">
+                            </div>
+                            <div class="rts-form-row">
+                                <label class="rts-form-label">Newsletter Delay (sec)</label>
+                                <input class="rts-form-input" type="number" min="1" max="120" name="rts_newsletter_batch_delay" value="<?php echo esc_attr((int) get_option('rts_newsletter_batch_delay', 5)); ?>">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rts-card rts-mail-card">
+                        <h2>SMTP Connection</h2>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Host</label>
+                            <input class="rts-form-input" type="text" name="rts_smtp_host" value="<?php echo esc_attr((string) get_option('rts_smtp_host', 'mail.smtp2go.com')); ?>">
+                        </div>
+                        <div class="rts-mail-inline-fields">
+                            <div class="rts-form-row">
+                                <label class="rts-form-label">Port</label>
+                                <input class="rts-form-input" type="number" min="1" max="65535" name="rts_smtp_port" value="<?php echo esc_attr((int) get_option('rts_smtp_port', 2525)); ?>">
+                            </div>
+                            <div class="rts-form-row">
+                                <label class="rts-form-label">Encryption</label>
+                                <select class="rts-form-select" name="rts_smtp_encryption">
+                                    <?php
+                                    $enc = (string) get_option('rts_smtp_encryption', 'tls');
+                                    if ($enc === 'none') {
+                                        $enc = '';
+                                    }
+                                    ?>
+                                    <option value="tls" <?php selected($enc, 'tls'); ?>>TLS</option>
+                                    <option value="ssl" <?php selected($enc, 'ssl'); ?>>SSL</option>
+                                    <option value="" <?php selected($enc, ''); ?>>None</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_smtp_auth" value="0">
+                            <label><input type="checkbox" name="rts_smtp_auth" value="1" <?php checked((bool) get_option('rts_smtp_auth', true)); ?>> SMTP authentication enabled</label>
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Username</label>
+                            <input class="rts-form-input" type="text" name="rts_smtp_user" value="<?php echo esc_attr((string) get_option('rts_smtp_user', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Password</label>
+                            <input class="rts-form-input" type="password" name="rts_smtp_pass" value="" placeholder="Leave blank to keep existing value">
+                        </div>
+                        <div class="rts-form-row">
+                            <input type="hidden" name="rts_smtp_debug" value="0">
+                            <label><input type="checkbox" name="rts_smtp_debug" value="1" <?php checked((bool) get_option('rts_smtp_debug', false)); ?>> Enable SMTP debug logging</label>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="rts-mail-grid-2">
+                    <section class="rts-card rts-mail-card">
+                        <h2>Sender Identity</h2>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">From Email</label>
+                            <input class="rts-form-input" type="email" name="rts_smtp_from_email" value="<?php echo esc_attr((string) get_option('rts_smtp_from_email', get_option('admin_email'))); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">From Name</label>
+                            <input class="rts-form-input" type="text" name="rts_smtp_from_name" value="<?php echo esc_attr((string) get_option('rts_smtp_from_name', get_bloginfo('name'))); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Reply-To</label>
+                            <input class="rts-form-input" type="email" name="rts_smtp_reply_to" value="<?php echo esc_attr((string) get_option('rts_smtp_reply_to', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">CC Email</label>
+                            <input class="rts-form-input" type="email" name="rts_smtp_cc_email" value="<?php echo esc_attr((string) get_option('rts_smtp_cc_email', '')); ?>">
+                        </div>
+                    </section>
+
+                    <section class="rts-card rts-mail-card">
+                        <h2>Branding + Social</h2>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Email Logo URL</label>
+                            <input class="rts-form-input" type="url" name="rts_email_logo_url" value="<?php echo esc_attr((string) get_option('rts_email_logo_url', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Privacy URL</label>
+                            <input class="rts-form-input" type="url" name="rts_privacy_url" value="<?php echo esc_attr((string) get_option('rts_privacy_url', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Facebook</label>
+                            <input class="rts-form-input" type="url" name="rts_social_facebook" value="<?php echo esc_attr((string) get_option('rts_social_facebook', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Instagram</label>
+                            <input class="rts-form-input" type="url" name="rts_social_instagram" value="<?php echo esc_attr((string) get_option('rts_social_instagram', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">LinkedIn</label>
+                            <input class="rts-form-input" type="url" name="rts_social_linkedin" value="<?php echo esc_attr((string) get_option('rts_social_linkedin', '')); ?>">
+                        </div>
+                        <div class="rts-form-row">
+                            <label class="rts-form-label">Linktree</label>
+                            <input class="rts-form-input" type="url" name="rts_social_linktree" value="<?php echo esc_attr((string) get_option('rts_social_linktree', '')); ?>">
+                        </div>
+                    </section>
+                </div>
+
+                <section class="rts-card rts-mail-card rts-frontend-controls">
+                    <div class="rts-frontend-controls__head">
+                        <h2>Frontend Availability Controls</h2>
+                        <p>Use these switches to keep forms closed until your database setup is complete.</p>
+                    </div>
+
+                    <div class="rts-frontend-controls__toggles">
+                        <div class="rts-glass-toggle-row">
+                            <div class="rts-glass-toggle-copy">
+                                <h3>Write a Letter Form</h3>
+                                <p>Allow visitors to submit letters from the public form.</p>
+                            </div>
+                            <div class="rts-glass-toggle-wrap">
+                                <input type="hidden" name="rts_letter_submissions_enabled" value="0">
+                                <label class="rts-glass-toggle" for="rts_letter_submissions_enabled_toggle">
+                                    <input id="rts_letter_submissions_enabled_toggle" type="checkbox" name="rts_letter_submissions_enabled" value="1" <?php checked((bool) get_option('rts_letter_submissions_enabled', false)); ?>>
+                                    <span class="rts-glass-toggle-track" aria-hidden="true"><span class="rts-glass-toggle-thumb"></span></span>
+                                    <span class="rts-glass-toggle-state"><span class="state-open">Open</span><span class="state-closed">Closed</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="rts-glass-toggle-row">
+                            <div class="rts-glass-toggle-copy">
+                                <h3>Newsletter Signup Form</h3>
+                                <p>Allow visitors to sign up for newsletters from the frontend form.</p>
+                            </div>
+                            <div class="rts-glass-toggle-wrap">
+                                <input type="hidden" name="rts_newsletter_signups_enabled" value="0">
+                                <label class="rts-glass-toggle" for="rts_newsletter_signups_enabled_toggle">
+                                    <input id="rts_newsletter_signups_enabled_toggle" type="checkbox" name="rts_newsletter_signups_enabled" value="1" <?php checked((bool) get_option('rts_newsletter_signups_enabled', false)); ?>>
+                                    <span class="rts-glass-toggle-track" aria-hidden="true"><span class="rts-glass-toggle-thumb"></span></span>
+                                    <span class="rts-glass-toggle-state"><span class="state-open">Open</span><span class="state-closed">Closed</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="rts-glass-toggle-row">
+                            <div class="rts-glass-toggle-copy">
+                                <h3>Onboarding Browser</h3>
+                                <p>Enable or disable the onboarding letter browser experience.</p>
+                            </div>
+                            <div class="rts-glass-toggle-wrap">
+                                <input type="hidden" name="rts_onboarder_enabled" value="0">
+                                <label class="rts-glass-toggle" for="rts_onboarder_enabled_toggle">
+                                    <input id="rts_onboarder_enabled_toggle" type="checkbox" name="rts_onboarder_enabled" value="1" <?php checked((bool) get_option('rts_onboarder_enabled', true)); ?>>
+                                    <span class="rts-glass-toggle-track" aria-hidden="true"><span class="rts-glass-toggle-thumb"></span></span>
+                                    <span class="rts-glass-toggle-state"><span class="state-open">Open</span><span class="state-closed">Closed</span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rts-form-row rts-frontend-controls__logo">
+                        <label class="rts-form-label">Paused Form Overlay Logo URL</label>
+                        <input class="rts-form-input" type="url" name="rts_frontend_pause_logo_url" value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png')); ?>">
+                    </div>
+
+                    <div class="rts-button-group">
+                        <button type="submit" class="rts-button success"><span class="dashicons dashicons-yes"></span> Save Settings</button>
+                    </div>
+                </section>
+            </form>
+
+            <div class="rts-mail-grid-2">
+                <section class="rts-card rts-mail-card">
+                    <h2>SMTP Test</h2>
+                    <div class="rts-mail-inline-fields">
+                        <input type="email" class="rts-form-input" id="rts_settings_test_email" value="<?php echo esc_attr((string) get_option('admin_email')); ?>" placeholder="name@example.com">
+                        <button type="button" class="rts-button primary" id="rts_settings_test_btn"><span class="dashicons dashicons-email-alt"></span> Send Test Email</button>
+                    </div>
+                    <div id="rts_settings_test_out"></div>
+                </section>
+
+                <section class="rts-card rts-mail-card">
+                    <h2>Re-consent Campaign</h2>
+                    <p class="rts-mail-muted">Send a one-time consent refresh to all active subscribers.</p>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <input type="hidden" name="action" value="rts_send_reconsent">
+                        <?php wp_nonce_field('rts_send_reconsent'); ?>
+                        <button type="submit" class="rts-button warning"><span class="dashicons dashicons-megaphone"></span> Send Re-consent Emails</button>
+                    </form>
+                </section>
+            </div>
+        </div>
+        <script>
+        (function(){
+            var btn = document.getElementById('rts_settings_test_btn');
+            if (!btn) return;
+            btn.addEventListener('click', function(){
+                var email = document.getElementById('rts_settings_test_email');
+                var out = document.getElementById('rts_settings_test_out');
+                if (!email || !email.value) {
+                    out.textContent = 'Enter an email address first.';
+                    return;
+                }
+                btn.disabled = true;
+                out.textContent = 'Sending test...';
+
+                var data = new FormData();
+                data.append('action', 'rts_test_smtp');
+                data.append('email', email.value);
+                data.append('nonce', '<?php echo esc_js(wp_create_nonce('rts_test_smtp')); ?>');
+
+                fetch(ajaxurl, { method: 'POST', credentials: 'same-origin', body: data })
+                    .then(function(r){ return r.json(); })
+                    .then(function(resp){
+                        btn.disabled = false;
+                        if (resp && resp.success) {
+                            out.textContent = 'Test email sent successfully.';
+                        } else {
+                            var msg = (resp && resp.data && resp.data.message) ? resp.data.message : 'Send failed.';
+                            out.textContent = 'Failed: ' + msg;
+                        }
+                    })
+                    .catch(function(){
+                        btn.disabled = false;
+                        out.textContent = 'Network error while sending test.';
+                    });
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * Shared metric card renderer.
+     */
+    private function render_metric_card($label, $value, $subtitle) {
+        ?>
+        <div class="rts-metric-card rts-mail-metric-card">
+            <span class="rts-metric-label"><?php echo esc_html((string) $label); ?></span>
+            <span class="rts-metric-value"><?php echo esc_html((string) $value); ?></span>
+            <span class="rts-metric-subtitle"><?php echo esc_html((string) $subtitle); ?></span>
+        </div>
+        <?php
+    }
+
+    /**
+     * Shared command center widget for subscriber endpoints.
+     *
+     * @param array<string,mixed> $args
+     */
+    private function render_subscriber_command_center(array $args = array()) {
+        $args = wp_parse_args($args, array(
+            'title'            => 'Subscriber Command Center',
+            'subtitle'         => 'Queue state, health, and key navigation links.',
+            'mini_newsletters' => array(),
+            'metric_labels'    => array(
+                'pending'    => 'Queue Pending',
+                'due'        => 'Due Right Now',
+                'processing' => 'Currently Processing',
+                'failed'     => 'Needs Retry (24h)',
+                'sent_today' => 'Sent Today',
+                'dead'       => 'Dead Letters',
+            ),
+        ));
+
+        $delivery     = $this->get_delivery_snapshot();
+        $batch_size   = max(10, (int) get_option('rts_email_batch_size', 100));
+        $batch_delay  = max(1, (int) get_option('rts_newsletter_batch_delay', 5));
+        $last_health  = (string) get_option('rts_last_cron_health_check', '');
+        $is_live      = (bool) get_option('rts_smtp_enabled', false);
+        $send_enabled = (bool) get_option('rts_email_sending_enabled', true);
+        $paused       = (bool) get_option('rts_pause_all_sending', false);
+
+        $health_label = 'Healthy';
+        $health_class = 'is-healthy';
+        if (!$send_enabled || $paused) {
+            $health_label = 'Paused';
+            $health_class = 'is-offline';
+        } elseif ((int) $delivery['dead_letters'] > 0 || (int) $delivery['failed_24h'] > 0 || (string) $delivery['next_run'] === 'Not scheduled') {
+            $health_label = 'Attention Needed';
+            $health_class = 'is-warning';
+        }
+
+        $metric_labels = is_array($args['metric_labels']) ? wp_parse_args($args['metric_labels'], array(
+            'pending'    => 'Queue Pending',
+            'due'        => 'Due Right Now',
+            'processing' => 'Currently Processing',
+            'failed'     => 'Needs Retry (24h)',
+            'sent_today' => 'Sent Today',
+            'dead'       => 'Dead Letters',
+        )) : array(
+            'pending'    => 'Queue Pending',
+            'due'        => 'Due Right Now',
+            'processing' => 'Currently Processing',
+            'failed'     => 'Needs Retry (24h)',
+            'sent_today' => 'Sent Today',
+            'dead'       => 'Dead Letters',
+        );
+
+        $mini_newsletters = $args['mini_newsletters'];
+        if (!is_array($mini_newsletters) || empty($mini_newsletters)) {
+            $mini_newsletters = get_posts(array(
+                'post_type'      => 'rts_newsletter',
+                'post_status'    => array('draft', 'publish', 'future', 'private'),
+                'posts_per_page' => 5,
+                'orderby'        => 'date',
+                'order'          => 'DESC',
+            ));
+        }
+        ?>
+        <section class="rts-card rts-mail-card rts-subscriber-command-center">
+            <div class="rts-subscriber-command-center__header">
+                <div>
+                    <h2><?php echo esc_html((string) $args['title']); ?></h2>
+                    <p class="rts-mail-muted"><?php echo esc_html((string) $args['subtitle']); ?></p>
+                </div>
+                <div class="rts-subscriber-command-center__header-actions">
+                    <span class="rts-subscriber-command-center__pill"><?php echo $is_live ? 'Live SMTP' : 'Testing Mode'; ?></span>
+                    <span class="rts-subscriber-command-center__pill <?php echo esc_attr($health_class); ?>"><?php echo esc_html($health_label); ?></span>
+                    <a class="rts-button secondary rts-subscriber-command-center__help" href="<?php echo esc_url(admin_url('admin.php?page=rts-site-manual')); ?>">Help</a>
+                </div>
+            </div>
+
+            <div class="rts-subscriber-command-center__layout">
+                <div class="rts-subscriber-command-center__metrics">
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['pending']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['pending']); ?></strong>
+                    </div>
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['due']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['due']); ?></strong>
+                    </div>
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['processing']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['processing']); ?></strong>
+                    </div>
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['failed']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['failed_24h']); ?></strong>
+                    </div>
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['sent_today']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['sent_today']); ?></strong>
+                    </div>
+                    <div class="rts-subscriber-command-center__metric">
+                        <span><?php echo esc_html((string) $metric_labels['dead']); ?></span>
+                        <strong><?php echo number_format_i18n((int) $delivery['dead_letters']); ?></strong>
+                    </div>
+                </div>
+
+                <aside class="rts-subscriber-command-center__rail">
+                    <div class="rts-subscriber-command-center__system">
+                        <h3>System Health</h3>
+                        <ul>
+                            <li><span>Send engine</span><strong><?php echo $send_enabled ? 'Enabled' : 'Disabled'; ?></strong></li>
+                            <li><span>Global pause</span><strong><?php echo $paused ? 'On' : 'Off'; ?></strong></li>
+                            <li><span>Next queue run</span><strong><?php echo esc_html((string) $delivery['next_run']); ?></strong></li>
+                            <li><span>Batch / Delay</span><strong><?php echo number_format_i18n($batch_size); ?> / <?php echo number_format_i18n($batch_delay); ?>s</strong></li>
+                            <li><span>Last cron health</span><strong><?php echo esc_html($last_health ?: 'Not recorded yet'); ?></strong></li>
+                        </ul>
+                    </div>
+                    <div class="rts-subscriber-command-center__mini-queue">
+                        <h3>Recent Queue States</h3>
+                        <?php if (empty($mini_newsletters)) : ?>
+                            <p class="rts-mail-muted">No newsletter queue records yet.</p>
+                        <?php else : ?>
+                            <ul>
+                                <?php foreach ($mini_newsletters as $newsletter_post) : ?>
+                                    <?php
+                                    $state = (string) get_post_meta($newsletter_post->ID, '_rts_newsletter_send_status', true);
+                                    $queued = (int) get_post_meta($newsletter_post->ID, '_rts_newsletter_queued_count', true);
+                                    ?>
+                                    <li>
+                                        <a href="<?php echo esc_url(get_edit_post_link($newsletter_post->ID)); ?>"><?php echo esc_html(get_the_title($newsletter_post)); ?></a>
+                                        <span><?php echo esc_html($state ?: 'draft'); ?> | queued <?php echo number_format_i18n($queued); ?></span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </div>
+                </aside>
+            </div>
+
+            <div class="rts-subscriber-command-center__quicklinks-header">
+                <strong>Quick Links</strong>
+                <span class="rts-mail-muted">Jump to core subscriber endpoints.</span>
+            </div>
+            <div class="rts-subscriber-command-center__quicklinks">
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard')); ?>">Audience &amp; Email</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-mailing')); ?>">Letter Mailing</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-subscriber-import-export')); ?>">Import / Export</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber')); ?>">Subscribers</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_newsletter')); ?>">Newsletters</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates')); ?>">Email Templates</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-settings')); ?>">Email Settings</a>
+                <a class="rts-button secondary" href="<?php echo esc_url(admin_url('edit.php?post_type=letter&page=rts-dashboard')); ?>">Letters Dashboard</a>
+            </div>
+        </section>
+        <?php
+    }
+
+    /**
+     * Get subscriber status snapshot used by the analytics hub.
+     *
+     * @return array<string, int>
+     */
+    private function get_subscriber_status_snapshot() {
+        global $wpdb;
+
+        $counts = array(
+            'total'                => 0,
+            'active'               => 0,
+            'pending_verification' => 0,
+            'paused'               => 0,
+            'unsubscribed'         => 0,
+            'bounced'              => 0,
+            'verified'             => 0,
+            'consent_confirmed'    => 0,
+        );
+
+        $total_posts = wp_count_posts('rts_subscriber');
+        $counts['total'] = (int) ($total_posts->publish ?? 0);
+
+        $rows = $wpdb->get_results(
+            "SELECT pm.meta_value AS status, COUNT(DISTINCT pm.post_id) AS qty
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_subscriber_status'
+             AND p.post_type = 'rts_subscriber'
+             AND p.post_status = 'publish'
+             GROUP BY pm.meta_value",
+            ARRAY_A
+        );
+
+        foreach ((array) $rows as $row) {
+            $status = (string) ($row['status'] ?? '');
+            $qty    = (int) ($row['qty'] ?? 0);
+            if (array_key_exists($status, $counts)) {
+                $counts[$status] = $qty;
+            }
+        }
+
+        $counts['verified'] = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT pm.post_id)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_subscriber_verified'
+             AND pm.meta_value = '1'
+             AND p.post_type = 'rts_subscriber'
+             AND p.post_status = 'publish'"
+        );
+
+        $counts['consent_confirmed'] = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT pm.post_id)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_subscriber_consent_confirmed'
+             AND pm.meta_value <> ''
+             AND p.post_type = 'rts_subscriber'
+             AND p.post_status = 'publish'"
+        );
+
+        return $counts;
+    }
+
+    /**
+     * Get delivery queue snapshot.
+     *
+     * @return array<string, int|string>
+     */
+    private function get_delivery_snapshot() {
+        global $wpdb;
+
+        $out = array(
+            'pending'    => 0,
+            'due'        => 0,
+            'processing' => 0,
+            'failed_24h' => 0,
+            'dead_letters' => 0,
+            'sent_today' => 0,
+            'next_run'   => 'Not scheduled',
+        );
+
+        $queue_table = $wpdb->prefix . 'rts_email_queue';
+        $dlq_table   = $wpdb->prefix . 'rts_dead_letter_queue';
+        $logs_table  = $wpdb->prefix . 'rts_email_logs';
+
+        $now_gmt = current_time('mysql', true);
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $queue_table)) === $queue_table) {
+            $out['pending'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$queue_table} WHERE status = 'pending'");
+            $out['due'] = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$queue_table} WHERE status = 'pending' AND scheduled_at <= %s",
+                    $now_gmt
+                )
+            );
+            $out['processing'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$queue_table} WHERE status = 'processing'");
+
+            $cutoff = gmdate('Y-m-d H:i:s', (int) current_time('timestamp', true) - DAY_IN_SECONDS);
+            $out['failed_24h'] = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$queue_table} WHERE status = 'failed' AND updated_at >= %s",
+                    $cutoff
+                )
+            );
+        }
+
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
+            $today = gmdate('Y-m-d 00:00:00', (int) current_time('timestamp', true));
+            $out['sent_today'] = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$logs_table} WHERE status = 'sent' AND sent_at >= %s",
+                    $today
+                )
+            );
+        }
+
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $dlq_table)) === $dlq_table) {
+            $out['dead_letters'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$dlq_table}");
+        }
+
+        $next = wp_next_scheduled('rts_process_email_queue');
+        if ($next) {
+            $out['next_run'] = date_i18n('Y-m-d H:i', $next);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Aggregate newsletter analytics events for dashboard-level reporting.
+     *
+     * @return array<string, int>
+     */
+    private function get_newsletter_event_snapshot($days = 0) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_newsletter_analytics';
+        $out = array(
+            'sent'        => 0,
+            'open'        => 0,
+            'click'       => 0,
+            'bounce'      => 0,
+            'unsubscribe' => 0,
+        );
+
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return $out;
+        }
+
+        $days = max(0, (int) $days);
+        $query = "SELECT event_type, COUNT(*) AS qty FROM {$table}";
+        if ($days > 0 && $this->table_has_column($table, 'occurred_at')) {
+            $cutoff = gmdate('Y-m-d H:i:s', (int) current_time('timestamp', true) - ($days * DAY_IN_SECONDS));
+            $query .= $wpdb->prepare(" WHERE occurred_at >= %s", $cutoff);
+        }
+        $query .= " GROUP BY event_type";
+
+        $rows = (array) $wpdb->get_results(
+            $query,
+            ARRAY_A
+        );
+
+        foreach ($rows as $row) {
+            $event = sanitize_key((string) ($row['event_type'] ?? ''));
+            if (array_key_exists($event, $out)) {
+                $out[$event] = (int) ($row['qty'] ?? 0);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Newsletter feature-state snapshot for the Audience hub.
+     *
+     * @return array<string, int|bool>
+     */
+    private function get_newsletter_feature_snapshot() {
+        global $wpdb;
+
+        $templates_table = $wpdb->prefix . 'rts_newsletter_templates';
+        $versions_table  = $wpdb->prefix . 'rts_newsletter_versions';
+        $analytics_table = $wpdb->prefix . 'rts_newsletter_analytics';
+
+        $workflow_review = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT pm.post_id)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_newsletter_workflow_status'
+             AND pm.meta_value = 'review'
+             AND p.post_type = 'rts_newsletter'
+             AND p.post_status <> 'trash'"
+        );
+
+        $workflow_scheduled = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT pm.post_id)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_newsletter_workflow_status'
+             AND pm.meta_value = 'scheduled'
+             AND p.post_type = 'rts_newsletter'
+             AND p.post_status <> 'trash'"
+        );
+
+        $recurring_campaigns = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT pm.post_id)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_rts_newsletter_schedule_mode'
+             AND pm.meta_value = 'recurring'
+             AND p.post_type = 'rts_newsletter'
+             AND p.post_status <> 'trash'"
+        );
+
+        $template_count = 0;
+        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $templates_table)) === $templates_table) {
+            $template_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$templates_table}");
+        }
+
+        $version_count = 0;
+        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $versions_table)) === $versions_table) {
+            $version_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$versions_table}");
+        }
+
+        $analytics_event_count = 0;
+        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $analytics_table)) === $analytics_table) {
+            $analytics_event_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$analytics_table}");
+        }
+
+        return array(
+            'builder_enabled'       => post_type_exists('rts_newsletter'),
+            'rest_api_enabled'      => class_exists('RTS_Newsletter_API'),
+            'workflow_review'       => $workflow_review,
+            'workflow_scheduled'    => $workflow_scheduled,
+            'recurring_campaigns'   => $recurring_campaigns,
+            'template_count'        => $template_count,
+            'version_count'         => $version_count,
+            'analytics_event_count' => $analytics_event_count,
+            'tracking_enabled'      => (bool) get_option('rts_email_tracking_enabled', true),
+            'click_tracking_enabled'=> (bool) get_option('rts_click_tracking_enabled', true),
+            'consent_required'      => (bool) get_option('rts_email_reconsent_required', false),
+            'delivery_live'         => (bool) get_option('rts_smtp_enabled', false),
+            'send_engine_enabled'   => (bool) get_option('rts_email_sending_enabled', true),
+            'demo_mode'             => (bool) get_option('rts_email_demo_mode', false),
+        );
+    }
+
+    /**
+     * Get letter, share, and feedback summary snapshot.
+     *
+     * @return array<string, int>
+     */
+    private function get_letter_snapshot() {
+        global $wpdb;
+
+        $letters = wp_count_posts('letter');
+        $feedback = wp_count_posts('rts_feedback');
+
+        $quarantined = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT p.ID)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type = 'letter'
+             AND p.post_status = 'draft'
+             AND pm.meta_key = 'needs_review'
+             AND pm.meta_value = '1'"
+        );
+
+        $shares = (int) $wpdb->get_var(
+            "SELECT COALESCE(SUM(CAST(pm.meta_value AS UNSIGNED)),0)
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = 'rts_shares'
+             AND p.post_type = 'letter'
+             AND p.post_status = 'publish'"
+        );
+
+        $email_ready = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT p.ID)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type = 'letter'
+             AND p.post_status = 'publish'
+             AND pm.meta_key = '_rts_email_ready'
+             AND pm.meta_value IN ('1', 'true')"
+        );
+
+        return array(
+            'published'    => (int) ($letters->publish ?? 0),
+            'pending'      => (int) ($letters->pending ?? 0),
+            'quarantined'  => $quarantined,
+            'feedback_total' => (int) (($feedback->publish ?? 0) + ($feedback->pending ?? 0) + ($feedback->draft ?? 0)),
+            'shares_total' => $shares + (int) get_option('rts_stat_offset_shares', 0),
+            'email_ready'  => $email_ready,
+        );
+    }
+
+    /**
+     * Snapshot of moderation queue and pending jobs.
+     *
+     * @return array<string, int>
+     */
+    private function get_moderation_snapshot() {
+        global $wpdb;
+
+        $pending_manual = (int) $wpdb->get_var(
+            "SELECT COUNT(1)
+             FROM {$wpdb->posts}
+             WHERE post_type = 'letter'
+             AND post_status = 'pending'"
+        );
+
+        $quarantined = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT p.ID)
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+             WHERE p.post_type = 'letter'
+             AND p.post_status = 'draft'
+             AND pm.meta_key = 'needs_review'
+             AND pm.meta_value = '1'"
+        );
+
+        $queued_jobs = 0;
+        if (function_exists('rts_as_available') && rts_as_available() && function_exists('as_get_scheduled_actions') && class_exists('ActionScheduler_Store')) {
+            $ids = as_get_scheduled_actions(array(
+                'hook'   => 'rts_process_letter',
+                'status' => ActionScheduler_Store::STATUS_PENDING,
+                'per_page' => 500,
+            ), 'ids');
+            if (is_array($ids)) {
+                $queued_jobs = count($ids);
+            } elseif (is_numeric($ids)) {
+                $queued_jobs = (int) $ids;
+            }
+        }
+
+        return array(
+            'pending_manual' => $pending_manual,
+            'quarantined'    => $quarantined,
+            'queued_jobs'    => $queued_jobs,
+        );
+    }
+
+    /**
+     * Aggregate key feedback outcomes from rts_feedback posts.
+     *
+     * @return array<string, int>
+     */
+    private function get_feedback_snapshot() {
+        global $wpdb;
+
+        return array(
+            'up' => (int) $wpdb->get_var(
+                "SELECT COUNT(*)
+                 FROM {$wpdb->postmeta} pm
+                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                 WHERE pm.meta_key = 'rating'
+                 AND pm.meta_value = 'up'
+                 AND p.post_type = 'rts_feedback'
+                 AND p.post_status <> 'trash'"
+            ),
+            'down' => (int) $wpdb->get_var(
+                "SELECT COUNT(*)
+                 FROM {$wpdb->postmeta} pm
+                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                 WHERE pm.meta_key = 'rating'
+                 AND pm.meta_value = 'down'
+                 AND p.post_type = 'rts_feedback'
+                 AND p.post_status <> 'trash'"
+            ),
+            'triggered' => (int) $wpdb->get_var(
+                "SELECT COUNT(*)
+                 FROM {$wpdb->postmeta} pm
+                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                 WHERE pm.meta_key = 'triggered'
+                 AND pm.meta_value = '1'
+                 AND p.post_type = 'rts_feedback'
+                 AND p.post_status <> 'trash'"
+            ),
+            'worse_mood' => (int) $wpdb->get_var(
+                "SELECT COUNT(*)
+                 FROM {$wpdb->postmeta} pm
+                 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                 WHERE pm.meta_key = 'mood_change'
+                 AND pm.meta_value IN ('little_worse','much_worse')
+                 AND p.post_type = 'rts_feedback'
+                 AND p.post_status <> 'trash'"
+            ),
+        );
+    }
+
+    /**
+     * Top taxonomy terms from aggregated moderation stats (fallback to empty).
+     *
+     * @return array{feelings: array<string,int>, tones: array<string,int>}
+     */
+    private function get_taxonomy_snapshot() {
+        global $wpdb;
+        $agg = get_option('rts_aggregated_stats', array());
+        if (!is_array($agg)) {
+            $agg = array();
+        }
+
+        $feelings = (array) ($agg['taxonomy_breakdown']['letter_feeling'] ?? array());
+        $tones = (array) ($agg['taxonomy_breakdown']['letter_tone'] ?? array());
+
+        if (empty($feelings) && taxonomy_exists('letter_feeling')) {
+            $rows = (array) $wpdb->get_results(
+                "SELECT t.slug, COUNT(1) AS qty
+                 FROM {$wpdb->term_relationships} tr
+                 INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                 INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
+                 INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
+                 WHERE tt.taxonomy = 'letter_feeling'
+                 AND p.post_type = 'letter'
+                 AND p.post_status = 'publish'
+                 GROUP BY t.slug
+                 ORDER BY qty DESC
+                 LIMIT 6",
+                ARRAY_A
+            );
+            foreach ($rows as $row) {
+                $feelings[(string) $row['slug']] = (int) ($row['qty'] ?? 0);
+            }
+        }
+
+        if (empty($tones) && taxonomy_exists('letter_tone')) {
+            $rows = (array) $wpdb->get_results(
+                "SELECT t.slug, COUNT(1) AS qty
+                 FROM {$wpdb->term_relationships} tr
+                 INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                 INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
+                 INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
+                 WHERE tt.taxonomy = 'letter_tone'
+                 AND p.post_type = 'letter'
+                 AND p.post_status = 'publish'
+                 GROUP BY t.slug
+                 ORDER BY qty DESC
+                 LIMIT 6",
+                ARRAY_A
+            );
+            foreach ($rows as $row) {
+                $tones[(string) $row['slug']] = (int) ($row['qty'] ?? 0);
+            }
+        }
+
+        return array(
+            'feelings' => array_slice($feelings, 0, 6, true),
+            'tones'    => array_slice($tones, 0, 6, true),
+        );
+    }
+
+    /**
+     * Share counts by platform from postmeta counters.
+     *
+     * @return array<string, int>
+     */
+    private function get_share_platform_snapshot() {
+        global $wpdb;
+        $rows = (array) $wpdb->get_results(
+            "SELECT pm.meta_key, COALESCE(SUM(CAST(pm.meta_value AS UNSIGNED)),0) AS qty
+             FROM {$wpdb->postmeta} pm
+             INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key LIKE 'rts_share_%'
+             AND p.post_type = 'letter'
+             AND p.post_status = 'publish'
+             GROUP BY pm.meta_key
+             ORDER BY qty DESC",
+            ARRAY_A
+        );
+
+        $out = array();
+        foreach ($rows as $row) {
+            $key = (string) ($row['meta_key'] ?? '');
+            if ($key === 'rts_shares') {
+                continue;
+            }
+            $platform = str_replace('rts_share_', '', $key);
+            if ($platform === '') {
+                continue;
+            }
+            $out[$platform] = (int) ($row['qty'] ?? 0);
+        }
+        return array_slice($out, 0, 8, true);
+    }
+
+    /**
+     * Get recent email log rows.
+     *
+     * @param int $limit Row count.
+     * @return array<int, array<string, mixed>>
+     */
+    private function get_recent_delivery_rows($limit = 12) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rts_email_logs';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            return array();
+        }
+
+        $limit = max(1, min(50, (int) $limit));
+        return (array) $wpdb->get_results(
+            "SELECT email, template, letter_id, status, sent_at, sent_at AS created_at
+             FROM {$table}
+             ORDER BY id DESC
+             LIMIT {$limit}",
+            ARRAY_A
+        );
     }
 
     /* ==================================================================
@@ -240,6 +1843,10 @@ class RTS_Admin_Menu {
      * =================================================================*/
 
     public function render_dashboard() {
+        // Legacy endpoint retained for back-compat; route to unified shell.
+        $this->render_analytics_hub();
+        return;
+
         $analytics = null;
         if (class_exists('RTS_Analytics')) {
             if (method_exists('RTS_Analytics', 'get_instance')) {
@@ -549,32 +2156,97 @@ class RTS_Admin_Menu {
     }
 
     /**
-     * Calculate open rate from email logs (last 30 days).
-     * Returns a formatted percentage string (e.g. "42.1").
+     * Calculate open rate from tracked events (last 30 days).
      */
     private function get_open_rate() {
+        $engagement = $this->get_engagement_snapshot();
+        return number_format((float) ($engagement['open_rate'] ?? 0), 1);
+    }
+
+    /**
+     * Calculate click rate from tracked events (last 30 days).
+     */
+    private function get_click_rate() {
+        $engagement = $this->get_engagement_snapshot();
+        return number_format((float) ($engagement['click_rate'] ?? 0), 1);
+    }
+
+    /**
+     * Engagement snapshot from logs + tracking rows.
+     *
+     * @return array<string, float|int>
+     */
+    private function get_engagement_snapshot() {
         global $wpdb;
-        $table = $wpdb->prefix . 'rts_email_logs';
-        $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
-        if ($exists !== $table) {
-            return '—';
+
+        $tracking_table = $wpdb->prefix . 'rts_email_tracking';
+        $logs_table     = $wpdb->prefix . 'rts_email_logs';
+        $thirty_days_ago = gmdate('Y-m-d H:i:s', (int) current_time('timestamp', true) - (30 * DAY_IN_SECONDS));
+
+        $sent_30d = 0;
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
+            $sent_30d = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$logs_table}
+                 WHERE status = 'sent'
+                 AND sent_at >= %s",
+                $thirty_days_ago
+            ));
         }
 
-        $thirty_days_ago = gmdate('Y-m-d H:i:s', time() - (30 * DAY_IN_SECONDS));
+        $opened_30d = 0;
+        $clicked_30d = 0;
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $tracking_table)) === $tracking_table) {
+            $has_opened_col = $this->table_has_column($tracking_table, 'opened');
+            $has_clicked_col = $this->table_has_column($tracking_table, 'clicked');
 
-        $total_sent = (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE status = 'sent' AND sent_at >= %s",
-            $thirty_days_ago
-        ));
+            if ($has_opened_col) {
+                $opened_30d = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$tracking_table}
+                     WHERE type = 'open'
+                     AND opened = 1
+                     AND created_at >= %s",
+                    $thirty_days_ago
+                ));
+            }
 
-        if ($total_sent < 1) return '0';
+            if ($has_clicked_col) {
+                $clicked_30d = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$tracking_table}
+                     WHERE type = 'click'
+                     AND clicked = 1
+                     AND created_at >= %s",
+                    $thirty_days_ago
+                ));
+            }
+        }
 
-        $total_opened = (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE status = 'sent' AND opened_at IS NOT NULL AND sent_at >= %s",
-            $thirty_days_ago
-        ));
+        $open_rate = $sent_30d > 0 ? ($opened_30d / $sent_30d) * 100 : 0.0;
+        $click_rate = $sent_30d > 0 ? ($clicked_30d / $sent_30d) * 100 : 0.0;
 
-        return number_format(($total_opened / $total_sent) * 100, 1);
+        return array(
+            'sent_30d'    => $sent_30d,
+            'opened_30d'  => $opened_30d,
+            'clicked_30d' => $clicked_30d,
+            'open_rate'   => $open_rate,
+            'click_rate'  => $click_rate,
+        );
+    }
+
+    /**
+     * Check whether a table has a specific column.
+     */
+    private function table_has_column($table, $column) {
+        global $wpdb;
+
+        $table = (string) $table;
+        $column = (string) $column;
+        if ($table === '' || $column === '') {
+            return false;
+        }
+
+        $sql = $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", $column);
+        $row = $wpdb->get_row($sql);
+        return !empty($row);
     }
 
     /**
@@ -587,7 +2259,7 @@ class RTS_Admin_Menu {
 
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
             $rows = $wpdb->get_results(
-                "SELECT id, subscriber_id, email, template, letter_id, status, sent_at, created_at
+                "SELECT id, subscriber_id, email, template, letter_id, status, sent_at, sent_at AS created_at
                  FROM {$logs_table} ORDER BY id DESC LIMIT 15",
                 ARRAY_A
             );
@@ -606,7 +2278,7 @@ class RTS_Admin_Menu {
                 </thead>
                 <tbody>
                     <?php if (empty($rows)) : ?>
-                        <tr><td colspan="5" style="color:#94a3b8;">No activity recorded yet.</td></tr>
+                        <tr><td colspan="6" style="color:#94a3b8;">No activity recorded yet.</td></tr>
                     <?php else : ?>
                         <?php foreach ($rows as $row) :
                             $when      = !empty($row['sent_at']) ? $row['sent_at'] : ($row['created_at'] ?? '');
@@ -997,6 +2669,10 @@ class RTS_Admin_Menu {
      * =================================================================*/
 
     public function render_settings() {
+        // Legacy endpoint retained for back-compat; route to unified shell.
+        $this->render_settings_hub();
+        return;
+
         $is_live = (bool) get_option('rts_smtp_enabled', false);
         $smtp_host = get_option('rts_smtp_host', '');
         $smtp_user = get_option('rts_smtp_user', '');
@@ -1280,6 +2956,30 @@ class RTS_Admin_Menu {
                             <span style="color:#ffffff;">Allow subscribers to browse letters during onboarding</span>
                         </label>
                     </div>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Write a Letter Form</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_letter_submissions_enabled" value="1" <?php checked((bool) get_option('rts_letter_submissions_enabled', false)); ?>>
+                            <span style="color:#ffffff;">Allow public write-a-letter submissions</span>
+                        </label>
+                    </div>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Newsletter Signup Form</label>
+                        <label style="display:flex;align-items:center;gap:10px;">
+                            <input type="checkbox" name="rts_newsletter_signups_enabled" value="1" <?php checked((bool) get_option('rts_newsletter_signups_enabled', false)); ?>>
+                            <span style="color:#ffffff;">Allow public newsletter signups</span>
+                        </label>
+                    </div>
+
+                    <div class="rts-form-row">
+                        <label class="rts-form-label">Paused Form Overlay Logo URL</label>
+                        <input type="url" name="rts_frontend_pause_logo_url"
+                               value="<?php echo esc_attr((string) get_option('rts_frontend_pause_logo_url', 'https://reasonstostay.co.uk/wp-content/uploads/2026/01/cropped-5-messages-to-send-instead-of-how-are-you-1-300x300.png')); ?>"
+                               class="rts-form-input" placeholder="https://example.com/logo.png">
+                        <span class="rts-form-description">Shown in the disabled form overlay when submissions are paused.</span>
+                    </div>
                 </div>
 
                 <div class="rts-button-group">
@@ -1384,11 +3084,18 @@ class RTS_Admin_Menu {
 
         $templates = $this->get_email_templates();
         ?>
-        <div class="wrap rts-templates-page rts-ui-wrapper">
+        <div class="wrap rts-templates-page rts-ui-wrapper rts-mail-admin">
             <div class="rts-page-header">
                 <h1><span class="dashicons dashicons-email-alt"></span>Email Templates</h1>
                 <p class="rts-page-description">Customize email content and styling - click any template to edit</p>
             </div>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'    => 'Templates Command Center',
+                'subtitle' => 'Quick operational snapshot while editing email templates.',
+            ));
+            ?>
 
             <div class="rts-info-box">
                 <h4><span class="dashicons dashicons-info"></span> How Email Templates Work</h4>
@@ -1430,7 +3137,7 @@ class RTS_Admin_Menu {
                             </div>
                         </div>
                         <div class="rts-template-actions">
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=rts-email-templates&edit=' . $key)); ?>"
+                            <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates&edit=' . $key)); ?>"
                                class="rts-button">
                                 <span class="dashicons dashicons-edit"></span> Edit Template
                             </a>
@@ -1449,18 +3156,31 @@ class RTS_Admin_Menu {
         }
 
         $template        = $templates[$template_key];
-        $current_subject = get_option('rts_email_template_' . $template_key . '_subject', $template['default_subject']);
-        $current_body    = get_option('rts_email_template_' . $template_key . '_body', $template['default_body']);
+        $current_subject = get_option(
+            'rts_email_subject_' . $template_key,
+            get_option('rts_email_template_' . $template_key . '_subject', $template['default_subject'])
+        );
+        $current_body    = get_option(
+            'rts_email_body_' . $template_key,
+            get_option('rts_email_template_' . $template_key . '_body', $template['default_body'])
+        );
         ?>
-        <div class="wrap rts-templates-page rts-ui-wrapper">
+        <div class="wrap rts-templates-page rts-ui-wrapper rts-mail-admin">
             <div class="rts-page-header">
                 <h1>
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=rts-email-templates')); ?>"
+                    <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates')); ?>"
                        class="dashicons dashicons-arrow-left-alt2" style="text-decoration:none;"></a>
                     Edit: <?php echo esc_html($template['name']); ?>
                 </h1>
                 <p class="rts-page-description"><?php echo esc_html($template['description']); ?></p>
             </div>
+
+            <?php
+            $this->render_subscriber_command_center(array(
+                'title'    => 'Template Editor Command Center',
+                'subtitle' => 'Queue state and quick links while editing template content.',
+            ));
+            ?>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <?php wp_nonce_field('rts_save_template'); ?>
@@ -1490,7 +3210,10 @@ class RTS_Admin_Menu {
                                     'textarea_rows' => 18,
                                     'media_buttons' => false,
                                     'teeny'         => false,
-                                    'tinymce'       => true,
+                                    'tinymce'       => [
+                                        'wp_autoresize_on' => true,
+                                        'content_style'    => 'body{background:#ffffff;color:#111827;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;}a{color:#1d4ed8;}',
+                                    ],
                                     'quicktags'     => true,
                                 ]
                             );
@@ -1546,7 +3269,7 @@ class RTS_Admin_Menu {
                     <button type="submit" class="rts-button success">
                         <span class="dashicons dashicons-yes"></span> Save Template
                     </button>
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=rts-email-templates')); ?>"
+                    <a href="<?php echo esc_url(admin_url('edit.php?post_type=rts_subscriber&page=rts-email-templates')); ?>"
                        class="rts-button secondary">
                         <span class="dashicons dashicons-no-alt"></span> Cancel
                     </a>
@@ -1622,6 +3345,28 @@ class RTS_Admin_Menu {
                 'default_body'        => '<h2>This Month\'s Letters</h2>{letters_list}<hr><p style="font-size:12px;color:#666;"><a href="{site_url}">Read more</a> | <a href="{change_frequency_url}">Change frequency</a> | <a href="{unsubscribe_url}">Unsubscribe</a></p>',
                 'available_variables' => array('{letters_list}', '{subscriber_email}', '{site_name}', '{site_url}', '{change_frequency_url}', '{unsubscribe_url}', '{current_date}'),
             ),
+            'automated_letter' => array(
+                'name'                => 'Letter In Your Inbox',
+                'description'         => 'Single personalized letter sent by the automated drip engine',
+                'order'               => 4,
+                'when'                => 'Based on subscriber frequency',
+                'audience'            => 'Verified letter subscribers',
+                'variables'           => 8,
+                'default_subject'     => 'A letter for you from {site_name}',
+                'default_body'        => '<h2>A Letter for You</h2>{letters}<hr><p style="font-size:12px;color:#666;"><a href="{manage_url}">Manage preferences</a> | <a href="{unsubscribe_url}">Unsubscribe</a></p>',
+                'available_variables' => array('{letters}', '{subscriber_email}', '{site_name}', '{site_url}', '{manage_url}', '{unsubscribe_url}', '{verification_url}', '{current_date}'),
+            ),
+            'newsletter_custom' => array(
+                'name'                => 'Newsletter Broadcast',
+                'description'         => 'Manual/batched newsletter sends from the newsletter builder',
+                'order'               => 5,
+                'when'                => 'When queued from Newsletter CPT',
+                'audience'            => 'Verified newsletter subscribers',
+                'variables'           => 6,
+                'default_subject'     => '{newsletter_subject}',
+                'default_body'        => '{newsletter_body}<hr><p style="font-size:12px;color:#666;"><a href="{manage_url}">Manage preferences</a> | <a href="{unsubscribe_url}">Unsubscribe</a></p>',
+                'available_variables' => array('{newsletter_subject}', '{newsletter_body}', '{subscriber_email}', '{site_name}', '{manage_url}', '{unsubscribe_url}'),
+            ),
             'frequency_changed' => array(
                 'name'                => 'Frequency Changed',
                 'description'         => 'Confirmation sent when subscriber changes their email frequency',
@@ -1659,10 +3404,14 @@ class RTS_Admin_Menu {
         $subject      = sanitize_text_field($_POST['template_subject']);
         $body         = wp_kses_post($_POST['template_body']);
 
+        // Canonical keys used by the runtime email template renderer.
+        update_option('rts_email_subject_' . $template_key, $subject);
+        update_option('rts_email_body_' . $template_key, $body);
+        // Legacy keys kept in sync for backwards compatibility.
         update_option('rts_email_template_' . $template_key . '_subject', $subject);
         update_option('rts_email_template_' . $template_key . '_body', $body);
 
-        wp_redirect(add_query_arg(array('page' => 'rts-email-templates', 'saved' => '1'), admin_url('admin.php')));
+        wp_redirect(add_query_arg(array('post_type' => 'rts_subscriber', 'page' => 'rts-email-templates', 'saved' => '1'), admin_url('edit.php')));
         exit;
     }
 
@@ -1672,18 +3421,31 @@ class RTS_Admin_Menu {
 
         $template_key = sanitize_text_field($_POST['template_key']);
         $to           = get_option('admin_email');
-        $subject      = get_option('rts_email_template_' . $template_key . '_subject', 'Test Email');
-        $body         = get_option('rts_email_template_' . $template_key . '_body', '<p>Test</p>');
+        $subject      = get_option(
+            'rts_email_subject_' . $template_key,
+            get_option('rts_email_template_' . $template_key . '_subject', 'Test Email')
+        );
+        $body         = get_option(
+            'rts_email_body_' . $template_key,
+            get_option('rts_email_template_' . $template_key . '_body', '<p>Test</p>')
+        );
 
         $body = str_replace('{subscriber_email}', $to, $body);
         $body = str_replace('{site_name}', get_bloginfo('name'), $body);
         $body = str_replace('{site_url}', home_url(), $body);
         $body = str_replace('{verify_url}', home_url('?test=verify'), $body);
+        $body = str_replace('{verification_url}', home_url('?test=verify'), $body);
+        $body = str_replace('{manage_url}', home_url('?test=manage'), $body);
         $body = str_replace('{unsubscribe_url}', home_url('?test=unsubscribe'), $body);
+        $body = str_replace('{newsletter_subject}', 'Test Newsletter Subject', $body);
+        $body = str_replace('{newsletter_body}', '<p>Test newsletter body block.</p>', $body);
+        $body = str_replace('{letters}', '<p>Sample letter content preview.</p>', $body);
+        $body = str_replace('{letters_list}', '<ul><li>Sample letter one</li><li>Sample letter two</li></ul>', $body);
+        $body = str_replace('{current_date}', date_i18n('Y-m-d'), $body);
 
         wp_mail($to, '[TEST] ' . $subject, $body, array('Content-Type: text/html'));
 
-        wp_redirect(add_query_arg(array('page' => 'rts-email-templates', 'edit' => $template_key, 'test_sent' => '1'), admin_url('admin.php')));
+        wp_redirect(add_query_arg(array('post_type' => 'rts_subscriber', 'page' => 'rts-email-templates', 'edit' => $template_key, 'test_sent' => '1'), admin_url('edit.php')));
         exit;
     }
 
@@ -1775,6 +3537,11 @@ class RTS_Admin_Menu {
             exit;
         }
 
+        $frequency = isset($_POST['frequency']) ? sanitize_key(wp_unslash($_POST['frequency'])) : 'weekly';
+        if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
+            $frequency = 'weekly';
+        }
+
         $existing      = get_page_by_title($email, OBJECT, 'rts_subscriber');
         $subscriber_id = $existing ? (int) $existing->ID : 0;
 
@@ -1787,10 +3554,12 @@ class RTS_Admin_Menu {
         }
 
         if (!is_wp_error($subscriber_id) && $subscriber_id) {
+            update_post_meta($subscriber_id, '_rts_subscriber_email', $email);
             update_post_meta($subscriber_id, '_rts_subscriber_status', 'active');
-            update_post_meta($subscriber_id, '_rts_subscriber_frequency', sanitize_key($_POST['frequency'] ?? 'weekly'));
+            update_post_meta($subscriber_id, '_rts_subscriber_frequency', $frequency);
             update_post_meta($subscriber_id, '_rts_pref_letters', isset($_POST['pref_letters']) ? 1 : 0);
             update_post_meta($subscriber_id, '_rts_pref_newsletters', isset($_POST['pref_newsletters']) ? 1 : 0);
+            update_post_meta($subscriber_id, '_rts_subscriber_source', 'admin_manual');
         }
 
         wp_safe_redirect(admin_url('edit.php?post_type=rts_subscriber&rts_added=1'));
@@ -1823,6 +3592,10 @@ class RTS_Admin_Menu {
      * =================================================================*/
 
     public function render_command_center() {
+        // Legacy endpoint retained for back-compat; route to unified shell.
+        $this->render_analytics_hub();
+        return;
+
         if (!current_user_can('manage_options')) {
             wp_die(__('You do not have permission to access this page.', 'rts'));
         }
@@ -1889,7 +3662,7 @@ class RTS_Admin_Menu {
         // Recent logs
         $rows = array();
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $logs_table)) === $logs_table) {
-            $rows = $wpdb->get_results("SELECT id, subscriber_id, email, template, letter_id, status, sent_at, created_at FROM {$logs_table} ORDER BY id DESC LIMIT 20", ARRAY_A);
+            $rows = $wpdb->get_results("SELECT id, subscriber_id, email, template, letter_id, status, sent_at, sent_at AS created_at FROM {$logs_table} ORDER BY id DESC LIMIT 20", ARRAY_A);
         }
 
         // Simulate Send dropdowns
@@ -1952,10 +3725,10 @@ class RTS_Admin_Menu {
                         </thead>
                         <tbody>
                             <?php if (empty($rows)) : ?>
-                                <tr><td colspan="5" style="color:#ffffff;">No logs found.</td></tr>
+                                <tr><td colspan="6" style="color:#ffffff;">No logs found.</td></tr>
                             <?php else : ?>
                                 <?php foreach ($rows as $row) :
-                                    $when        = !empty($row['sent_at']) ? $row['sent_at'] : $row['created_at'];
+                                    $when        = !empty($row['sent_at']) ? $row['sent_at'] : ($row['created_at'] ?? '');
                                     $recipient   = !empty($row['email']) ? $this->obfuscate_email($row['email']) : '';
                                     $type        = !empty($row['template']) ? $row['template'] : '';
                                     $status      = !empty($row['status']) ? $row['status'] : '';

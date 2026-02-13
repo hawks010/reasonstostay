@@ -219,7 +219,7 @@ function rts_site_manual_get_default_html() {
 
 <div class="rts-admin-bar">
 <div class="rts-admin-bar-title">⚡ Quick Actions</div>
-<a href="/wp-admin/admin.php?page=rts-subscribers-dashboard" class="rts-btn rts-btn-primary">📊 Subscriber Dashboard</a>
+<a href="/wp-admin/edit.php?post_type=rts_subscriber&page=rts-subscribers-dashboard" class="rts-btn rts-btn-primary">📊 Subscriber Dashboard</a>
 <a href="/wp-admin/edit.php?post_type=letter" class="rts-btn rts-btn-outline">✉️ Manage Letters</a>
 <a href="/wp-admin/edit.php?post_type=rts_newsletter" class="rts-btn rts-btn-outline">📰 Create Newsletter</a>
 <a href="/wp-admin/edit.php?post_type=rts_subscriber" class="rts-btn rts-btn-outline">👥 View Subscribers</a>

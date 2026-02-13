@@ -2,10 +2,10 @@
 /**
  * RTS Content Refiner
  *
- * Version: 7.0 (Pending Review Workflow & Dear Stranger Fix)
+ * Version: 7.2 (Pending Review Workflow & Dear Strange Fix)
  * - Forces 'pending' status for review (unless already published).
  * - Saves Snapshot for Learning Engine (_rts_bot_snapshot).
- * - Enforces "Dear Stranger" correctly (strict word boundary to avoid Today/Tomorrow).
+ * - Enforces "Dear stranger" correctly (strict word boundary to avoid Today/Tomorrow).
  * - WCAG 2.2 AA: strips inline styles unless learning cache allows them.
  */
 
@@ -159,11 +159,11 @@ class RTS_Content_Refiner {
     }
 
     private static function pipeline_structure(string $c): string {
-        // "Dear Stranger" greeting logic:
+        // "Dear stranger" greeting logic:
         // Check first 100 chars with strict word boundary (\b) to avoid matching Today/Tomorrow.
         $check = mb_strtolower(substr(wp_strip_all_tags($c), 0, 100));
         if (!preg_match('/^\s*(dear|dearest|hi|hello|hey|greetings|salutations|to)\b/iu', $check)) {
-            $c = "Dear Stranger,\n\n" . $c;
+            $c = "Dear stranger,\n\n" . $c;
         }
 
         return wpautop($c);

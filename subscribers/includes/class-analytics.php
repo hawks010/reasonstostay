@@ -62,6 +62,15 @@ class RTS_Analytics {
     }
 
     /**
+     * Prevent serialization.
+     *
+     * @throws Exception
+     */
+    public function __sleep() {
+        throw new Exception('Cannot serialize singleton');
+    }
+
+    /**
      * Constructor.
      */
     private function __construct() {
@@ -116,6 +125,10 @@ class RTS_Analytics {
         $stats = array(
             'total'      => 0,
             'active'     => 0,
+            'paused'     => 0,
+            'unsubscribed' => 0,
+            'bounced'    => 0,
+            'pending_verification' => 0,
             'verified'   => 0,
             'unverified' => 0,
             'digest_frequency' => array(
@@ -171,34 +184,40 @@ class RTS_Analytics {
             $stats['verified'] = absint($verified);
             $stats['unverified'] = $stats['total'] - $stats['verified'];
 
-            // Digest frequency breakdown
-            $frequencies = array('daily', 'weekly', 'monthly');
-            foreach ($frequencies as $freq) {
-                $count = $wpdb->get_var($wpdb->prepare(
-                    "SELECT COUNT(DISTINCT p.ID) 
-                    FROM {$wpdb->posts} p 
-                    INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id 
-                    WHERE p.post_type = %s 
-                    AND p.post_status = %s 
-                    AND pm.meta_key = '_rts_digest_frequency' 
-                    AND pm.meta_value = %s",
-                    'rts_subscriber',
-                    'publish',
-                    $freq
-                ));
-                
-                $stats['digest_frequency'][$freq] = absint($count);
+            // Digest frequency breakdown (single grouped query for scale).
+            $freq_rows = (array) $wpdb->get_results($wpdb->prepare(
+                "SELECT pm.meta_value AS frequency, COUNT(DISTINCT p.ID) AS count
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                 WHERE p.post_type = %s
+                   AND p.post_status = %s
+                   AND pm.meta_key IN ('_rts_subscriber_frequency', '_rts_digest_frequency')
+                   AND pm.meta_value IN ('daily', 'weekly', 'monthly')
+                 GROUP BY pm.meta_value",
+                'rts_subscriber',
+                'publish'
+            ), ARRAY_A);
+            foreach ($freq_rows as $row) {
+                $frequency = sanitize_key((string) ($row['frequency'] ?? ''));
+                if (isset($stats['digest_frequency'][$frequency])) {
+                    $stats['digest_frequency'][$frequency] = absint($row['count'] ?? 0);
+                }
             }
 
             // Status Breakdown
             $stats['by_status'] = $this->get_status_breakdown();
+            $stats['paused'] = absint($stats['by_status']['paused'] ?? 0);
+            $stats['unsubscribed'] = absint($stats['by_status']['unsubscribed'] ?? 0);
+            $stats['bounced'] = absint($stats['by_status']['bounced'] ?? 0);
+            $stats['pending_verification'] = absint($stats['by_status']['pending_verification'] ?? 0);
 
             // Validate structure and fill missing keys if needed
             if (!$this->validate_stats($stats)) {
+                 $this->log_stats_validation_issue($stats);
                  if (!isset($stats['digest_frequency'])) {
                      $stats['digest_frequency'] = array('daily' => 0, 'weekly' => 0, 'monthly' => 0);
                  }
-                 $required = ['total', 'active', 'verified', 'unverified', 'digest_frequency', 'by_status'];
+                 $required = ['total', 'active', 'paused', 'unsubscribed', 'bounced', 'pending_verification', 'verified', 'unverified', 'digest_frequency', 'by_status'];
                  foreach ($required as $key) {
                     if (!isset($stats[$key])) {
                         $stats[$key] = ($key === 'by_status' || $key === 'digest_frequency') ? [] : 0;
@@ -562,6 +581,20 @@ class RTS_Analytics {
         }
         
         return true;
+    }
+
+    /**
+     * Emit diagnostics when stats payload shape is invalid.
+     *
+     * @param array $stats
+     * @return void
+     */
+    private function log_stats_validation_issue(array $stats): void {
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
+            return;
+        }
+        $keys = implode(', ', array_keys($stats));
+        error_log('[RTS Analytics] Invalid stats structure; rebuilding defaults. Keys: ' . $keys);
     }
 
     /**
